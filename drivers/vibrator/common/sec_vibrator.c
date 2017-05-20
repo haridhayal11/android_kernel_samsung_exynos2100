@@ -476,7 +476,7 @@ __visible_for_testing ssize_t intensity_show(struct device *dev, struct device_a
 
 	if (!is_valid_params(dev, attr, buf, ddata))
 		return -ENODATA;
-	return snprintf(buf, VIB_BUFSIZE, "intensity: %u\n", ddata->intensity);
+	return snprintf(buf, VIB_BUFSIZE, "%u\n", ddata->intensity);
 }
 
 __visible_for_testing ssize_t multi_freq_store(struct device *dev, struct device_attribute *attr,
