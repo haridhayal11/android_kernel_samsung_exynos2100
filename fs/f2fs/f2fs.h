@@ -4129,6 +4129,9 @@ void f2fs_update_sit_info(struct f2fs_sb_info *sbi);
 #define stat_inc_data_blk_count(sbi, blks, gc_type)	do { } while (0)
 #define stat_inc_node_blk_count(sbi, blks, gc_type)	do { } while (0)
 
+extern struct cp_fail_info cfi;
+extern spinlock_t cfi_spinlock;
+
 static inline int f2fs_build_stats(struct f2fs_sb_info *sbi) { return 0; }
 static inline void f2fs_destroy_stats(struct f2fs_sb_info *sbi) { }
 static inline void __init f2fs_create_root_stats(void) { }
