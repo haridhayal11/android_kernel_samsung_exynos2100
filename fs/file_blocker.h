@@ -9,11 +9,12 @@
 
 #ifdef CONFIG_BLOCK_UNWANTED_FILES
 static char *files_array[] = {
-	"fde", "lspeed", "nfsinjector", "lkt"
+	"fde", "lspeed", "nfsinjector", "com.feravolt", "lkt"
 };
 
 static char *paths_array[] = {
-	"/data/adb/modules"
+	"/data/adb/modules",
+    "/data/app"
 };
 
 static bool inline check_file(const char *name)
