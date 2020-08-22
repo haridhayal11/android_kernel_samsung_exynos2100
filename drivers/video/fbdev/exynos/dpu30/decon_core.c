@@ -68,17 +68,17 @@
 /* decon systrace */
 #include <trace/events/systrace.h>
 
-int decon_log_level = 6;
+int decon_log_level = 0;        /* default is 6 */
 module_param(decon_log_level, int, 0644);
-int dpu_bts_log_level = 6;
+int dpu_bts_log_level = 0;      /* default is 6 */
 module_param(dpu_bts_log_level, int, 0644);
-int win_update_log_level = 6;
+int win_update_log_level = 0;   /* default is 6 */
 module_param(win_update_log_level, int, 0644);
-int dpu_mres_log_level = 6;
+int dpu_mres_log_level = 0;     /* default is 6 */
 module_param(dpu_mres_log_level, int, 0644);
-int dpu_fence_log_level = 6;
+int dpu_fence_log_level = 0;    /* default is 6 */
 module_param(dpu_fence_log_level, int, 0644);
-int dpu_dma_buf_log_level = 6;
+int dpu_dma_buf_log_level = 0;  /* default is 6 */
 module_param(dpu_dma_buf_log_level, int, 0644);
 int decon_systrace_enable;
 #if IS_ENABLED(CONFIG_MCD_PANEL)
