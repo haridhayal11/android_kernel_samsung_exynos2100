@@ -425,7 +425,7 @@ STRIP		= llvm-strip
 else
 #CC		= $(CROSS_COMPILE)gcc
 #CC    = $(srctree)/toolchain/clang/host/linux-x86/clang-r383902/bin/clang
-CC    = ../PLATFORM/prebuilts/clang/host/linux-x86/clang-r383902/bin/clang
+CC    ?= ../PLATFORM/prebuilts/clang/host/linux-x86/clang-r383902/bin/clang
 LD		= $(CROSS_COMPILE)ld
 AR		= $(CROSS_COMPILE)ar
 NM		= $(CROSS_COMPILE)nm
