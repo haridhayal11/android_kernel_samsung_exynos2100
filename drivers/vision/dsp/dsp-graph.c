@@ -288,8 +288,7 @@ static void __dsp_graph_remove_kernel(struct dsp_graph *graph)
 	dsp_leave();
 }
 
-static int __dsp_graph_add_kernel(struct dsp_graph *graph, void *kernel_name,
-		void *list)
+static int __dsp_graph_add_kernel(struct dsp_graph *graph, void *kernel_name)
 {
 	int ret;
 	struct dsp_kernel_manager *kmgr;
@@ -298,8 +297,6 @@ static int __dsp_graph_add_kernel(struct dsp_graph *graph, void *kernel_name,
 	unsigned long offset;
 	int idx;
 	struct dsp_kernel *kernel;
-	struct dsp_bin_file_list *bin_list = list;
-	struct dsp_bin_file *bin = NULL;
 
 	dsp_enter();
 	kmgr = &graph->owner->kernel_manager;
@@ -318,11 +315,8 @@ static int __dsp_graph_add_kernel(struct dsp_graph *graph, void *kernel_name,
 	for (idx = 0; idx < kernel_count; ++idx) {
 		graph->dl_libs[idx].name = (const char *)offset;
 
-		if (bin_list)
-			bin = &bin_list->bins[idx];
-
 		kernel = dsp_kernel_alloc(kmgr, length[idx],
-				&graph->dl_libs[idx], bin);
+				&graph->dl_libs[idx]);
 		if (IS_ERR(kernel)) {
 			ret = PTR_ERR(kernel);
 			dsp_err("Failed to alloc kernel(%u/%u)\n",
@@ -415,7 +409,7 @@ struct dsp_graph *dsp_graph_get(struct dsp_graph_manager *gmgr,
 
 struct dsp_graph *dsp_graph_load(struct dsp_graph_manager *gmgr,
 		struct dsp_mailbox_pool *pool, void *kernel_name,
-		unsigned int version, void *bin_list)
+		unsigned int version)
 {
 	int ret;
 	struct dsp_graph *graph, *temp;
@@ -494,7 +488,7 @@ struct dsp_graph *dsp_graph_load(struct dsp_graph_manager *gmgr,
 	graph->param_count = ginfo_n_param;
 	graph->kernel_count = ginfo_n_kernel;
 
-	ret = __dsp_graph_add_kernel(graph, kernel_name, bin_list);
+	ret = __dsp_graph_add_kernel(graph, kernel_name);
 	if (ret)
 		goto p_err_kernel;
 
@@ -625,12 +619,12 @@ void dsp_graph_manager_stop(struct dsp_graph_manager *gmgr, unsigned int id)
 	dsp_leave();
 }
 
-int dsp_graph_manager_open(struct dsp_graph_manager *gmgr, void *bin_list)
+int dsp_graph_manager_open(struct dsp_graph_manager *gmgr)
 {
 	int ret;
 
 	dsp_enter();
-	ret = dsp_kernel_manager_open(&gmgr->kernel_manager, bin_list);
+	ret = dsp_kernel_manager_open(&gmgr->kernel_manager);
 	if (ret)
 		goto p_err;
 

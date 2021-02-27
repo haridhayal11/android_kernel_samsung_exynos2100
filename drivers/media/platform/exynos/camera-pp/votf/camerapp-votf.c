@@ -14,6 +14,7 @@
 #include <linux/dma-iommu.h>
 #include "camerapp-votf.h"
 #include "camerapp-votf-reg.h"
+#include "camerapp-debug.h"
 
 static struct votf_dev *votfdev;
 
@@ -1704,6 +1705,78 @@ int votfitf_check_wait_con(struct votf_info *s_vinfo, struct votf_info *d_vinfo)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(votfitf_check_wait_con);
+
+int votfitf_check_invalid_state(struct votf_info *s_vinfo, struct votf_info *d_vinfo)
+{
+	int s_id, s_ip, s_service, s_idx_ip;
+	int d_id, d_ip, d_service, d_idx_ip;
+	int module;
+	u32 tws_value, trs_value;
+	u32 tws_state, trs_state;
+	struct votf_debug_info *debug_info;
+
+	if (!votfdev) {
+		pr_err("%s: votf devices is null\n", __func__);
+		return -EINVAL;
+	}
+
+	if (!check_vinfo(s_vinfo)) {
+		pr_err("%s: invalid src votf_info\n", __func__);
+		return -EINVAL;
+	}
+
+	if (!check_vinfo(d_vinfo)) {
+		pr_err("%s: invalid dst votf_info\n", __func__);
+		return -EINVAL;
+	}
+
+	s_ip = s_vinfo->ip;
+	s_id = s_vinfo->id;
+	s_service = s_vinfo->service;
+	s_idx_ip = search_ip_idx(s_vinfo);
+
+	if (!votfdev->votf_table[s_service][s_idx_ip][s_id].use) {
+		pr_err("%s: invalid input\n", __func__);
+		return -EINVAL;
+	}
+
+	module = votfdev->votf_table[s_service][s_idx_ip][s_id].module;
+
+	d_ip = d_vinfo->ip;
+	d_id = d_vinfo->id;
+	d_service = d_vinfo->service;
+	d_idx_ip = search_ip_idx(d_vinfo);
+
+	/* TWS: check wait connection */
+	camerapp_hw_votf_get_debug_state(votfdev->votf_addr[s_idx_ip],
+			module, s_id, s_service, &tws_value, &tws_state);
+
+	debug_info = &votfdev->votf_table[s_service][s_idx_ip][s_id].debug_info;
+	debug_info->time = local_clock();
+	debug_info->debug[0] = tws_value;
+	debug_info->debug[1] = tws_state;
+
+	/* TRS: check wait connection */
+	camerapp_hw_votf_get_debug_state(votfdev->votf_addr[d_idx_ip],
+			module, d_id, d_service, &trs_value, &trs_state);
+
+	debug_info = &votfdev->votf_table[d_service][d_idx_ip][d_id].debug_info;
+	debug_info->time = local_clock();
+	debug_info->debug[0] = trs_value;
+	debug_info->debug[1] = trs_state;
+
+	/* s2d for debugging */
+	if ((tws_state & (GENMASK(3,0))) == VOTF_WAIT_TOKEN_ACK ||
+	    (tws_state & (GENMASK(3,0))) == VOTF_WAIT_RESET_ACK) {
+		pr_err("%s: debug state(TWS(0x%04X-%d): 0x%X, TRS(0x%04X-%d): 0x%X)\n",
+			__func__, s_ip, s_id, tws_state, d_ip, d_id, trs_state);
+
+		camerapp_debug_s2d(true, "VOTF invalid state");
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(votfitf_check_invalid_state);
 
 int votf_runtime_resume(struct device *dev)
 {

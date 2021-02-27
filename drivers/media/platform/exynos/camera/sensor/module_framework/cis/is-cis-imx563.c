@@ -702,6 +702,7 @@ int sensor_imx563_cis_stream_on(struct v4l2_subdev *subdev)
 		err("group_param_hold_func failed at stream on");
 
 	/* Sensor stream on */
+	info("%s\n", __func__);
 	is_sensor_write8(client, 0x0100, 0x01);
 
 	ret = sensor_imx563_cis_group_param_hold_func(subdev, 0x00);

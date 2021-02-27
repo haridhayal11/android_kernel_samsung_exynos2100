@@ -36,43 +36,12 @@
 #define DSP_DL_GPT_OFFSET		(SZ_1K * 30)
 #define DSP_DL_GPT_SIZE			(SZ_1K * 2)
 
-static int __dsp_kernel_alloc_copy(const char *name, void **dest, void *src,
-		size_t size)
-{
-	int ret;
-
-	dsp_enter();
-	*dest = vmalloc(size);
-	if (!(*dest)) {
-		ret = -ENOMEM;
-		dsp_err("Failed to allocate dest for binary[%s](%zu)\n",
-				name, size);
-		goto p_err;
-	}
-
-	if (copy_from_user(*dest, (void __user *)src, size)) {
-		ret = -EFAULT;
-		dsp_err("Failed to copy for binary[%s](%d)\n", name, ret);
-		vfree(*dest);
-		goto p_err;
-	}
-	dsp_info("binary[%s/%zd] is copied\n", name, size);
-
-	dsp_leave();
-	return 0;
-p_err:
-	return ret;
-}
-
 struct dsp_kernel *dsp_kernel_alloc(struct dsp_kernel_manager *kmgr,
-		unsigned int name_length, struct dsp_dl_lib_info *dl_lib,
-		void *bin)
-
+		unsigned int name_length, struct dsp_dl_lib_info *dl_lib)
 {
 	int ret;
 	struct dsp_kernel *new, *list, *temp;
 	bool checked = false;
-	struct dsp_bin_file *elf = bin;
 
 	dsp_enter();
 	new = kzalloc(sizeof(*new), GFP_KERNEL);
@@ -117,21 +86,11 @@ struct dsp_kernel *dsp_kernel_alloc(struct dsp_kernel_manager *kmgr,
 
 	if (!checked) {
 		new->ref_count = 1;
-		if (elf) {
-			ret = __dsp_kernel_alloc_copy(new->name, &new->elf,
-					(void *)elf->vaddr, elf->size);
-			if (ret < 0) {
-				mutex_unlock(&kmgr->lock);
-				goto p_err_load;
-			}
-			new->elf_size = elf->size;
-		} else {
-			ret = dsp_binary_alloc_load(new->name, NULL, NULL,
-					&new->elf, &new->elf_size);
-			if (ret) {
-				mutex_unlock(&kmgr->lock);
-				goto p_err_load;
-			}
+		ret = dsp_binary_alloc_load(new->name, NULL, NULL,
+				&new->elf, &new->elf_size);
+		if (ret) {
+			mutex_unlock(&kmgr->lock);
+			goto p_err_load;
 		}
 	}
 
@@ -252,16 +211,13 @@ void dsp_kernel_dump(struct dsp_kernel_manager *kmgr)
 	dsp_leave();
 }
 
-static int __dsp_kernel_manager_dl_init(struct dsp_kernel_manager *kmgr,
-		void *list)
+static int __dsp_kernel_manager_dl_init(struct dsp_kernel_manager *kmgr)
 {
 	int ret;
 	struct dsp_priv_mem *pmem;
 	struct dsp_dl_param *dl_param;
 	void *load;
 	size_t loaded_size;
-	struct dsp_bin_file_list *bin_list = list;
-	struct dsp_bin_file *bin;
 	unsigned int ivp_pm_id;
 	unsigned int dl_out_id;
 
@@ -280,77 +236,37 @@ static int __dsp_kernel_manager_dl_init(struct dsp_kernel_manager *kmgr,
 		goto p_err;
 	}
 
-	if (bin_list) {
-		bin = &bin_list->bins[BIN_TYPE_DSP_GKT_XML];
-		ret = __dsp_kernel_alloc_copy(DSP_DL_GKT_NAME, &load,
-				(void *)bin->vaddr, bin->size);
-		if (ret)
-			goto p_err_gkt;
+	ret = dsp_binary_alloc_load(DSP_DL_GKT_NAME, NULL, NULL, &load,
+			&loaded_size);
+	if (ret)
+		goto p_err_gkt;
 
-		dl_param->gkt.size = bin->size;
-	} else {
-		ret = dsp_binary_alloc_load(DSP_DL_GKT_NAME, NULL, NULL, &load,
-				&loaded_size);
-		if (ret)
-			goto p_err_gkt;
-
-		dl_param->gkt.size = loaded_size;
-	}
+	dl_param->gkt.size = loaded_size;
 	dl_param->gkt.mem = load;
 
-	if (bin_list) {
-		bin = &bin_list->bins[BIN_TYPE_DSP_RELOC_RULES_BIN];
-		ret = __dsp_kernel_alloc_copy(DSP_DL_RULE_NAME, &load,
-				(void *)bin->vaddr, bin->size);
-		if (ret)
-			goto p_err_rule;
+	ret = dsp_binary_alloc_load(DSP_DL_RULE_NAME, NULL, NULL,
+			&load, &loaded_size);
+	if (ret)
+		goto p_err_rule;
 
-		dl_param->rule.size = bin->size;
-	} else {
-		ret = dsp_binary_alloc_load(DSP_DL_RULE_NAME, NULL, NULL,
-				&load, &loaded_size);
-		if (ret)
-			goto p_err_rule;
-
-		dl_param->rule.size = loaded_size;
-	}
+	dl_param->rule.size = loaded_size;
 	dl_param->rule.mem = load;
 
-	if (bin_list) {
-		bin = &bin_list->bins[BIN_TYPE_LIB_LOG_ELF];
-		ret = __dsp_kernel_alloc_copy(DSP_DL_LIB_LOG_NAME, &load,
-				(void *)bin->vaddr, bin->size);
-		if (ret)
-			goto p_err_log;
+	ret = dsp_binary_alloc_load(DSP_DL_LIB_LOG_NAME, NULL, NULL,
+			&load, &loaded_size);
+	if (ret)
+		goto p_err_log;
 
-		dl_param->common_libs[0].file.size = bin->size;
-	} else {
-		ret = dsp_binary_alloc_load(DSP_DL_LIB_LOG_NAME, NULL, NULL,
-				&load, &loaded_size);
-		if (ret)
-			goto p_err_log;
-
-		dl_param->common_libs[0].file.size = loaded_size;
-	}
+	dl_param->common_libs[0].file.size = loaded_size;
 	dl_param->common_libs[0].name = DSP_DL_LIB_LOG_NAME;
 	dl_param->common_libs[0].file.mem = load;
 
-	if (bin_list) {
-		bin = &bin_list->bins[BIN_TYPE_LIB_IVP_ELF];
-		ret = __dsp_kernel_alloc_copy(DSP_DL_LIB_IVP_NAME, &load,
-				(void *)bin->vaddr, bin->size);
-		if (ret)
-			goto p_err_ivp;
+	ret = dsp_binary_alloc_load(DSP_DL_LIB_IVP_NAME, NULL, NULL,
+			&load, &loaded_size);
+	if (ret)
+		goto p_err_ivp;
 
-		dl_param->common_libs[1].file.size = bin->size;
-	} else {
-		ret = dsp_binary_alloc_load(DSP_DL_LIB_IVP_NAME, NULL, NULL,
-				&load, &loaded_size);
-		if (ret)
-			goto p_err_ivp;
-
-		dl_param->common_libs[1].file.size = loaded_size;
-	}
+	dl_param->common_libs[1].file.size = loaded_size;
 	dl_param->common_libs[1].name = DSP_DL_LIB_IVP_NAME;
 	dl_param->common_libs[1].file.mem = load;
 
@@ -392,7 +308,7 @@ p_err:
 	return ret;
 }
 
-int dsp_kernel_manager_open(struct dsp_kernel_manager *kmgr, void *bin_list)
+int dsp_kernel_manager_open(struct dsp_kernel_manager *kmgr)
 {
 	int ret;
 
@@ -407,7 +323,7 @@ int dsp_kernel_manager_open(struct dsp_kernel_manager *kmgr, void *bin_list)
 
 		kmgr->dl_init++;
 	} else {
-		ret = __dsp_kernel_manager_dl_init(kmgr, bin_list);
+		ret = __dsp_kernel_manager_dl_init(kmgr);
 		if (ret)
 			goto p_err;
 

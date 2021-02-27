@@ -17,6 +17,7 @@
 #define NUM_OF_VOTF_BUF		(1)
 
 int is_votf_check_wait_con(struct is_group *group);
+int is_votf_check_invalid_state(struct is_group *group);
 int is_votf_flush(struct is_group *group);
 int is_votf_create_link(struct is_group *group, u32 width, u32 height);
 int is_votf_destroy_link(struct is_group *group);

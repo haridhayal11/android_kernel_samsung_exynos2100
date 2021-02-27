@@ -95,7 +95,7 @@ static ssize_t dsp_hw_debug_power_write(struct file *filp,
 	} else if (sysfs_streq(command, "close")) {
 		dsp_device_close(debug->dspdev);
 	} else if (sysfs_streq(command, "start")) {
-		ret = dsp_device_start(debug->dspdev, 0, NULL);
+		ret = dsp_device_start(debug->dspdev, 0);
 		if (ret)
 			goto p_err;
 	} else if (sysfs_streq(command, "stop")) {
@@ -339,7 +339,7 @@ static int dsp_hw_debug_sfr_show(struct seq_file *file, void *unused)
 	if (ret)
 		goto p_err_open;
 
-	ret = dsp_device_start(debug->dspdev, 0, NULL);
+	ret = dsp_device_start(debug->dspdev, 0);
 	if (ret)
 		goto p_err_start;
 
@@ -817,7 +817,7 @@ static ssize_t dsp_hw_debug_mailbox_write(struct file *filp,
 	if (ret)
 		goto p_err_open;
 
-	ret = dsp_device_start(debug->dspdev, 0, NULL);
+	ret = dsp_device_start(debug->dspdev, 0);
 	if (ret)
 		goto p_err_start;
 
@@ -1236,7 +1236,7 @@ static int dsp_hw_debug_governor_test(struct seq_file *file)
 	if (ret)
 		goto p_err_open;
 
-	ret = dsp_device_start(debug->dspdev, 0, NULL);
+	ret = dsp_device_start(debug->dspdev, 0);
 	if (ret)
 		goto p_err_start;
 

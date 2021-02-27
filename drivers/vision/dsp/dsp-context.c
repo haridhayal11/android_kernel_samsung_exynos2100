@@ -26,7 +26,7 @@ static int dsp_context_boot(struct dsp_context *dctx, struct dsp_ioc_boot *args)
 	dsp_dbg("boot start\n");
 	core = dctx->core;
 
-	ret = dsp_graph_manager_open(&core->graph_manager, NULL);
+	ret = dsp_graph_manager_open(&core->graph_manager);
 	if (ret)
 		goto p_err_graph;
 
@@ -37,7 +37,7 @@ static int dsp_context_boot(struct dsp_context *dctx, struct dsp_ioc_boot *args)
 		goto p_err_count;
 	}
 
-	ret = dsp_device_start(core->dspdev, args->pm_level, NULL);
+	ret = dsp_device_start(core->dspdev, args->pm_level);
 	if (ret)
 		goto p_err_device;
 
@@ -52,70 +52,6 @@ p_err_count:
 	mutex_unlock(&dctx->lock);
 	dsp_graph_manager_close(&core->graph_manager, 1);
 p_err_graph:
-	return ret;
-}
-
-static int dsp_context_boot_direct(struct dsp_context *dctx,
-		struct dsp_ioc_boot_direct *args)
-{
-	int ret;
-	struct dsp_core *core;
-	void *bin_list;
-
-	dsp_enter();
-	dsp_dbg("boot direct start\n");
-	core = dctx->core;
-
-	if (!args->bin_list_size) {
-		ret = -EINVAL;
-		dsp_err("size of bin_list is invalid\n");
-		goto p_err_info;
-	}
-
-	bin_list = kmalloc(args->bin_list_size, GFP_KERNEL);
-	if (!bin_list) {
-		ret = -ENOMEM;
-		dsp_err("Failed to alloc bin_list\n");
-		goto p_err_info;
-	}
-
-	if (copy_from_user(bin_list, (void __user *)args->bin_list_addr,
-				args->bin_list_size)) {
-		ret = -EFAULT;
-		dsp_err("Failed to copy boot_direct info(%d)\n", ret);
-		goto p_err_copy;
-	}
-
-	ret = dsp_graph_manager_open(&core->graph_manager, bin_list);
-	if (ret)
-		goto p_err_graph;
-
-	mutex_lock(&dctx->lock);
-	if (dctx->boot_count + 1 < dctx->boot_count) {
-		ret = -EINVAL;
-		dsp_err("boot count is overflowed\n");
-		goto p_err_count;
-	}
-
-	ret = dsp_device_start(core->dspdev, args->pm_level, bin_list);
-	if (ret)
-		goto p_err_device;
-
-	dctx->boot_count++;
-	mutex_unlock(&dctx->lock);
-
-	kfree(bin_list);
-	dsp_dbg("boot direct end\n");
-	dsp_leave();
-	return 0;
-p_err_device:
-p_err_count:
-	mutex_unlock(&dctx->lock);
-	dsp_graph_manager_close(&core->graph_manager, 1);
-p_err_graph:
-p_err_copy:
-	kfree(bin_list);
-p_err_info:
 	return ret;
 }
 
@@ -272,7 +208,7 @@ static int dsp_context_load_graph(struct dsp_context *dctx,
 	}
 
 	graph = dsp_graph_load(&dctx->core->graph_manager, pool,
-			kernel_name, version, NULL);
+			kernel_name, version);
 	if (IS_ERR(graph)) {
 		ret = PTR_ERR(graph);
 		goto p_err_graph;
@@ -301,143 +237,6 @@ p_err_graph:
 p_err_info:
 	dsp_mailbox_free_pool(pool);
 p_err_pool:
-	kfree(kernel_name);
-p_err_name:
-p_err:
-	return ret;
-}
-
-static int __dsp_context_get_graph_info_direct(struct dsp_context *dctx,
-		struct dsp_ioc_load_graph_direct *load,
-		void *ginfo, void *kernel_name, void *bin_list)
-{
-	int ret;
-
-	dsp_enter();
-	if (copy_from_user(ginfo, (void __user *)load->param_addr,
-				load->param_size)) {
-		ret = -EFAULT;
-		dsp_err("Failed to copy from user param_addr(%d)\n", ret);
-		goto p_err_copy;
-	}
-
-	if (copy_from_user(kernel_name, (void __user *)load->kernel_addr,
-				load->kernel_size)) {
-		ret = -EFAULT;
-		dsp_err("Failed to copy from user kernel_addr(%d)\n", ret);
-		goto p_err_copy;
-	}
-
-	if (copy_from_user(bin_list, (void __user *)load->bin_list_addr,
-				load->bin_list_size)) {
-		ret = -EFAULT;
-		dsp_err("Failed to copy from user bin_list(%d)\n", ret);
-		goto p_err_copy;
-	}
-
-	dsp_leave();
-	return 0;
-p_err_copy:
-	return ret;
-}
-
-static int dsp_context_load_graph_direct(struct dsp_context *dctx,
-		struct dsp_ioc_load_graph_direct *args)
-{
-	int ret;
-	unsigned int booted;
-	struct dsp_system *sys;
-	void *kernel_name, *bin_list;
-	struct dsp_mailbox_pool *pool;
-	struct dsp_common_graph_info_v3 *ginfo;
-	struct dsp_graph *graph;
-	unsigned int version;
-
-	dsp_enter();
-	dsp_dbg("load direct start\n");
-	mutex_lock(&dctx->lock);
-	booted = dctx->boot_count;
-	mutex_unlock(&dctx->lock);
-	if (!booted) {
-		ret = -EINVAL;
-		dsp_err("device is not normal booted\n");
-		goto p_err;
-	}
-
-	sys = &dctx->core->dspdev->system;
-	version = args->version;
-
-	if (!args->kernel_size) {
-		ret = -EINVAL;
-		dsp_err("size for kernel_name is invalid\n");
-		goto p_err;
-	}
-
-	kernel_name = kmalloc(args->kernel_size, GFP_KERNEL);
-	if (!kernel_name) {
-		ret = -ENOMEM;
-		dsp_err("Failed to allocate kernel_name(%u)\n",
-				args->kernel_size);
-		goto p_err_name;
-	}
-
-	if (!args->bin_list_size) {
-		ret = -EINVAL;
-		dsp_err("size of bin_list is invalid\n");
-		goto p_err_bin;
-	}
-
-	bin_list = kmalloc(args->bin_list_size, GFP_KERNEL);
-	if (!bin_list) {
-		ret = -ENOMEM;
-		dsp_err("Failed to allocate bin_list(%u)\n",
-				args->bin_list_size);
-		goto p_err_bin;
-	}
-
-	pool = dsp_mailbox_alloc_pool(&sys->mailbox, args->param_size);
-	if (IS_ERR(pool)) {
-		ret = PTR_ERR(pool);
-		goto p_err_pool;
-	}
-	pool->pm_qos = args->request_qos;
-
-	if (version == DSP_IOC_V3) {
-		ginfo = pool->kva;
-		ret = __dsp_context_get_graph_info_direct(dctx, args, ginfo,
-				kernel_name, bin_list);
-		if (ret)
-			goto p_err_info;
-		SET_COMMON_CONTEXT_ID(&ginfo->global_id, dctx->id);
-	} else {
-		ret = -EINVAL;
-		dsp_err("Failed to load graph due to invalid version(%u)\n",
-				version);
-		goto p_err_info;
-	}
-
-	graph = dsp_graph_load(&dctx->core->graph_manager, pool,
-			kernel_name, version, bin_list);
-	if (IS_ERR(graph)) {
-		ret = PTR_ERR(graph);
-		goto p_err_graph;
-	}
-
-	args->timestamp[0] = pool->time.start;
-	args->timestamp[1] = pool->time.end;
-
-	__dsp_context_put_graph_info(dctx, ginfo);
-	kfree(bin_list);
-	dsp_dbg("load direct end\n");
-	dsp_leave();
-	return 0;
-p_err_graph:
-	__dsp_context_put_graph_info(dctx, ginfo);
-p_err_info:
-	dsp_mailbox_free_pool(pool);
-p_err_pool:
-	kfree(bin_list);
-p_err_bin:
 	kfree(kernel_name);
 p_err_name:
 p_err:
@@ -769,8 +568,6 @@ const struct dsp_ioctl_ops dsp_ioctl_ops = {
 	.unload_graph		= dsp_context_unload_graph,
 	.execute_msg		= dsp_context_execute_msg,
 	.control		= dsp_context_control,
-	.boot_direct		= dsp_context_boot_direct,
-	.load_graph_direct	= dsp_context_load_graph_direct,
 	.boot_secure		= dsp_context_boot_secure,
 };
 

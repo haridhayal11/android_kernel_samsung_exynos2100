@@ -174,6 +174,37 @@ int is_votf_check_wait_con(struct is_group *group)
 	return 0;
 }
 
+int is_votf_check_invalid_state(struct is_group *group)
+{
+	int ret;
+	struct votf_info src_info, dst_info;
+
+	ret = is_votf_get_votf_info(group, &src_info, &dst_info, NULL);
+	if (ret)
+		return ret;
+
+	ret = votfitf_check_invalid_state(&src_info, &dst_info);
+	if (ret)
+		mgerr("votfitf_check_invalid_state is fail(%d)", group, group, ret);
+
+	if (group->prev->device_type == IS_DEVICE_SENSOR) {
+		ret = is_votf_get_pd_votf_info(group, &src_info, &dst_info, NULL);
+		if (ret) {
+			if (ret == -ECHILD)
+				return 0;
+			else
+				return ret;
+		}
+
+		ret = votfitf_check_invalid_state(&src_info, &dst_info);
+		if (ret)
+			mgerr("votfitf_check_invalid_state of subdev_pdaf is fail(%d)",
+				group, group, ret);
+	}
+
+	return 0;
+}
+
 int is_votf_link_set_service_cfg(struct votf_info *src_info,
 		struct votf_info *dst_info,
 		u32 width, u32 height, u32 change)
@@ -376,7 +407,7 @@ int is_votf_create_link(struct is_group *group, u32 width, u32 height)
 		ret = is_votf_get_pd_votf_info(group, &src_info, &dst_info, (char *)__func__);
 		if (ret) {
 			if (ret == -ECHILD)
-				return 0;
+				goto p_skip;
 			else
 				return ret;
 		}
@@ -423,6 +454,9 @@ int is_votf_create_link(struct is_group *group, u32 width, u32 height)
 			return ret;
 		}
 	}
+
+p_skip:
+	set_bit(IS_GROUP_VOTF_CONN_LINK, &group->state);
 
 	return 0;
 }

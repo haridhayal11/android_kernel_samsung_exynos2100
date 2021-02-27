@@ -211,7 +211,7 @@ static int ams_setWord(AMS_PORT_portHndl *portHndl, ams_deviceRegister_t reg, ui
 #define AMS_SET_AGC_NR_SAMPLES(Num, ret)    {ret = ams_setByte(ctx->portHndl, DEVREG_AGC_NR_SAMPLES_LO,   ((0xFF) & ((Num - 1)>>0)));\
                                             ret = ams_setByte(ctx->portHndl, DEVREG_AGC_NR_SAMPLES_HI,   ((0xFF) & ((Num - 1)>>8)));}
 
-#define AMS_FIFO_CLEAR(ret)            {ret = ams_setField(ctx->portHndl, DEVREG_CONTROL, HIGH, MASK_FIFO_CLR);} //FIFO Buffer , FINT, FIFO_OV, FIFO_LVL all clear	
+#define AMS_FIFO_CLEAR(ret)            {ret = ams_setField(ctx->portHndl, DEVREG_CONTROL, HIGH, MASK_FIFO_CLR);} //FIFO Buffer , FINT, FIFO_OV, FIFO_LVL all clear
 
 
 // AGC Number of sample  0 ~ 511
@@ -571,6 +571,10 @@ void FFT(int32_t* data, enum fft_size size)
         return;
     }
     for (i = 0; i < size; i++) {
+        if (!tsl2510_data->saturation && data[i] >= 0x3FFF) {
+            ALS_info("DEBUG_FLICKER saturation");
+            tsl2510_data->saturation = true;
+        }
         buf_r[i] = ((int64_t)data[i]*(int64_t)hamming[i]) >> 10;        // 16+16-10=22   Q6
         ALS_info("DEBUG_FLICKER data[%d] => %d buf[%d] => %lld", i, data[i], i, buf_r[i]);
     }
@@ -753,7 +757,7 @@ static int tsl2510_write_reg_bulk(struct tsl2510_device_data *device, u8 reg_add
     buffer[0] = reg_addr;
     memcpy(&buffer[1] , &data[0], length);
 
-#ifndef AMS_BUILD	
+#ifndef AMS_BUILD
     if (!device->pm_state || device->regulator_state == 0) {
         ALS_err("%s - write error, pm suspend or reg_state %d\n",
                 __func__, device->regulator_state);
@@ -800,7 +804,7 @@ static int tsl2510_write_reg(struct tsl2510_device_data *device,
             .buf = buffer,
         },
     };
-#ifndef AMS_BUILD	
+#ifndef AMS_BUILD
     if (!device->pm_state || device->regulator_state == 0) {
         ALS_err("%s - write error, pm suspend or reg_state %d\n",
                 __func__, device->regulator_state);
@@ -850,7 +854,7 @@ static int tsl2510_read_reg(struct tsl2510_device_data *device,
             .buf = buffer,
         },
     };
-#ifndef AMS_BUILD	
+#ifndef AMS_BUILD
     if (!device->pm_state || device->regulator_state == 0) {
         ALS_err("%s - read error, pm suspend or reg_state %d\n",
                 __func__, device->regulator_state);
@@ -1044,17 +1048,21 @@ static int amsAlg_als_processData(amsAlsContext_t *ctx, amsAlsDataSet_t *inputDa
         ctx->results.irrClear = inputData->datasetArray->clearADC;
         ctx->results.irrWideband = inputData->datasetArray->widebandADC;
 
-        if (ctx->results.irrWideband < ctx->results.irrClear) {
-            ctx->results.IR = 0;
-        } else {
-            tempWb = (WIDEBAND_CONST * AMS_ALS_FACTOR) * ctx->results.irrWideband;
-            tempClear = (CLEAR_CONST * AMS_ALS_FACTOR) * ctx->results.irrClear;
-
-            if (tempWb < tempClear) {
+        if (!tsl2510_data->saturation) {
+            if (ctx->results.irrWideband < ctx->results.irrClear) {
                 ctx->results.IR = 0;
             } else {
-                ctx->results.IR = (tempWb - tempClear) / AMS_ALS_FACTOR;
+                tempWb = (WIDEBAND_CONST * AMS_ALS_FACTOR) * ctx->results.irrWideband;
+                tempClear = (CLEAR_CONST * AMS_ALS_FACTOR) * ctx->results.irrClear;
+
+                if (tempWb < tempClear) {
+                    ctx->results.IR = 0;
+                } else {
+                    ctx->results.IR = (tempWb - tempClear) / AMS_ALS_FACTOR;
+                }
             }
+        } else {
+            ctx->results.IR = 0;
         }
     }
 
@@ -1070,7 +1078,7 @@ static int amsAlg_als_processData(amsAlsContext_t *ctx, amsAlsDataSet_t *inputDa
         CWRatio = 15;
 
     if(CWRatio ==0){ // Normal lux
-        lux = ctx->results.rawClear * (((coef_a *ctx->results.rawClear) /ctx->results.rawWideband) +coef_b);	
+        lux = ctx->results.rawClear * (((coef_a *ctx->results.rawClear) /ctx->results.rawWideband) +coef_b);
     }else{ //CWRatio data have over 15
         lux = ctx->results.rawClear * ((coef_a *CWRatio) +coef_b);
     }
@@ -1596,7 +1604,7 @@ ssize_t read_fifo(ams_deviceCtx_t * ctx , uint16_t *buf, int size)
             buf[j] = tmp;
         }
 
-        parse_fifo_end_data(ctx);	
+        parse_fifo_end_data(ctx);
     } else {
         len = 0;
     }
@@ -1608,7 +1616,7 @@ int get_fft(ams_deviceCtx_t * ctx , uint32_t *out)
 {
     static uint16_t buffer[2048] ;
     static uint32_t clear_buffer[MAX_NUM_FLICKER_SAMPLES] = { 0 };
-    static uint32_t wideband_buffer[MAX_NUM_FLICKER_SAMPLES] = { 0 };	
+    static uint32_t wideband_buffer[MAX_NUM_FLICKER_SAMPLES] = { 0 };
     //int num_samples = ctx->flicker_num_samples;
 
     //  int num_sample_bytes = num_samples * 4;
@@ -1631,8 +1639,8 @@ int get_fft(ams_deviceCtx_t * ctx , uint32_t *out)
 
     //if(size < 4096){
     //return 0;
-    //} 
-    kfifo_reset(&ams_fifo);	
+    //}
+    kfifo_reset(&ams_fifo);
 
     /* Separate Clear and Wideband data */
     for (i = 0, j = 0; i < size/2; i+=2, j++) { //256 sample (clear & wide)
@@ -1641,12 +1649,12 @@ int get_fft(ams_deviceCtx_t * ctx , uint32_t *out)
 
         /* Wideband */
         out[j] = wideband_buffer[j] = buffer[i + 1]; //seperate 128
-        //ALS_info("CLEAR[ %d]=%d, WIDE[%d]=%d \n",j,clear_buffer[j],j, wideband_buffer[j]);			
+        //ALS_info("CLEAR[ %d]=%d, WIDE[%d]=%d \n",j,clear_buffer[j],j, wideband_buffer[j]);
     }
 
     ctx->clear_average_fifo = calc_average(clear_buffer, AMS_CLR_WIDE_FLICKER_NUM_SAMPLES);//128
     ctx->wideband_average_fifo = calc_average(wideband_buffer, AMS_CLR_WIDE_FLICKER_NUM_SAMPLES);//128
-    ALS_info("clear_average_fifo %d , wideband_average_fifo %d ,mod0_gain 0x%x , mod1_gain 0x%x  \n",ctx->clear_average_fifo, ctx->wideband_average_fifo, ctx->fifo_mod0_gain, ctx->fifo_mod1_gain);			
+    ALS_info("clear_average_fifo %d , wideband_average_fifo %d ,mod0_gain 0x%x , mod1_gain 0x%x  \n",ctx->clear_average_fifo, ctx->wideband_average_fifo, ctx->fifo_mod0_gain, ctx->fifo_mod1_gain);
 
     fifo_mod0_gain = ctx->fifo_mod0_gain & 0x0F;//clear
     fifo_mod1_gain = (ctx->fifo_mod0_gain >> 4) & 0x0F;//wide
@@ -1701,7 +1709,7 @@ bool  ccb_sw_bin4096_flicker_GetResult(void * dcbCtx)
     if(get_fft(ctx,buf)){
         //buf[0] = 0;
         for(i = 5 ; i <= 50; ++i){			// 50~500Hz
-            //ALS_info("ccb_sw_bin4096_flicker_GetResult: buf[%d]=%d \n",i,buf[i]);		
+            //ALS_info("ccb_sw_bin4096_flicker_GetResult: buf[%d]=%d \n",i,buf[i]);
             if(max < 0 || buf[i] > buf[max]){
                 max = i;
             }
@@ -1811,7 +1819,7 @@ static bool ccb_FIFOEvent(void *dcbCtx)
          //dev_info(&chip->client->dev, "Sample Rate: %ld Hz\n", sample_rate);
          ALS_info("%s FIFO now is full!!! ready  to calc freq   fifo size %d ",__func__,len);
 
-     }	
+     }
      //AMS_FIFO_CLEAR(ret);
 
 
@@ -2256,7 +2264,7 @@ static int tsl2510_set_nr_sample(struct tsl2510_device_data *data , u16 fifo_thr
     ams_deviceCtx_t *ctx = data->deviceCtx;
     int ret = 0;
 
-    AMS_DISABLE_FD(ret);			
+    AMS_DISABLE_FD(ret);
     if (ret < 0) {
         ALS_err("%s - failed to AMS_DISABLE_FD\n", __func__);
         return ret;
@@ -2266,7 +2274,7 @@ static int tsl2510_set_nr_sample(struct tsl2510_device_data *data , u16 fifo_thr
         ALS_err("%s - failed to AMS_SET_FLICKER_NUM_SAMPLES\n", __func__);
         return ret;
     }
-    AMS_REENABLE_FD(ret);			
+    AMS_REENABLE_FD(ret);
     if (ret < 0) {
         ALS_err("%s - failed to AMS_REENABLE_FD\n", __func__);
         return ret;
@@ -2279,7 +2287,7 @@ static int tsl2510_set_sampling_time(struct tsl2510_device_data *data , u16 time
     ams_deviceCtx_t *ctx = data->deviceCtx;
     int ret = 0;
 
-    AMS_DISABLE_FD(ret);			
+    AMS_DISABLE_FD(ret);
     if (ret < 0) {
         ALS_err("%s - failed to AMS_DISABLE_FD\n", __func__);
         return ret;
@@ -2289,7 +2297,7 @@ static int tsl2510_set_sampling_time(struct tsl2510_device_data *data , u16 time
         ALS_err("%s - failed to AMS_SET_SAMPLE_TIME\n", __func__);
         return ret;
     }
-    AMS_REENABLE_FD(ret);			
+    AMS_REENABLE_FD(ret);
     if (ret < 0) {
         ALS_err("%s - failed to AMS_REENABLE_FD\n", __func__);
         return ret;
@@ -2303,7 +2311,7 @@ static int tsl2510_hamming_status(struct tsl2510_device_data *data , bool on_off
     ams_deviceCtx_t *ctx = data->deviceCtx;
     int ret = 0;
 
-    AMS_DISABLE_FD(ret);			
+    AMS_DISABLE_FD(ret);
     if (ret < 0) {
         ALS_err("%s - failed to AMS_DISABLE_FD\n", __func__);
         return ret;
@@ -2311,7 +2319,7 @@ static int tsl2510_hamming_status(struct tsl2510_device_data *data , bool on_off
 
     ctx->hamming_status = on_off;
 
-    AMS_REENABLE_FD(ret);			
+    AMS_REENABLE_FD(ret);
     if (ret < 0) {
         ALS_err("%s - failed to AMS_REENABLE_FD\n", __func__);
         return ret;
@@ -2337,17 +2345,17 @@ static int tsl2510_polling_enable(struct tsl2510_device_data *data , bool on_off
             ALS_err("%s - failed to AMS_DISABLE_FDINT\n", __func__);
             return ret;
         }
-        AMS_REENABLE_ALS(ret);			
+        AMS_REENABLE_ALS(ret);
         hrtimer_start(&data->timer, data->light_poll_delay, HRTIMER_MODE_REL);   /* polling start*/
     }else{
-        hrtimer_cancel(&data->timer);/*polling stop*/	
+        hrtimer_cancel(&data->timer);/*polling stop*/
         AMS_DISABLE_ALS(ret);
         AMS_REENABLE_FD(ret);
         if (ret < 0) {
             ALS_err("%s - failed to AMS_REENABLE_FD\n", __func__);
             return ret;
         }
-        AMS_REENABLE_FDINT(ret);	
+        AMS_REENABLE_FDINT(ret);
         if (ret < 0) {
             ALS_err("%s - failed to AMS_REENABLE_FDINT\n", __func__);
             return ret;
@@ -2383,7 +2391,7 @@ static int tsl2510_set_fifo_thr(struct tsl2510_device_data *data , u16 fifo_thr)
     ams_deviceCtx_t *ctx = data->deviceCtx;
     int ret = 0;
 
-    AMS_DISABLE_FD(ret);			
+    AMS_DISABLE_FD(ret);
     if (ret < 0) {
         ALS_err("%s - failed to AMS_DISABLE_FD\n", __func__);
         return ret;
@@ -2394,7 +2402,7 @@ static int tsl2510_set_fifo_thr(struct tsl2510_device_data *data , u16 fifo_thr)
         return ret;
     }
 
-    AMS_REENABLE_FD(ret);			
+    AMS_REENABLE_FD(ret);
     if (ret < 0) {
         ALS_err("%s - failed to AMS_REENABLE_FD\n", __func__);
         return ret;
@@ -2548,11 +2556,18 @@ static void report_als(struct tsl2510_device_data *chip)
 {
     ams_apiAls_t outData;
     static unsigned int als_cnt;
+    int temp_ir = 0;
 
     if (chip->als_input_dev) {
         ams_deviceGetAls(chip->deviceCtx, &outData);
 #ifndef AMS_BUILD
-        input_report_rel(chip->als_input_dev, REL_X, outData.ir + 1);
+        if (chip->saturation) {
+            temp_ir = -3;
+        } else {
+            temp_ir = outData.ir;
+        }
+
+        input_report_rel(chip->als_input_dev, REL_X, temp_ir + 1);
         input_report_rel(chip->als_input_dev, REL_RY, outData.clear + 1);
         input_report_abs(chip->als_input_dev, ABS_X, outData.time_us + 1);
         input_report_abs(chip->als_input_dev, ABS_Y, outData.ClearGain + 1);
@@ -2561,13 +2576,14 @@ static void report_als(struct tsl2510_device_data *chip)
 
         if (als_cnt++ > 10) {
             ALS_dbg("%s - I:%d, W:%d, C:%d, TIME:%d, Clear GAIN:%d WB GAIN : %d\n", __func__,
-                    outData.ir, outData.wideband, outData.clear, outData.time_us, outData.ClearGain, outData.WBGain);
+                    temp_ir, outData.wideband, outData.clear, outData.time_us, outData.ClearGain, outData.WBGain);
             als_cnt = 0;
+        } else {
+            ALS_info("%s - I:%d, W:%d, C:%d, TIME:%d, Clear GAIN:%d WB GAIN : %d\n", __func__,
+                    temp_ir, outData.wideband, outData.clear, outData.time_us, outData.ClearGain, outData.WBGain);
         }
 #endif
-        ALS_info("%s - I:%d, W:%d, C:%d, TIME:%d, Clear GAIN:%d WB GAIN : %d\n", __func__,
-                outData.ir, outData.wideband, outData.clear, outData.time_us, outData.ClearGain, outData.WBGain);
-        chip->user_ir_data = outData.ir;
+        chip->user_ir_data = temp_ir;
 #ifdef CONFIG_AMS_OPTICAL_SENSOR_EOL_MODE
         if (chip->eol_enable && chip->eol_count >= EOL_SKIP_COUNT) {
             chip->eol_awb += outData.ir;
@@ -2576,6 +2592,7 @@ static void report_als(struct tsl2510_device_data *chip)
         }
 #endif
     }
+    chip->saturation = false;
 }
 
 static void report_flicker(struct tsl2510_device_data *chip)
@@ -4329,6 +4346,7 @@ static void tsl2510_init_var(struct tsl2510_device_data *data)
     data->awb_sample_cnt = 0;
     data->flicker_data_cnt = 0;
     //flicker_data_cnt = 0;
+    data->saturation = false;
 }
 
 static int tsl2510_parse_dt(struct tsl2510_device_data *data)
@@ -4898,7 +4916,7 @@ int tsl2510_probe(struct i2c_client *client, const struct i2c_device_id *id)
 #ifdef CONFIG_OF
         if (of_match_device(tsl2510_match_table, &client->dev))
             pdata->of_node = client->dev.of_node;
-#endif 		
+#endif
     }
 
     data->client = client;
@@ -4926,7 +4944,7 @@ int tsl2510_probe(struct i2c_client *client, const struct i2c_device_id *id)
         err = -ENODEV;
         goto err_parse_dt;
     }
-#ifndef AMS_BUILD	
+#ifndef AMS_BUILD
     err = tsl2510_setup_gpio(data);
     if (err) {
         ALS_err("%s - failed to setup gpio\n", __func__);
@@ -4934,7 +4952,7 @@ int tsl2510_probe(struct i2c_client *client, const struct i2c_device_id *id)
     }
 #else
     data->dev_irq = client->irq;
-#endif 	
+#endif
     err = tsl2510_power_ctrl(data, PWR_ON);
     if (err < 0) {
         ALS_err("%s - failed to power on ctrl\n", __func__);
@@ -5151,7 +5169,7 @@ int tsl2510_remove(struct i2c_client *client)
         regulator_put(data->regulator_i2c_1p8);
 #ifndef AMS_BUILD
     sensors_unregister(data->dev, tsl2510_sensor_attrs);
-#endif 	
+#endif
     sysfs_remove_group(&data->als_input_dev->dev.kobj,
             &als_attribute_group);
 #ifndef AMS_BUILD

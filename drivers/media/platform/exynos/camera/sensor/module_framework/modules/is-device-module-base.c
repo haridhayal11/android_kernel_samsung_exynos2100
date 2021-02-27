@@ -167,6 +167,7 @@ int sensor_module_init(struct v4l2_subdev *subdev, u32 val)
 #ifdef USE_CAMERA_HW_BIG_DATA
 	struct cam_hw_param *hw_param = NULL;
 #endif
+	int retry = 10;
 
 	FIMC_BUG(!subdev);
 
@@ -278,8 +279,16 @@ int sensor_module_init(struct v4l2_subdev *subdev, u32 val)
 
 		ret = v4l2_subdev_call(subdev_actuator, core, init, 0);
 		if (ret) {
-			err("v4l2_actuator_call(init) is fail(%d)", ret);
-			goto p_err;
+			while (--retry && ret) {
+				msleep(100);
+				err("v4l2_actuator_call(init) is fail(%d) retry again! (%d)", ret, retry);
+				ret = v4l2_subdev_call(subdev_actuator, core, init, 0);
+			}
+
+			if (retry == 0) {
+				err("v4l2_actuator_call(init) is fail(%d) retry(%d)", ret, retry);
+				goto p_err;
+			}
 		}
 	}
 

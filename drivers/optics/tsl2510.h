@@ -51,7 +51,7 @@
 #ifdef CONFIG_AMS_OPTICAL_SENSOR_EOL_MODE
 #include <linux/pinctrl/consumer.h>
 #include <linux/pm_qos.h>
-#endif 
+#endif
 
 #ifdef CONFIG_OF
 #include <linux/of_gpio.h>
@@ -92,7 +92,7 @@ enum fft_size {
 //#define AMS_SAMPLING_TIME					(500)  /* usec */
 //#define AMS_SAMPLING_TIME					(250)  /* usec */
 
- 
+
 // FLICKER SETTING VALUES
 #define AMS_FLICKER_NUM_SAMPLES         (512)
 #define AMS_CLR_WIDE_FLICKER_NUM_SAMPLES (128) // Clear & wide = 128 samples ,  128 * 2byte * 2ch = 512byte
@@ -335,7 +335,7 @@ typedef struct {
 extern "C" {
 #endif
 
-#define AMS_USEC_PER_TICK			(1389) // 1.388889usec 
+#define AMS_USEC_PER_TICK			(1389) // 1.388889usec
     //#define ACTUAL_USEC(x)	(((x + AMS_USEC_PER_TICK / 2) / AMS_USEC_PER_TICK) * AMS_USEC_PER_TICK)
     //#define AMS_ALS_USEC_TO_REG(x)		(256 - (x / AMS_USEC_PER_TICK))
 #define AMS_DEFAULT_REPORTTIME_US	(1000000) /* Max 8 seconds */
@@ -628,7 +628,7 @@ extern "C" {
         OFFSET_ADJUSTED = 0x02,
         CALIB_FINISHED = 0x01,
 
-#endif 
+#endif
         /* INTENAB register  */
         SIEN = 0x01,  /*aligned to STATUS3 *//* register 0xBA */
         FIEN = 0x04,
@@ -783,7 +783,7 @@ extern "C" {
         MASK_AGC_HIGH_HYST = 0xC0,
 
         MASK_SOFT_RESET = 0x04, /* register 0xF3 */
-#endif 
+#endif
         MASK_LAST_IN_ENUMLIST
     } ams_regMask_t;
 
@@ -883,14 +883,14 @@ extern "C" {
         bool alwaysReadProx;		/* ditto PDATA */
         bool alwaysReadFlicker;
 
-        bool agc;   // Auto gain control for als and flicker 
-        u8 sensor_mode;		
+        bool agc;   // Auto gain control for als and flicker
+        u8 sensor_mode;
 
         uint32_t updateAvailable;
         uint8_t shadowEnableReg;
         uint8_t shadowIntenabReg;
         uint8_t shadowStatus1Reg;     // STATUS
-        uint8_t shadowStatus2Reg;    // STATUS2 
+        uint8_t shadowStatus2Reg;    // STATUS2
         uint8_t shadowAlsStatusReg;  // ALS_STATUS
         uint8_t shadowAlsStatus2Reg;  // ALS_STATUS2
         uint8_t shadowFIFOStatusReg;  // FifoStatus
@@ -1065,9 +1065,9 @@ extern "C" {
         wait_queue_head_t fifo_wait;
         bool i2c_1p8;
         u8 enabled;
-        u8 sensor_mode;		
+        u8 sensor_mode;
         u32 sampling_period_ns;
-        u32 fifo_thr;		
+        u32 fifo_thr;
         u8 regulator_state;
         s32 pin_als_int;
         s32 pin_als_en;
@@ -1083,6 +1083,7 @@ extern "C" {
         u32 i2c_err_cnt;
         u32 user_ir_data;
         u32 user_flicker_data;
+        bool saturation;
 #ifdef CONFIG_AMS_OPTICAL_SENSOR_EOL_MODE
         char *eol_result;
         u8 eol_enable;
@@ -1114,7 +1115,7 @@ extern "C" {
         ktime_t light_poll_delay;
         struct workqueue_struct *wq;
         struct work_struct work_light;
-        //#endif        
+        //#endif
 
     };
 

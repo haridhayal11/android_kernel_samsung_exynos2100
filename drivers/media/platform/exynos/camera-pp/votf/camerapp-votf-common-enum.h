@@ -68,10 +68,12 @@ enum votf_mode {
 };
 
 enum votf_debug_state {
-	VOTF_IDLE,
-	VOTF_TRS_WAIT_CON,
-	VOTF_TWS_WAIT_CON,
-	VOTF_CONNECT,
+	VOTF_IDLE = 0,
+	VOTF_TRS_WAIT_CON = 1,
+	VOTF_TWS_WAIT_CON = 2,
+	VOTF_CONNECT = 3,
+	VOTF_WAIT_TOKEN_ACK = 5,
+	VOTF_WAIT_RESET_ACK = 7,
 };
 
 #endif /* CAMERAPP_VOTF_ENUM_H */

@@ -43,6 +43,7 @@ static int mid_thd = 50;
 static int mid_thd_h = 600;
 static int boost_timer = 5;
 static int debug = 0;
+static int gpu_util_thd = 80;
 
 
 static uint cpu_util_avgs[NR_CPUS];
@@ -59,6 +60,13 @@ static struct kobject *gmc_kobj;
 
 //---------------------------------------
 // thread main
+#define GMC_T1	1
+#define GMC_T2	2
+#define GMC_T3	3
+#define TYPE_LEN	(3+1)
+static int boost_vals[TYPE_LEN];
+static int boost_vals_old[TYPE_LEN];
+
 static int gmc_thread(void *data)
 {
 	int cpu;
@@ -69,7 +77,7 @@ static int gmc_thread(void *data)
 	int mid_avg_sum = 0;
 	int big_avg, mid_avg;
 	int boost_cnt = 0;
-	int old_boost = 0;
+	int gpu_util = 0;
 
 	if (is_running) {
 		pr_info("[%s] gmc already running!!\n", prefix);
@@ -82,6 +90,28 @@ static int gmc_thread(void *data)
 
 
 	while (is_running) {
+		/******************************
+		  GPU heavy --> wakeup boost down
+		*/
+		gpu_util = gpu_dvfs_get_utilization();
+		if (gpu_util > gpu_util_thd)
+			boost_vals[GMC_T3] = 1;
+		else
+			boost_vals[GMC_T3] = 0;
+
+		if (boost_vals_old[GMC_T3] != boost_vals[GMC_T3]) {
+			snprintf(msg, sizeof(msg), "GMC_TYPE=%d,GMC_BOOST=%d", GMC_T3, boost_vals[GMC_T3]);
+			ret = kobject_uevent_env(gmc_kobj->parent, KOBJ_CHANGE, envp);
+			if (ret)
+				pr_warn("[%s] fail to send uevent to gmc\n", prefix);
+			boost_vals_old[GMC_T3] = boost_vals[GMC_T3];
+			if (debug)
+				pr_info("[%s] gmc gpu_util %d boost %d\n", prefix, gpu_util, boost_vals[GMC_T3]);
+		}
+
+		/******************************
+		  Big heavy + Mid light --> Mid boost up
+		*/
 		for_each_possible_cpu(cpu) {
 			if (cpu >= 4 && cpu <= 6)
 				mid_avg_sum += cpu_util_avgs[cpu];
@@ -92,21 +122,20 @@ static int gmc_thread(void *data)
 			mid_avg = mid_avg_sum / boost_timer / 3;
 			big_avg = big_avg_sum / boost_timer;
 			if (big_avg >= big_thd && (mid_avg >= mid_thd && mid_avg < mid_thd_h))
-				boost = 1;
+				boost_vals[GMC_T1] = 1;
 			else
-				boost = 0;
+				boost_vals[GMC_T1] = 0;
 
 			if (debug)
 				pr_info("[%s] gmc big_thd %d mid_thd %d big_avg %d mid_avg %d boost_timer %d boost %d\n",
-						prefix, big_thd, mid_thd, big_avg, mid_avg, boost_timer, boost);
+						prefix, big_thd, mid_thd, big_avg, mid_avg, boost_timer, boost_vals[GMC_T1]);
 
-			if (old_boost != boost) {
-				// send uevent
-				snprintf(msg, sizeof(msg), "GMC_BOOST=%d", boost);
+			if (boost_vals_old[GMC_T1] != boost_vals[GMC_T1]) {
+				snprintf(msg, sizeof(msg), "GMC_TYPE=%d,GMC_BOOST=%d", GMC_T1, boost_vals[GMC_T1]);
 				ret = kobject_uevent_env(gmc_kobj->parent, KOBJ_CHANGE, envp);
 				if (ret)
 					pr_warn("[%s] fail to send uevent to gmc\n", prefix);
-				old_boost = boost;
+				boost_vals_old[GMC_T1] = boost_vals[GMC_T1];
 			}
 			boost_cnt = 0;
 			big_avg_sum = 0;
@@ -198,6 +227,7 @@ DEF_NODE(mid_thd)
 DEF_NODE(mid_thd_h)
 DEF_NODE(boost_timer)
 DEF_NODE(debug)
+DEF_NODE(gpu_util_thd)
 
 
 // run
@@ -229,6 +259,7 @@ static struct attribute *gmc_attrs[] = {
 	&mid_thd_h_attr.attr,
 	&boost_timer_attr.attr,
 	&debug_attr.attr,
+	&gpu_util_thd_attr.attr,
 	NULL
 };
 

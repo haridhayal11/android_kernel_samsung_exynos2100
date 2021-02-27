@@ -2387,8 +2387,6 @@ int is_group_start(struct is_groupmgr *groupmgr,
 				mgerr("is_votf_create_link is fail(%d)", child, child, ret);
 				goto p_err;
 			}
-
-			set_bit(IS_GROUP_VOTF_CONN_LINK, &child->state);
 		}
 
 		child = child->child;

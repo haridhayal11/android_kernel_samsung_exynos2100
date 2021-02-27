@@ -377,6 +377,7 @@ int dsp_reloc_rule_list_import(struct dsp_reloc_rule_list *list,
 				list->cnt, RULE_MAX);
 		return -1;
 	}
+	DL_DEBUG("Rule list count %d\n", list->cnt);
 
 	for (idx = 0; idx < list->cnt; idx++) {
 		list->list[idx] = (struct dsp_reloc_rule *)dsp_dl_malloc(

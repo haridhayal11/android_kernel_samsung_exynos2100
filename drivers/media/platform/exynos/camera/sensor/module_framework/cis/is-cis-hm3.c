@@ -2115,9 +2115,6 @@ int sensor_hm3_cis_stream_on(struct v4l2_subdev *subdev)
 	is_vendor_set_mipi_clock(device);
 
 	I2C_MUTEX_LOCK(cis->i2c_lock);
-	ret = sensor_hm3_cis_group_param_hold_func(subdev, 0x01);
-	if (ret < 0)
-		err("group_param_hold_func failed at stream on");
 
 #ifdef DEBUG_HM3_PLL
 	{
@@ -2178,10 +2175,6 @@ int sensor_hm3_cis_stream_on(struct v4l2_subdev *subdev)
 	/* Sensor stream on */
 	info("%s - set_cal_available(%d)\n", __func__, sensor_hm3_eeprom_cal_available);
 	is_sensor_write16(client, 0x0100, 0x0100);
-
-	ret = sensor_hm3_cis_group_param_hold_func(subdev, 0x00);
-	if (ret < 0)
-		err("group_param_hold_func failed at stream on");
 
 	I2C_MUTEX_UNLOCK(cis->i2c_lock);
 

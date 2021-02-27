@@ -1716,7 +1716,7 @@
 			rear_single_wide_video_fhd30_cam = <DVFS_CAM_L6>;
 			rear_single_wide_video_fhd30_csis = <DVFS_CSIS_L4>;
 			rear_single_wide_video_fhd30_isp = <DVFS_ISP_L6>;
-			rear_single_wide_video_fhd30_mif = <DVFS_MIF_L7>;
+			rear_single_wide_video_fhd30_mif = <DVFS_MIF_L8>;
 			rear_single_wide_video_fhd30_int = <DVFS_INT_L2>;
 			rear_single_wide_video_fhd30_hpg = <1>;
 			rear_single_wide_video_fhd30_cpu = CPU_CL0;

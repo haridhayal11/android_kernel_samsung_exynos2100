@@ -4905,7 +4905,7 @@
 					rear_single_wide_video_fhd30_cam = <0x99cf0>;
 					rear_single_wide_video_fhd30_csis = <0x9eb10>;
 					rear_single_wide_video_fhd30_isp = <0x99cf0>;
-					rear_single_wide_video_fhd30_mif = <0x14a140>;
+					rear_single_wide_video_fhd30_mif = <0xf78f0>;
 					rear_single_wide_video_fhd30_int = <0x61a80>;
 					rear_single_wide_video_fhd30_hpg = <0x01>;
 					rear_single_wide_video_fhd30_cpu = "0-3";

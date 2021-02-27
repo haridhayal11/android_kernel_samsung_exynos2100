@@ -810,6 +810,11 @@ static int __calc_link_value(struct dsp_lib *lib,
 	if (ret == -1) {
 		rela_info = lib->link_info;
 		ruleidx = dsp_elf32_rela_get_rule_idx(rela);
+		if (ruleidx >= rules->cnt) {
+			DL_ERROR("invalid ruleidx(%u/%d)\n",
+					ruleidx, rules->cnt);
+			return -1;
+		}
 		rule = rules->list[ruleidx];
 
 		ret = dsp_hash_get(&rela_info->elf->symhash, sym_str,
@@ -821,7 +826,6 @@ static int __calc_link_value(struct dsp_lib *lib,
 					&sym_info, sym_str, rela_info,
 					libs, libs_size,
 					common_libs, common_size);
-
 			if (ret == -1) {
 				DL_ERROR("Symbol(%s) is not found\n",
 					sym_str);
@@ -960,7 +964,7 @@ static int __cvt_to_item_idx(unsigned int *sh, int num, int item_cnt,
 	return idx;
 }
 
-static void __process_rule(struct dsp_lib *lib, struct dsp_reloc_rule *rule,
+static int __process_rule(struct dsp_lib *lib, struct dsp_reloc_rule *rule,
 	struct dsp_elf32_shdr *rela_shdr, unsigned int value,
 	struct dsp_elf32_rela *rela)
 {
@@ -981,12 +985,19 @@ static void __process_rule(struct dsp_lib *lib, struct dsp_reloc_rule *rule,
 
 	struct dsp_list_node *pos_node, *bit_node;
 
-	DL_DEBUG("reloc_data : %ld\n",
-		(unsigned long)(reloc_data - elf->data));
+	if ((reloc_data > (elf->data + elf->size)) ||
+			(reloc_data < elf->data)) {
+		DL_ERROR("reloc_data is out of range(%#lx/%#zx)\n",
+				(unsigned long)(reloc_data - elf->data),
+				elf->size);
+		return -1;
+	}
+	DL_DEBUG("reloc_data : %#lx/%#zx\n",
+			(unsigned long)(reloc_data - elf->data), elf->size);
 	DL_DEBUG("item_bit : %d, cnt : %d, align : %d\n",
-		item_bit, item_cnt, item_align);
+			item_bit, item_cnt, item_align);
 	DL_DEBUG("cont bit sz : %d, item reversed : %d",
-		rule->cont.type.bit_sz, item_rev);
+			rule->cont.type.bit_sz, item_rev);
 
 	dsp_list_for_each(pos_node, &rule->pos_list) {
 		pos = container_of(pos_node, struct dsp_pos, list_node);
@@ -1019,6 +1030,7 @@ static void __process_rule(struct dsp_lib *lib, struct dsp_reloc_rule *rule,
 			}
 		}
 	}
+	return 0;
 }
 
 static int __rela_relocation(struct dsp_lib *lib, struct dsp_elf32_rela *rela,
@@ -1027,16 +1039,25 @@ static int __rela_relocation(struct dsp_lib *lib, struct dsp_elf32_rela *rela,
 	struct dsp_lib **common_libs, int common_size)
 {
 	int ret;
-	struct dsp_link_info *l_info = lib->link_info;
-	struct dsp_elf32 *elf = l_info->elf;
-	unsigned int symidx = dsp_elf32_rela_get_sym_idx(rela);
-	unsigned int ruleidx = dsp_elf32_rela_get_rule_idx(rela);
-
-	struct dsp_reloc_rule *rule = rules->list[ruleidx];
-	struct dsp_elf32_sym *sym = &elf->symtab[symidx];
-	const char *sym_str = elf->strtab + sym->st_name;
-
+	struct dsp_elf32 *elf;
+	unsigned int symidx;
+	struct dsp_elf32_sym *sym;
+	const char *sym_str;
+	unsigned int ruleidx;
+	struct dsp_reloc_rule *rule;
 	unsigned int value;
+
+	elf = lib->link_info->elf;
+	symidx = dsp_elf32_rela_get_sym_idx(rela);
+	sym = &elf->symtab[symidx];
+	sym_str = elf->strtab + sym->st_name;
+
+	ruleidx = dsp_elf32_rela_get_rule_idx(rela);
+	if (ruleidx >= rules->cnt) {
+		DL_ERROR("invalid ruleidx(%u/%d)\n", ruleidx, rules->cnt);
+		return -1;
+	}
+	rule = rules->list[ruleidx];
 
 	ret = __calc_link_value(lib, &value, sym_str, rela, rela_shdr,
 			libs, libs_size,
@@ -1048,9 +1069,7 @@ static int __rela_relocation(struct dsp_lib *lib, struct dsp_elf32_rela *rela,
 
 	DL_DEBUG("Symbol(%s) Link value(%x)\n", sym_str, value);
 
-
-	__process_rule(lib, rule, rela_shdr, value, rela);
-	return 0;
+	return __process_rule(lib, rule, rela_shdr, value, rela);
 }
 
 static int __linker_reloc_list(struct dsp_lib *lib,

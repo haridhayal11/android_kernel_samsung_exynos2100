@@ -4040,6 +4040,12 @@ static int queue_command(struct xhci_hcd *xhci, struct xhci_command *cmd,
 	if (list_empty(&xhci->cmd_list)) {
 		xhci->current_cmd = cmd;
 		xhci_mod_cmd_timer(xhci, XHCI_CMD_DEFAULT_TIMEOUT);
+	} else {
+		if (!delayed_work_pending(&xhci->cmd_timer)) {
+			xhci_err(xhci, "cmd_timer is not pending... %d\n",
+						TRB_FIELD_TO_TYPE(field4));
+			/* xhci_mod_cmd_timer(xhci, XHCI_CMD_DEFAULT_TIMEOUT); */
+		}
 	}
 
 	list_add_tail(&cmd->cmd_list, &xhci->cmd_list);

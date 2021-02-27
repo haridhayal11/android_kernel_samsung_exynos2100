@@ -165,7 +165,6 @@ static int __dsp_hw_o1_system_wait_task(struct dsp_system *sys,
 				task->id, task->message_id);
 		if (sys->debug_mode & BIT(DSP_DEBUG_MODE_TASK_TIMEOUT_PANIC)) {
 			dsp_dump_set_value(DSP_O1_DUMP_DEFAULT_VALUE |
-					1 << DSP_O1_DUMP_VALUE_SDMA_CM |
 					1 << DSP_O1_DUMP_VALUE_SDMA_ND);
 			dsp_dump_ctrl();
 			dbg_snapshot_expire_watchdog();
@@ -274,7 +273,6 @@ static void dsp_hw_o1_system_iovmm_fault_dump(struct dsp_system *sys)
 {
 	dsp_enter();
 	dsp_dump_set_value(DSP_O1_DUMP_DEFAULT_VALUE |
-			1 << DSP_O1_DUMP_VALUE_SDMA_CM |
 			1 << DSP_O1_DUMP_VALUE_SDMA_ND);
 	dsp_dump_ctrl();
 	dsp_dump_task_manager_count(&sys->task_manager);
@@ -492,7 +490,6 @@ static int __dsp_hw_o1_system_wait_boot(struct dsp_system *sys)
 				sys->wait[DSP_SYSTEM_WAIT_BOOT]);
 		if (sys->debug_mode & BIT(DSP_DEBUG_MODE_BOOT_TIMEOUT_PANIC)) {
 			dsp_dump_set_value(DSP_O1_DUMP_DEFAULT_VALUE |
-					1 << DSP_O1_DUMP_VALUE_SDMA_CM |
 					1 << DSP_O1_DUMP_VALUE_SDMA_ND);
 			dsp_dump_ctrl();
 			dbg_snapshot_expire_watchdog();
@@ -624,7 +621,6 @@ static int __dsp_hw_o1_system_wait_reset(struct dsp_system *sys)
 				sys->wait[DSP_SYSTEM_WAIT_RESET]);
 		if (sys->debug_mode & BIT(DSP_DEBUG_MODE_RESET_TIMEOUT_PANIC)) {
 			dsp_dump_set_value(DSP_O1_DUMP_DEFAULT_VALUE |
-					1 << DSP_O1_DUMP_VALUE_SDMA_CM |
 					1 << DSP_O1_DUMP_VALUE_SDMA_ND);
 			dsp_dump_ctrl();
 			dbg_snapshot_expire_watchdog();
@@ -778,114 +774,6 @@ static int dsp_hw_o1_system_npu_start(struct dsp_system *sys, bool boot,
 	return 0;
 }
 
-static int __dsp_hw_o1_system_binary_copy(struct dsp_system *sys, void *list)
-{
-	int ret;
-	struct dsp_memory *mem;
-	struct dsp_priv_mem *pmem;
-	struct dsp_bin_file_list *bin_list = list;
-	struct dsp_bin_file *bin;
-
-	dsp_enter();
-	mem = &sys->memory;
-
-	pmem = &mem->priv_mem[DSP_O1_PRIV_MEM_FW];
-	bin = &bin_list->bins[BIN_TYPE_DSP_BIN];
-	if (bin->size > pmem->size) {
-		ret = -EINVAL;
-		dsp_err("binary(%s) size is over(%u/%zu)\n",
-				DSP_O1_FW_NAME, bin->size, pmem->size);
-		goto p_err;
-	}
-
-	if (copy_from_user(pmem->bac_kvaddr, (void __user *)bin->vaddr,
-				bin->size)) {
-		ret = -EFAULT;
-		dsp_err("Failed to copy binary(%s)\n", DSP_O1_FW_NAME);
-		goto p_err;
-	}
-	pmem->used_size = bin->size;
-	dsp_info("binary[%s/%u] is copied\n", DSP_O1_FW_NAME, bin->size);
-
-	pmem = &mem->priv_mem[DSP_O1_PRIV_MEM_IVP_PM];
-	bin = &bin_list->bins[BIN_TYPE_DSP_IVP_PM_BIN];
-	if (bin->size > pmem->size) {
-		ret = -EINVAL;
-		dsp_err("binary(%s) size is over(%u/%zu)\n",
-				DSP_O1_IVP_PM_NAME, bin->size, pmem->size);
-		goto p_err;
-	}
-
-	if (copy_from_user(pmem->kvaddr, (void __user *)bin->vaddr,
-				bin->size)) {
-		ret = -EFAULT;
-		dsp_err("Failed to copy binary(%s)\n", DSP_O1_IVP_PM_NAME);
-		goto p_err;
-	}
-	pmem->used_size = bin->size;
-	dsp_info("binary[%s/%u] is copied\n", DSP_O1_IVP_PM_NAME, bin->size);
-
-	pmem = &mem->priv_mem[DSP_O1_PRIV_MEM_IVP_DM];
-	bin = &bin_list->bins[BIN_TYPE_DSP_IVP_DM_BIN];
-	if (bin->size > pmem->size) {
-		ret = -EINVAL;
-		dsp_err("binary(%s) size is over(%u/%zu)\n",
-				DSP_O1_IVP_DM_NAME, bin->size, pmem->size);
-		goto p_err;
-	}
-
-	if (copy_from_user(pmem->kvaddr, (void __user *)bin->vaddr,
-				bin->size)) {
-		ret = -EFAULT;
-		dsp_err("Failed to copy binary(%s)\n", DSP_O1_IVP_DM_NAME);
-		goto p_err;
-	}
-	pmem->used_size = bin->size;
-	dsp_info("binary[%s/%u] is copied\n", DSP_O1_IVP_DM_NAME, bin->size);
-
-	pmem = &mem->priv_mem[DSP_O1_PRIV_MEM_IAC_PM];
-	bin = &bin_list->bins[BIN_TYPE_DSP_IAC_PM_BIN];
-	if (bin->size > pmem->size) {
-		ret = -EINVAL;
-		dsp_err("binary(%s) size is over(%u/%zu)\n",
-				DSP_O1_IAC_PM_NAME, bin->size,
-				pmem->size);
-		goto p_err;
-	}
-
-	if (copy_from_user(pmem->kvaddr, (void __user *)bin->vaddr,
-				bin->size)) {
-		ret = -EFAULT;
-		dsp_err("Failed to copy binary(%s)\n", DSP_O1_IAC_PM_NAME);
-		goto p_err;
-	}
-	pmem->used_size = bin->size;
-	dsp_info("binary[%s/%u] is copied\n", DSP_O1_IAC_PM_NAME, bin->size);
-
-	pmem = &mem->priv_mem[DSP_O1_PRIV_MEM_IAC_DM];
-	bin = &bin_list->bins[BIN_TYPE_DSP_IAC_DM_BIN];
-	if (bin->size > pmem->size) {
-		ret = -EINVAL;
-		dsp_err("binary(%s) size is over(%u/%zu)\n",
-				DSP_O1_IAC_DM_NAME, bin->size, pmem->size);
-		goto p_err;
-	}
-
-	if (copy_from_user(pmem->kvaddr, (void __user *)bin->vaddr,
-				bin->size)) {
-		ret = -EFAULT;
-		dsp_err("Failed to copy binary(%s)\n", DSP_O1_IAC_DM_NAME);
-		goto p_err;
-	}
-	pmem->used_size = bin->size;
-	dsp_info("binary[%s/%u] is copied\n", DSP_O1_IAC_DM_NAME, bin->size);
-
-	dsp_leave();
-	return 0;
-p_err:
-	return ret;
-}
-
 static int __dsp_hw_o1_system_binary_load(struct dsp_system *sys)
 {
 	int ret;
@@ -936,7 +824,7 @@ p_err_load:
 	return ret;
 }
 
-static int dsp_hw_o1_system_start(struct dsp_system *sys, void *bin_list)
+static int dsp_hw_o1_system_start(struct dsp_system *sys)
 {
 	int ret;
 	struct dsp_task_manager *tmgr;
@@ -949,10 +837,7 @@ static int dsp_hw_o1_system_start(struct dsp_system *sys, void *bin_list)
 	if (ret)
 		goto p_err_interface;
 
-	if (bin_list)
-		ret = __dsp_hw_o1_system_binary_copy(sys, bin_list);
-	else
-		ret = __dsp_hw_o1_system_binary_load(sys);
+	ret = __dsp_hw_o1_system_binary_load(sys);
 	if (ret)
 		goto p_err_load;
 

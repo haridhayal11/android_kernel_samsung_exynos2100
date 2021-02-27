@@ -40,29 +40,6 @@ struct dsp_ioc_boot_secure32 {
 	struct compat_timespec		timestamp[4];
 };
 
-struct dsp_ioc_boot_direct32 {
-	unsigned int			pm_level;
-	unsigned int			bin_list_size;
-	compat_caddr_t			bin_list_addr;
-	int				reserved[3];
-	struct compat_timespec		timestamp[4];
-};
-
-struct dsp_ioc_load_graph_direct32 {
-	unsigned int			version;
-	unsigned int			param_size;
-	compat_caddr_t			param_addr;
-	unsigned int			kernel_count;
-	unsigned int			kernel_size;
-	compat_caddr_t			kernel_addr;
-	unsigned int			bin_list_size;
-	compat_caddr_t			bin_list_addr;
-	unsigned char			request_qos;
-	unsigned char			reserved1[3];
-	int				reserved2[3];
-	struct compat_timespec		timestamp[4];
-};
-
 struct dsp_ioc_unload_graph32 {
 	unsigned int			global_id;
 	unsigned char			request_qos;
@@ -95,9 +72,6 @@ struct dsp_ioc_control32 {
 #define DSP_IOC_UNLOAD_GRAPH32	_IOWR('D', 2, struct dsp_ioc_unload_graph32)
 #define DSP_IOC_EXECUTE_MSG32	_IOWR('D', 3, struct dsp_ioc_execute_msg32)
 #define DSP_IOC_CONTROL32	_IOWR('D', 4, struct dsp_ioc_control32)
-#define DSP_IOC_BOOT_DIRECT32	_IOWR('D', 5, struct dsp_ioc_boot_direct32)
-#define DSP_IOC_LOAD_GRAPH_DIRECT32	\
-	_IOWR('D', 6, struct dsp_ioc_load_graph_direct32)
 #define DSP_IOC_BOOT_SECURE32	_IOWR('D', 7, struct dsp_ioc_boot_secure32)
 
 static int __dsp_ioctl_get_boot32(struct dsp_ioc_boot *karg,
@@ -343,110 +317,6 @@ static void __dsp_ioctl_put_control32(struct dsp_ioc_control *karg,
 	dsp_leave();
 }
 
-static int __dsp_ioctl_get_boot_direct32(struct dsp_ioc_boot_direct *karg,
-		struct dsp_ioc_boot_direct32 __user *uarg)
-{
-	int ret;
-
-	dsp_enter();
-	if (get_user(karg->pm_level, &uarg->pm_level) ||
-			get_user(karg->bin_list_size, &uarg->bin_list_size) ||
-			get_user(karg->bin_list_addr, &uarg->bin_list_addr)) {
-		ret = -EFAULT;
-		dsp_err("Failed to copy from user at boot_direct32\n");
-		goto p_err;
-	}
-
-	memset(karg->timestamp, 0, sizeof(karg->timestamp));
-
-	dsp_leave();
-	return 0;
-p_err:
-	return ret;
-}
-
-static void __dsp_ioctl_put_boot_direct32(struct dsp_ioc_boot_direct *karg,
-		struct dsp_ioc_boot_direct32 __user *uarg)
-{
-	dsp_enter();
-	if (put_user(karg->timestamp[0].tv_sec,
-				&uarg->timestamp[0].tv_sec) ||
-			put_user(karg->timestamp[0].tv_nsec,
-				&uarg->timestamp[0].tv_nsec) ||
-			put_user(karg->timestamp[1].tv_sec,
-				&uarg->timestamp[1].tv_sec) ||
-			put_user(karg->timestamp[1].tv_nsec,
-				&uarg->timestamp[1].tv_nsec) ||
-			put_user(karg->timestamp[2].tv_sec,
-				&uarg->timestamp[2].tv_sec) ||
-			put_user(karg->timestamp[2].tv_nsec,
-				&uarg->timestamp[2].tv_nsec) ||
-			put_user(karg->timestamp[3].tv_sec,
-				&uarg->timestamp[3].tv_sec) ||
-			put_user(karg->timestamp[3].tv_nsec,
-				&uarg->timestamp[3].tv_nsec)) {
-		dsp_err("Failed to copy to user at boot_direct32\n");
-	}
-
-	dsp_leave();
-}
-
-static int __dsp_ioctl_get_load_graph_direct32(
-		struct dsp_ioc_load_graph_direct *karg,
-		struct dsp_ioc_load_graph_direct32 __user *uarg)
-{
-	int ret;
-
-	dsp_enter();
-	if (get_user(karg->version, &uarg->version) ||
-			get_user(karg->param_size, &uarg->param_size) ||
-			get_user(karg->param_addr, &uarg->param_addr) ||
-			get_user(karg->kernel_count, &uarg->kernel_count) ||
-			get_user(karg->kernel_size, &uarg->kernel_size) ||
-			get_user(karg->kernel_addr, &uarg->kernel_addr) ||
-			get_user(karg->bin_list_size, &uarg->bin_list_size) ||
-			get_user(karg->bin_list_addr, &uarg->bin_list_addr) ||
-			get_user(karg->request_qos, &uarg->request_qos)) {
-		ret = -EFAULT;
-		dsp_err("Failed to copy from user at load_direct32\n");
-		goto p_err;
-	}
-
-	memset(karg->timestamp, 0, sizeof(karg->timestamp));
-
-	dsp_leave();
-	return 0;
-p_err:
-	return ret;
-}
-
-static void __dsp_ioctl_put_load_graph_direct32(
-		struct dsp_ioc_load_graph_direct *karg,
-		struct dsp_ioc_load_graph_direct32 __user *uarg)
-{
-	dsp_enter();
-	if (put_user(karg->timestamp[0].tv_sec,
-				&uarg->timestamp[0].tv_sec) ||
-			put_user(karg->timestamp[0].tv_nsec,
-				&uarg->timestamp[0].tv_nsec) ||
-			put_user(karg->timestamp[1].tv_sec,
-				&uarg->timestamp[1].tv_sec) ||
-			put_user(karg->timestamp[1].tv_nsec,
-				&uarg->timestamp[1].tv_nsec) ||
-			put_user(karg->timestamp[2].tv_sec,
-				&uarg->timestamp[2].tv_sec) ||
-			put_user(karg->timestamp[2].tv_nsec,
-				&uarg->timestamp[2].tv_nsec) ||
-			put_user(karg->timestamp[3].tv_sec,
-				&uarg->timestamp[3].tv_sec) ||
-			put_user(karg->timestamp[3].tv_nsec,
-				&uarg->timestamp[3].tv_nsec)) {
-		dsp_err("Failed to copy to user at load_direct32\n");
-	}
-
-	dsp_leave();
-}
-
 static int __dsp_ioctl_get_boot_secure32(struct dsp_ioc_boot_secure *karg,
 		struct dsp_ioc_boot_secure32 __user *uarg)
 {
@@ -549,25 +419,6 @@ long dsp_compat_ioctl32(struct file *file, unsigned int cmd, unsigned long arg)
 
 		ret = ops->control(dctx, &karg.control);
 		__dsp_ioctl_put_control32(&karg.control, compat_arg);
-		break;
-	case DSP_IOC_BOOT_DIRECT32:
-		ret = __dsp_ioctl_get_boot_direct32(&karg.boot_direct,
-				compat_arg);
-		if (ret)
-			goto p_err;
-
-		ret = ops->boot_direct(dctx, &karg.boot_direct);
-		__dsp_ioctl_put_boot_direct32(&karg.boot_direct, compat_arg);
-		break;
-	case DSP_IOC_LOAD_GRAPH_DIRECT32:
-		ret = __dsp_ioctl_get_load_graph_direct32(&karg.load_direct,
-				compat_arg);
-		if (ret)
-			goto p_err;
-
-		ret = ops->load_graph_direct(dctx, &karg.load_direct);
-		__dsp_ioctl_put_load_graph_direct32(&karg.load_direct,
-				compat_arg);
 		break;
 	case DSP_IOC_BOOT_SECURE32:
 		ret = __dsp_ioctl_get_boot_secure32(&karg.boot_sec, compat_arg);

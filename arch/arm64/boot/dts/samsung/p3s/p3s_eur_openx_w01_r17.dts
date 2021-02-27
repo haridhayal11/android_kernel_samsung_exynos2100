@@ -8770,6 +8770,18 @@
 							votf = <0x01>;
 						};
 					};
+
+					mode14 {
+						common = <0xe40 0xab0 0x3c 0x00 0x0f 0x02 0x576 0x02 0x01 0x04>;
+						vc0 = <0x00 0x2b 0xe40 0xab0 0x2b 0x00 0xe40 0xab0>;
+						vc1 = <0x01 0x2b 0x1c8 0xaa0 0x2b 0x01 0x1c8 0xaa0>;
+						vc2 = <0x02 0x00 0x00 0x00 0x2b 0x00 0x00 0x00>;
+						vc3 = <0x03 0x00 0x00 0x00 0x2b 0x00 0x00 0x00>;
+
+						option {
+							votf = <0x01>;
+						};
+					};
 				};
 
 				power_seq {
@@ -9994,7 +10006,7 @@
 					rear_single_wide_video_fhd30_cam = <0x99cf0>;
 					rear_single_wide_video_fhd30_csis = <0xa1220>;
 					rear_single_wide_video_fhd30_isp = <0x99cf0>;
-					rear_single_wide_video_fhd30_mif = <0x14a140>;
+					rear_single_wide_video_fhd30_mif = <0xf78f0>;
 					rear_single_wide_video_fhd30_int = <0x61a80>;
 					rear_single_wide_video_fhd30_hpg = <0x01>;
 					rear_single_wide_video_fhd30_cpu = "0-3";
@@ -10186,7 +10198,7 @@
 					rear_single_ultrawide_video_fhd60_cam = <0xa1220>;
 					rear_single_ultrawide_video_fhd60_csis = <0xa1220>;
 					rear_single_ultrawide_video_fhd60_isp = <0x9eb10>;
-					rear_single_ultrawide_video_fhd60_mif = <0x22e980>;
+					rear_single_ultrawide_video_fhd60_mif = <0x177bb8>;
 					rear_single_ultrawide_video_fhd60_int = <0x61a80>;
 					rear_single_ultrawide_video_fhd60_hpg = <0x01>;
 					rear_single_ultrawide_video_fhd60_cpu = "4-6";
@@ -10353,8 +10365,8 @@
 					rear_dual_wide_tele_video_fhd30_int_cam = <0x9eb10>;
 					rear_dual_wide_tele_video_fhd30_cam = <0x9eb10>;
 					rear_dual_wide_tele_video_fhd30_csis = <0xa1220>;
-					rear_dual_wide_tele_video_fhd30_isp = <0x9eb10>;
-					rear_dual_wide_tele_video_fhd30_mif = <0x1a2f20>;
+					rear_dual_wide_tele_video_fhd30_isp = <0x9c400>;
+					rear_dual_wide_tele_video_fhd30_mif = <0x177bb8>;
 					rear_dual_wide_tele_video_fhd30_int = <0x61a80>;
 					rear_dual_wide_tele_video_fhd30_hpg = <0x01>;
 					rear_dual_wide_tele_video_fhd30_cpu = "0-3";
@@ -10655,20 +10667,20 @@
 				kallsyms {
 					_stext = <0xffffffc0 0x10081000>;
 					_etext = <0xffffffc0 0x10f00000>;
-					kallsyms_offsets = <0xffffffc0 0x112e3f70>;
-					kallsyms_relative_base = <0xffffffc0 0x113621d0>;
-					kallsyms_num_syms = <0xffffffc0 0x113621d8>;
-					kallsyms_names = <0xffffffc0 0x113621e0>;
-					kallsyms_markers = <0xffffffc0 0x11615408>;
-					kallsyms_token_table = <0xffffffc0 0x11615bf0>;
-					kallsyms_token_index = <0xffffffc0 0x11615f48>;
+					kallsyms_offsets = <0xffffffc0 0x112e45e0>;
+					kallsyms_relative_base = <0xffffffc0 0x11362820>;
+					kallsyms_num_syms = <0xffffffc0 0x11362828>;
+					kallsyms_names = <0xffffffc0 0x11362830>;
+					kallsyms_markers = <0xffffffc0 0x11615960>;
+					kallsyms_token_table = <0xffffffc0 0x11616148>;
+					kallsyms_token_index = <0xffffffc0 0x116164a0>;
 					_sinittext = <0xffffffc0 0x11980000>;
 					_einittext = <0xffffffc0 0x119fe4a0>;
 					_end = <0xffffffc0 0x1202e000>;
 				};
 
 				kconstants {
-					swapper_pg_dir = <0xffffffc0 0x11975000>;
+					swapper_pg_dir = <0xffffffc0 0x11976000>;
 				};
 			};
 		};

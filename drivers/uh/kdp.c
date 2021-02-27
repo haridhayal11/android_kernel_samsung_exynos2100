@@ -583,6 +583,44 @@ int is_kdp_priv_task(void)
 	return 0;
 }
 
+static int kdp_check_path_mismatch(struct kdp_vfsmount *vfsmnt)
+{
+	int i = 0;
+	int ret = -1;
+	char *buf = NULL;
+	char *path_name = NULL;
+	const char* skip_path[] = {
+		"/com.android.runtime",
+		"/com.android.conscrypt",
+		"/com.android.art",
+		"/com.android.adbd",
+	};
+
+	if (!vfsmnt->bp_mount) {
+		printk(KERN_ERR "vfsmnt->bp_mount is NULL");
+		return -ENOMEM;
+	}
+
+	buf = kzalloc(PATH_MAX, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	path_name = dentry_path_raw(vfsmnt->bp_mount->mnt_mountpoint, buf, PATH_MAX);
+	if (IS_ERR(path_name))
+		goto out;
+
+	for (; i < ARRAY_SIZE(skip_path); ++i) {
+		if (!strncmp(path_name, skip_path[i], strlen(skip_path[i]))) {
+			ret = 0;
+			break;
+		}
+	}
+out:
+	kfree(buf);
+
+	return ret;
+}
+
 int invalid_drive(struct linux_binprm *bprm)
 {
 	struct super_block *sb =  NULL;
@@ -593,6 +631,10 @@ int invalid_drive(struct linux_binprm *bprm)
 		printk(KERN_ERR "[KDP] Invalid Drive : %s, vfsmnt: 0x%lx\n",
 				bprm->filename, (unsigned long)vfsmnt);
 		return 1;
+	}
+
+	if (!kdp_check_path_mismatch((struct kdp_vfsmount *)vfsmnt)) {
+		return 0;
 	}
 
 	sb = vfsmnt->mnt_sb;

@@ -2886,7 +2886,7 @@ static int xhci_configure_endpoint(struct xhci_hcd *xhci,
 	spin_unlock_irqrestore(&xhci->lock, flags);
 
 	/* Wait for the configure endpoint command to complete */
-	wait_for_completion_timeout(command->completion, msecs_to_jiffies(1000));
+	wait_for_completion(command->completion);
 
 	if (!ctx_change)
 		ret = xhci_configure_endpoint_result(xhci, udev,

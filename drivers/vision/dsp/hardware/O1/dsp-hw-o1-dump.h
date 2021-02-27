@@ -49,6 +49,7 @@ enum dsp_dump_value {
 	 1 << DSP_O1_DUMP_VALUE_GIC |			\
 	 1 << DSP_O1_DUMP_VALUE_VPD0_CTRL |		\
 	 1 << DSP_O1_DUMP_VALUE_VPD1_CTRL |		\
+	 1 << DSP_O1_DUMP_VALUE_SDMA_CM |		\
 	 1 << DSP_O1_DUMP_VALUE_DHCP |			\
 	 1 << DSP_O1_DUMP_VALUE_USERDEFINED |		\
 	 1 << DSP_O1_DUMP_VALUE_FW_INFO |		\

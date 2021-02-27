@@ -379,10 +379,18 @@ static int __create_lib(char *buf, unsigned int buf_len)
 			} else if (type == SXML_CHARACTER) {
 				ret = kstrtouint(token_value, 10,
 						&lib->kernel_cnt);
-				if (ret)
+				if (ret) {
 					DL_ERROR("Failed to change str(%d)\n",
 						ret);
+					dsp_dl_free(lib);
+					return -1;
+				}
 
+				if (!lib->kernel_cnt) {
+					DL_ERROR("invalid kernel cnt\n");
+					dsp_dl_free(lib);
+					return -1;
+				}
 				DL_DEBUG("lib kernel cnt : %u\n",
 					lib->kernel_cnt);
 

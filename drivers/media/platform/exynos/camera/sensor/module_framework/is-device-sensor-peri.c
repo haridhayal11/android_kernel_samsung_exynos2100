@@ -1943,7 +1943,13 @@ int is_sensor_peri_s_stream(struct is_device_sensor *device,
 #ifndef USE_RTA_CONTROL_LASER_AF
 			if (sensor_peri->laser_af && test_bit(IS_SENSOR_LASER_AF_AVAILABLE, &sensor_peri->peri_state)) {
 				if (sensor_peri->laser_af->rs_mode != CAMERA_RANGE_SENSOR_MODE_OFF) {
-					CALL_LASEROPS(sensor_peri->laser_af, set_active, sensor_peri->subdev_laser_af, true);
+					if ((device->ischain->setfile & IS_SETFILE_MASK) != ISS_SUB_SCENARIO_VIDEO_SUPER_STEADY
+						&& (device->ischain->setfile & IS_SETFILE_MASK) != ISS_SUB_SCENARIO_VIDEO_SUPER_STEADY_WDR_AUTO
+						&& (device->ischain->setfile & IS_SETFILE_MASK) != ISS_SUB_SCENARIO_VIDEO_SUPER_STEADY_WDR_ON) {
+						CALL_LASEROPS(sensor_peri->laser_af, set_active, sensor_peri->subdev_laser_af, true);
+					} else {
+						info("[%s] supersteady RS not active", __func__);
+					}
 				} else {
 					info("[%s] CAMERA_RANGE_SENSOR_MODE_OFF", __func__);
 				}

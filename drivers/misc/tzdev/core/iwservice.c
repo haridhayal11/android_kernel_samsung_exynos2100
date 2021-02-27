@@ -96,24 +96,27 @@ static void tz_iwservice_should_retry(void)
 
 unsigned long tz_iwservice_get_cpu_mask_in_atomic_preempt(void)
 {
+	uint32_t cal_mask;
+	
 	if (!iw_channel)
 		return 0;
 
-	iw_channel->cpu_mask = tz_iwservice_check_swd_idle_mask(iw_channel->cpu_mask);
+	cal_mask = tz_iwservice_check_swd_idle_mask(iw_channel->cpu_mask);
 
-	return (iw_channel->cpu_mask | iw_channel->user_cpu_mask);
+	return (cal_mask | iw_channel->user_cpu_mask);
 }
 
 unsigned long tz_iwservice_get_cpu_mask(void)
 {
+	uint32_t cal_mask;
 	if (!iw_channel)
 		return 0;
 
-	iw_channel->cpu_mask = tz_iwservice_check_swd_idle_mask(iw_channel->cpu_mask);
+	cal_mask = tz_iwservice_check_swd_idle_mask(iw_channel->cpu_mask);
 	tz_iwservice_should_retry();
 	
 
-	return (iw_channel->cpu_mask | iw_channel->user_cpu_mask);
+	return (cal_mask | iw_channel->user_cpu_mask);
 }
 
 unsigned long tz_iwservice_get_user_cpu_mask(void)

@@ -518,8 +518,12 @@ int is_devicemgr_shot_done(struct is_group *group,
 	if (group->device_type == IS_DEVICE_ISCHAIN)
 		return ret;
 
-	/* if error happened, cancel the sensor's subdev frames */
-	if (status) {
+	/*
+	 * When error happens, cancel the sensor's subdev frames
+	 *  - CONFIG_LOCK_DELAY: Skip cancel because the sensor subdev has already finished its processing.
+	 *  - LATE_FRAME: FS_REQUEST frame is handled by 'is_devicemgr_late_shot_handle()'.
+	 */
+	if (status && status != IS_SHOT_CONFIG_LOCK_DELAY) {
 		mginfo("[F%d] Start CANCEL Other subdev frame\n", group->device, group, ldr_frame->fcount);
 		flags = is_group_lock(group, group->device_type, false);
 		is_group_subdev_cancel(group, ldr_frame, group->device_type, FS_PROCESS, true);

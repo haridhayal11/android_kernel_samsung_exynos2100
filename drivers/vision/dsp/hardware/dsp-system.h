@@ -62,7 +62,7 @@ struct dsp_system_ops {
 	int (*suspend)(struct dsp_system *sys);
 
 	int (*npu_start)(struct dsp_system *sys, bool boot, dma_addr_t fw_iova);
-	int (*start)(struct dsp_system *sys, void *bin_list);
+	int (*start)(struct dsp_system *sys);
 	int (*stop)(struct dsp_system *sys);
 
 	int (*open)(struct dsp_system *sys);

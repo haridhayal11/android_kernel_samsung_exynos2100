@@ -1101,6 +1101,9 @@ static void csi_err_handle_ext(struct is_device_csi *csi, u32 error_id_all)
 
 			/* get connected ip status for detect reason of dma overlap */
 			csi_debug_otf(group, csi);
+
+			if (test_bit(IS_GROUP_VOTF_OUTPUT, &group->state))
+				is_votf_check_invalid_state(group->next);
 		}
 
 		if (csi->error_count_vc_overlap >= CSI_ERR_COUNT - 1)

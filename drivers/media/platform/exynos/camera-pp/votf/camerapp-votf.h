@@ -125,6 +125,7 @@ void votfitf_votf_create_ring(void __iomem *base_addr, int ip, int module);
 void votfitf_votf_set_sel_reg(void __iomem *base_addr, u32 set, u32 mode);
 u32 votfitf_wrapper_reset(void __iomem *base_addr);
 int votfitf_check_wait_con(struct votf_info *s_vinfo, struct votf_info *d_vinfo);
+int votfitf_check_invalid_state(struct votf_info *s_vinfo, struct votf_info *d_vinfo);
 
 /* C2SERV function */
 int votfitf_set_trs_lost_cfg(struct votf_info *vinfo, struct votf_lost_cfg *cfg);
@@ -171,6 +172,7 @@ static inline void votfitf_votf_create_ring(void __iomem *base_addr, int ip, int
 static inline void votfitf_votf_set_sel_reg(void __iomem *base_addr, u32 set, u32 mode) {return;}
 static inline u32 votfitf_wrapper_reset(void __iomem *base_addr) {return 0;}
 static inline int votfitf_check_wait_con(struct votf_info *s_vinfo, struct votf_info *d_vinfo) {return 0;}
+static inline int votfitf_check_invalid_state(struct votf_info *s_vinfo, struct votf_info *d_vinfo) {return 0;}
 
 /* C2SERV function */
 static inline int votfitf_set_trs_lost_cfg(struct votf_info *vinfo, struct votf_lost_cfg *cfg) {return 0;}

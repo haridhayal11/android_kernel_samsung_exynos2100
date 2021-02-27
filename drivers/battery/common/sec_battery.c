@@ -2705,7 +2705,7 @@ static void sec_bat_siop_level_work(struct work_struct *work)
 	} else if (is_hv_wire_type(battery->cable_type) && is_hv_wire_type(battery->wire_status)) {
 		icl = (siop_step == SIOP_STEP3) ? pdata->siop_hv_icl_2nd : pdata->siop_hv_icl;
 		fcc = pdata->siop_hv_fcc;
-	} else if (is_pd_apdo_wire_type(battery->cable_type)) {
+	} else if (is_pd_apdo_wire_type(battery->cable_type) && battery->pd_list.now_isApdo) {
 		icl = pdata->siop_apdo_icl;
 		fcc = pdata->siop_apdo_fcc;
 	} else if (is_pd_wire_type(battery->cable_type)) {
@@ -5520,6 +5520,12 @@ static int usb_typec_handle_id_power_status(struct sec_battery_info *battery,
 			return -1; /* skip usb_typec_handle_after_id() */
 	}
 	battery->pdic_attach = true;
+	if (is_pd_wire_type(battery->cable_type) && bPdIndexChanged) {
+		/* Check VOTER_SIOP to set up current based on chagned index */
+		__pm_stay_awake(battery->siop_level_ws);
+		queue_delayed_work(battery->monitor_wqueue, &battery->siop_level_work, 0);
+	}
+
 	if (is_pd_apdo_wire_type(battery->wire_status) && !bPdIndexChanged &&
 		battery->sink_status.power_list[current_pdo].apdo) {
 		battery->wire_status = *cable_type;
