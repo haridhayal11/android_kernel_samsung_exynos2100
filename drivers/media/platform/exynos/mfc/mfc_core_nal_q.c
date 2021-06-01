@@ -1454,7 +1454,8 @@ static void __mfc_core_nal_q_handle_stream_output(struct mfc_ctx *ctx, int slice
 	mfc_debug(2, "[NALQ][STREAM] Slice type flag: %d\n", dst_mb->vb.flags);
 
 	vb2_set_plane_payload(&dst_mb->vb.vb2_buf, 0, strm_size);
-	mfc_qos_update_framerate(ctx, strm_size);
+	mfc_qos_update_bitrate(ctx, strm_size);
+	mfc_qos_update_framerate(ctx);
 
 	index = dst_mb->vb.vb2_buf.index;
 	if (call_cop(ctx, get_buf_ctrls_val_nal_q_enc, ctx,
@@ -2416,6 +2417,10 @@ int __mfc_core_nal_q_handle_error(struct mfc_core *core, struct mfc_core_ctx *co
 		 * one input buffer is returned and the NAL-Q mode continues.
 		 */
 		if (err == MFC_REG_ERR_BUFFER_FULL) {
+			mfc_err("[NALQ] stream buffer size(%d) isn't enough, skip (Bitrate: %d)\n",
+				pOutStr->StreamSize,
+				MFC_CORE_RAW_READL(MFC_REG_E_RC_BIT_RATE));
+
 			src_mb = mfc_get_del_buf(ctx,&ctx->src_buf_nal_queue, MFC_BUF_NO_TOUCH_USED);
 
 			if (!src_mb)

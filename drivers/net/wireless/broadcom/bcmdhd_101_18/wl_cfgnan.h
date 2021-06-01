@@ -826,6 +826,8 @@ bool wl_cfgnan_check_role_concurrency(struct bcm_cfg80211 *cfg,
 bool wl_cfgnan_update_geofence_target_idx(struct bcm_cfg80211 *cfg);
 bool wl_cfgnan_ranging_is_in_prog_for_peer(struct bcm_cfg80211 *cfg,
 	struct ether_addr *peer_addr);
+#else
+static INLINE bool wl_cfgnan_ranging_allowed(struct bcm_cfg80211 *cfg) { return FALSE; }
 #endif /* RTT_SUPPORT */
 
 typedef enum {

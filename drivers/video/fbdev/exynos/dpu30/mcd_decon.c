@@ -251,24 +251,27 @@ void mcd_set_freq_hop(struct decon_device *decon, struct decon_reg_data *regs, b
 
 #ifdef CONFIG_MCDHDR
 
-static bool check_hdr_header_info(struct fd_hdr_header *header)
+static unsigned int check_hdr_header_info(struct fd_hdr_header *header)
 {
+	unsigned int sz = 0;
+
 	if (!header) {
 		decon_err("%s header is null\n", __func__);
-		return false;
+		return 0;
 	}
 
-	if (header->total_bytesize < sizeof(struct fd_hdr_header)) {
+	sz = header->total_bytesize;
+	if (sz < sizeof(struct fd_hdr_header)) {
 		decon_err("%s: error wrong size: %d\n", __func__, header->total_bytesize);
-		return false;
+		return 0;
 	}
 
 	if (header->type.unpack.hw_type != HDR_HW_MCD) {
 		decon_err("%s: wrong hw type: %d\n", __func__, header->type.unpack.hw_type);
-		return false;
+		return 0;
 	}
 
-	return true;
+	return sz;
 }
 
 static struct fd_hdr_header *mcd_map_hdr_info(struct saved_hdr_info *saved_hdr, int fd_hdr)
@@ -325,6 +328,7 @@ static void mcd_unmap_hdr_info(struct saved_hdr_info *saved_hdr)
 static void *mcd_get_hdr_info(struct decon_device *decon, int fd_hdr, int idx)
 {
 	void *hdr_info = NULL;
+	unsigned int bytesize = 0;
 	struct dma_buf *hdr_buf = NULL;
 	struct fd_hdr_header *header = NULL;
 	struct saved_hdr_info *saved_hdr = NULL;
@@ -358,17 +362,23 @@ static void *mcd_get_hdr_info(struct decon_device *decon, int fd_hdr, int idx)
 		}
 	}
 
-	if (check_hdr_header_info(header) == false) {
+	bytesize = check_hdr_header_info(header);
+	if (!bytesize) {
 		decon_err("%s: invalid header\n", __func__);
 		goto exit_dma_buf;
 	}
 
-	hdr_info = kzalloc(header->total_bytesize, GFP_KERNEL);
+	hdr_info = kzalloc(bytesize, GFP_KERNEL);
 	if (!hdr_info) {
 		decon_err("%s: failed to alloc hdr_info, size: %d\n", __func__, header->total_bytesize);
 		goto exit_dma_buf;
 	}
-	memcpy(hdr_info, header, sizeof(char) * header->total_bytesize);
+	if (bytesize != header->total_bytesize) {
+		decon_err("%s: hdr header info was changed %d -> %d\n", __func__, bytesize, header->total_bytesize);
+		kfree(hdr_info);
+		goto exit_dma_buf;
+	}
+	memcpy(hdr_info, header, bytesize);
 
 #ifdef DEBUG_MCDHDR
 	decon_dbg("hdr header info-> size: %d, layer: %d, log: %d, shall: %d, need: %d\n",
@@ -378,7 +388,6 @@ static void *mcd_get_hdr_info(struct decon_device *decon, int fd_hdr, int idx)
 	dma_buf_put(hdr_buf);
 
 	return hdr_info;
-
 
 exit_dma_buf:
 	mcd_unmap_hdr_info(saved_hdr);

@@ -71,7 +71,7 @@ static void prepare_sfr_dump(struct is_hardware *hardware)
 			if (IS_ERR_OR_NULL(hw_ip->sfr_dump[i]))
 				serr_hw("sfr %d dump memory alloc fail", hw_ip, i);
 			else
-				sinfo_hw("sfr %d dump memory (V/P/S):(%p/%p/0x%X)[0x%llX~0x%llX]\n", hw_ip,
+				sinfo_hw("sfr %d dump memory (V/P/S):(%lx/%lx/0x%X)[0x%llX~0x%llX]\n", hw_ip,
 					i, hw_ip->sfr_dump[i], (void *)virt_to_phys(hw_ip->sfr_dump[i]),
 					reg_size, hw_ip->regs_start[i], hw_ip->regs_end[i]);
 		}

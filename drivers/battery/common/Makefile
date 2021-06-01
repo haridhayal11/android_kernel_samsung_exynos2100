@@ -9,7 +9,7 @@ sec-battery-$(CONFIG_BATTERY_SAMSUNG)		+= sec_battery.o sec_battery_vote.o sec_b
 sec-battery-$(CONFIG_BATTERY_CISD)	+= sec_cisd.o
 sec-battery-$(CONFIG_STEP_CHARGING)		+= sec_step_charging.o
 sec-battery-$(CONFIG_WIRELESS_AUTH)		+= sec_battery_misc.o
-sec-battery-$(CONFIG_WIRELESS_CHARGER_MFC)	+= sec_battery_wc.o
+sec-battery-$(CONFIG_WIRELESS_CHARGING)	+= sec_battery_wc.o
 
 obj-$(CONFIG_UPDATE_BATTERY_DATA)	+= sec_battery_data.o
 

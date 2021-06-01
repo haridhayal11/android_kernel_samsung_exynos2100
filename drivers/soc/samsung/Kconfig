@@ -319,6 +319,14 @@ config EXYNOS_SCI_DBG
 	help
 	Enable exynos sci debug interface driver support
 
+config EXYNOS_SCI_DBG_AUTO
+	tristate "EXYNOS_SCI_DBG_AUTO support"
+	default m
+	depends on EXYNOS_SCI_DBG
+	depends on !(USE_SIGNED_BINARY)
+	help
+	  Enable exynos-sci_dbg_auto support
+
 config EXYNOS_BCM_DBG
 	tristate "EXYNOS_BCM_DBG driver support"
 	help

@@ -113,7 +113,6 @@ void is_sec_copy_err_cnt_to_file(void)
 {
 #ifdef USE_KERNEL_VFS_READ_WRITE
 	struct file *fp = NULL;
-	mm_segment_t old_fs;
 	long nwrite = 0;
 	bool ret = false;
 	int old_mask = 0;
@@ -121,9 +120,6 @@ void is_sec_copy_err_cnt_to_file(void)
 	info("%s\n", __func__);
 
 	if (current && current->fs) {
-		old_fs = get_fs();
-		set_fs(KERNEL_DS);
-
 		ret = sys_access(CAM_HW_ERR_CNT_FILE_PATH, 0);
 
 		if (ret != 0) {
@@ -147,10 +143,9 @@ void is_sec_copy_err_cnt_to_file(void)
 			return;
 		}
 
-		nwrite = vfs_write(fp, (char *)&cam_hwparam_collector, sizeof(struct cam_hw_param_collector), &fp->f_pos);
+		nwrite = kernel_write(fp, &cam_hwparam_collector, sizeof(struct cam_hw_param_collector), &fp->f_pos);
 
 		filp_close(fp, current->files);
-		set_fs(old_fs);
 		need_update_to_file = false;
 	}
 #endif
@@ -160,7 +155,6 @@ void is_sec_copy_err_cnt_from_file(void)
 {
 #ifdef USE_KERNEL_VFS_READ_WRITE
 	struct file *fp = NULL;
-	mm_segment_t old_fs;
 	long nread = 0;
 	bool ret = false;
 
@@ -169,9 +163,6 @@ void is_sec_copy_err_cnt_from_file(void)
 	ret = is_sec_file_exist(CAM_HW_ERR_CNT_FILE_PATH);
 
 	if (ret) {
-		old_fs = get_fs();
-		set_fs(KERNEL_DS);
-
 		fp = filp_open(CAM_HW_ERR_CNT_FILE_PATH, O_RDONLY, 0660);
 		if (IS_ERR_OR_NULL(fp)) {
 			warn("%s open failed", CAM_HW_ERR_CNT_FILE_PATH);
@@ -179,10 +170,9 @@ void is_sec_copy_err_cnt_from_file(void)
 			return;
 		}
 
-		nread = vfs_read(fp, (char *)&cam_hwparam_collector, sizeof(struct cam_hw_param_collector), &fp->f_pos);
+		nread = kernel_read(fp, &cam_hwparam_collector, sizeof(struct cam_hw_param_collector), &fp->f_pos);
 
 		filp_close(fp, current->files);
-		set_fs(old_fs);
 	}
 #endif
 }

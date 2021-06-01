@@ -40,6 +40,7 @@ obj-$(CONFIG_CAMERA_CIS_IMX260_OBJ) += is-cis-imx260.o
 obj-$(CONFIG_CAMERA_CIS_2L7_OBJ) += is-cis-2l7.o
 obj-$(CONFIG_CAMERA_CIS_IMX320_OBJ) += is-cis-imx320.o
 obj-$(CONFIG_CAMERA_CIS_IMX333_OBJ) += is-cis-imx333.o
+obj-$(CONFIG_CAMERA_CIS_IMX555_OBJ) += is-cis-imx555.o
 obj-$(CONFIG_CAMERA_CIS_IMX219_OBJ) += is-cis-imx219.o
 obj-$(CONFIG_CAMERA_CIS_IMX258_OBJ) += is-cis-imx258.o
 obj-$(CONFIG_CAMERA_CIS_IMX241_OBJ) += is-cis-imx241.o

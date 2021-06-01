@@ -23,7 +23,6 @@
 #include "npu-util-liststatemgr.h"
 #include "npu-debug.h"
 #include "npu-errno.h"
-#include "npu-device.h"
 #include "npu-queue.h"
 #include "npu-if-protodrv-mbox2.h"
 #include "npu-if-session-protodrv.h"
@@ -78,7 +77,7 @@ LSM_DECLARE(proto_frame_lsm, struct proto_req_frame, NPU_PROTO_DRV_SIZE, NPU_PRO
 LSM_DECLARE(proto_nw_lsm, struct proto_req_nw, NPU_PROTO_DRV_SIZE, NPU_PROTO_DRV_NW_LSM_NAME);
 
 /* Definition of proto-drv singleton object */
-struct npu_proto_drv npu_proto_drv = {
+static struct npu_proto_drv npu_proto_drv = {
 	.magic_head = PROTO_DRV_MAGIC_HEAD,
 	.frame_lsm = &proto_frame_lsm,
 	.nw_lsm = &proto_nw_lsm,
@@ -190,6 +189,7 @@ static const char *NW_CMD_NAMES[NPU_NW_CMD_END - NPU_NW_CMD_BASE] = {
 	"PROFILE_START",
 	"PROFILE_STOP",
 	"FW_TC_EXECUTE",
+	"CORE_CTL",
 	"CLEAR_CB",
 	"MODE",
 };
@@ -254,6 +254,7 @@ static int is_belong_session(const struct npu_nw *nw)
 	case NPU_NW_CMD_PROFILE_START:
 	case NPU_NW_CMD_PROFILE_STOP:
 	case NPU_NW_CMD_FW_TC_EXECUTE:
+	case NPU_NW_CMD_CORE_CTL:
 		return 0;
 	default:
 		return 1;
@@ -1912,6 +1913,7 @@ static int npu_protodrv_handler_nw_completed(void)
 				case NPU_NW_CMD_POWER_DOWN:
 				case NPU_NW_CMD_PROFILE_START:
 				case NPU_NW_CMD_PROFILE_STOP:
+				case NPU_NW_CMD_CORE_CTL:
 					/* Should be processed on above if clause */
 				default:
 					npu_uerr("invalid command(%u)\n", &entry->nw, entry->nw.cmd);
@@ -2203,13 +2205,13 @@ static int proto_drv_do_task(struct auto_sleep_thread_param *data)
 	}
 
 	ret += npu_protodrv_handler_frame_processing();
-	ret += npu_protodrv_handler_frame_free();
 	ret += npu_protodrv_handler_frame_completed();
+	ret += npu_protodrv_handler_frame_free();
 	ret += npu_protodrv_handler_frame_requested();
 
 	ret += npu_protodrv_handler_nw_processing();
-	ret += npu_protodrv_handler_nw_free();
 	ret += npu_protodrv_handler_nw_completed();
+	ret += npu_protodrv_handler_nw_free();
 	ret += npu_protodrv_handler_nw_requested();
 
 	/* Timeout handling */
@@ -2668,7 +2670,7 @@ int proto_drv_probe(struct npu_device *npu_device)
 	npu_debug_register("proto-drv-dump", &npu_proto_drv_dump_debug_fops);
 
 	/* Pass reference of npu_proto_drv via npu_device */
-	npu_device->proto_drv = &npu_proto_drv;
+	// npu_device->proto_drv = &npu_proto_drv;
 	npu_proto_drv.npu_device = npu_device;
 
 #ifdef T32_GROUP_TRACE_SUPPORT

@@ -412,6 +412,7 @@ int dsp_dl_out_alloc(struct dsp_lib *lib, int *pm_inv)
 	dsp_dl_free(lib->dl_out);
 
 	lib->dl_out = (struct dsp_dl_out *)mem_addr;
+	lib->dl_out_data_size = dl_out_size - sizeof(*lib->dl_out);
 
 	strcpy(lib->dl_out->data, lib->name);
 	DL_DEBUG("lib name : %s\n", lib->dl_out->data);

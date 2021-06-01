@@ -955,11 +955,6 @@ static ssize_t max77705_muic_set_afc_disable(struct device *dev,
 			max77705_muic_check_afc_disabled(muic_data);
 	}
 
-#if IS_ENABLED(CONFIG_SEC_FACTORY)
-	/* for factory self charging test (AFC-> NORMAL TA) */
-	if (muic_data->attached_dev == ATTACHED_DEV_AFC_CHARGER_9V_MUIC)
-		max77705_muic_afc_hv_set(muic_data, 5);
-#endif
 	pr_info("%s afc_disable(%d)\n", __func__, pdata->afc_disable);
 
 	psy_val.intval = param_val;

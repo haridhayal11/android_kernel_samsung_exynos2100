@@ -1471,9 +1471,7 @@ typedef struct wl_event_mbo_cell_nw_switch wl_event_mbo_cell_nw_switch_t;
 typedef struct wl_btm_event_type_data wl_btm_event_type_data_t;
 #endif /* WL_MBO */
 
-#if defined(WL_MBO) || defined(WL_OCE)
 typedef struct wl_bssid_prune_evt_info wl_bssid_pruned_evt_info_t;
-#endif /* WL_MBO || WL_OCE */
 
 #ifdef WL_NAN
 #endif /* WL_NAN */
@@ -1971,6 +1969,9 @@ struct bcm_cfg80211 {
 #ifdef WL_SCHED_SCAN
 	struct delayed_work sched_scan_stop_work;
 #endif /* WL_SCHED_SCAN */
+#ifdef DHD_CLEANUP_KEEP_ALIVE
+	uint8 mkeep_alive_avail;
+#endif /* DHD_CLEANUP_KEEP_ALIVE */
 };
 
 /* Max auth timeout allowed in case of EAP is 70sec, additional 5 sec for

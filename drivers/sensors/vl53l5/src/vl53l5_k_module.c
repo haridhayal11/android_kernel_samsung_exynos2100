@@ -573,8 +573,14 @@ void vl53l5_k_re_init(struct vl53l5_k_module_t *p_module)
 		}
 		p_module->last_driver_error = STATUS_OK;
 		status = vl53l5_ioctl_init(p_module);
-		vl53l5_k_log_error("fail reset %d", status);
+
+		if (status == STATUS_OK) {
+			vl53l5_k_log_info("get module_info");
+			status = vl53l5_ioctl_get_module_info(p_module, NULL);
+		}
+
 		if (status != STATUS_OK) {
+			vl53l5_k_log_error("fail reset %d", status);
 			p_module->enabled = -1;
 			p_module->last_driver_error = VL53L5_PROBE_FAILED;
 			vl53l5_k_power_onoff(p_module, p_module->iovdd_vreg, p_module->iovdd_vreg_name, 0);
@@ -591,12 +597,6 @@ void vl53l5_k_re_init(struct vl53l5_k_module_t *p_module)
 			global_p_module = p_module;
 #endif
 			p_module->enabled = 0;
-
-			vl53l5_k_log_info("get_module_info start");
-			status = vl53l5_ioctl_get_module_info(p_module, NULL);
-			if (status != STATUS_OK)
-				vl53l5_k_log_info("get_module_info fail");
-
 			vl53l5_ioctl_stop(p_module, NULL, 1);
 		}
 	}
@@ -1171,7 +1171,7 @@ static ssize_t vl53l5_enable_store(struct device *dev,
 				status = -1;
 			}
 #endif*/
-			if (status != STATUS_OK) {
+			if ((status != STATUS_OK) || (p_module->last_driver_error != STATUS_OK)) {
 				status = vl53l5_ioctl_init(p_module);
 				vl53l5_k_log_info("reset %d", status);
 				status = vl53l5_ioctl_stop(p_module, NULL, 1);

@@ -542,7 +542,8 @@ enum dhd_dongledump_type {
 	DUMP_TYPE_INBAND_DEVICE_WAKE_FAILURE	= 30,
 	DUMP_TYPE_PKTID_POOL_DEPLETED		= 31,
 	DUMP_TYPE_ESCAN_SYNCID_MISMATCH		= 32,
-	DUMP_TYPE_INVALID_SHINFO_NRFRAGS	= 33
+	DUMP_TYPE_INVALID_SHINFO_NRFRAGS	= 33,
+	DUMP_TYPE_P2P_DISC_BUSY			= 34
 };
 
 enum dhd_hang_reason {
@@ -567,6 +568,7 @@ enum dhd_hang_reason {
 	HANG_REASON_ESCAN_SYNCID_MISMATCH		= 0x8013,
 	HANG_REASON_SCAN_TIMEOUT			= 0x8014,
 	HANG_REASON_SCAN_TIMEOUT_SCHED_ERROR		= 0x8015,
+	HANG_REASON_P2P_DISC_BUSY			= 0x8016,
 	HANG_REASON_PCIE_LINK_DOWN_RC_DETECT		= 0x8805,
 	HANG_REASON_INVALID_EVENT_OR_DATA		= 0x8806,
 	HANG_REASON_UNKNOWN				= 0x8807,
@@ -1193,6 +1195,7 @@ typedef struct dhd_pub {
 	bool	is_bt_recovery_required;
 #endif
 	bool	smmu_fault_occurred;	/* flag to indicate SMMU Fault */
+	bool	p2p_disc_busy_occurred;
 /*
  * Add any new variables to track Bus errors above
  * this line. Also ensure that the variable is
@@ -3803,18 +3806,20 @@ int dhd_tx_profile_detach(dhd_pub_t *dhdp);
 #endif /* defined (DHD_TX_PROFILE) */
 #if defined(DHD_LB_RXP)
 uint32 dhd_lb_rxp_process_qlen(dhd_pub_t *dhdp);
-#ifdef DHD_ENAB_LB_RXP_FLOW_CONTROL
 /*
  * To avoid OOM, Flow control will be kicked in when packet size in process_queue
  * crosses LB_RXP_STOP_THR * rcpl ring size * 1500(pkt size) and will stop
  * when it goes below LB_RXP_STRT_THR * rcpl ring size * 1500(pkt size)
+ * By default flow control is diabled. i.e tunables set to 0/0.
+ * to enable flow control, these tunables need to be passed from platform Makefiles.
  */
-#define LB_RXP_STOP_THR 200	/* 200 * 1024 * 1500 = 300MB */
-#define LB_RXP_STRT_THR 199	/* 199 * 1024 * 1500 = 291MB */
-#else /* !DHD_ENAB_LB_RXP_FLOW_CONTROL */
+#ifndef LB_RXP_STOP_THR
 #define LB_RXP_STOP_THR 0
+#endif /* LB_RXP_STOP_THR */
+#ifndef LB_RXP_STRT_THR
 #define LB_RXP_STRT_THR 0
-#endif /* DHD_ENAB_LB_RXP_FLOW_CONTROL */
+#endif /* LB_RXP_STRT_THR */
+
 #endif /* DHD_LB_RXP */
 #ifdef DHD_SUPPORT_HDM
 extern bool hdm_trigger_init;
@@ -3953,6 +3958,10 @@ static INLINE int dhd_kern_path(char *name, int flags, struct path *file_path)
 	{ return 0; }
 #endif /* DHD_SUPPORT_VFS_CALL */
 #endif /* __linux__ */
+#ifdef WL_TWT
+extern int dhd_config_twt_event_mask_in_suspend(dhd_pub_t *dhdp, bool suspend);
+extern int dhd_send_twt_info_suspend(dhd_pub_t *dhdp, bool suspend);
+#endif /* WL_TWT */
 #if defined(DHD_WAKE_STATUS_PRINT) && defined(DHD_WAKE_RX_STATUS) && \
 	defined(DHD_WAKE_STATUS)
 void dhd_dump_wake_status(dhd_pub_t *dhdp, wake_counts_t *wcp, struct ether_header *eh);

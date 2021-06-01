@@ -235,9 +235,11 @@ void sec_bat_check_wpc_temp(struct sec_battery_info *battery)
 		if (is_hv_wireless_type(battery->cable_type)) {
 #if defined(CONFIG_ISDB_CHARGING_CONTROL)
 			if ((battery->current_event & SEC_BAT_CURRENT_EVENT_HIGH_TEMP_SWELLING) ||
-				(battery->current_event & SEC_BAT_CURRENT_EVENT_ISDB))
+				(battery->current_event & SEC_BAT_CURRENT_EVENT_ISDB) ||
+				battery->sleep_mode)
 #else
-			if (battery->current_event & SEC_BAT_CURRENT_EVENT_HIGH_TEMP_SWELLING)
+			if (battery->current_event & SEC_BAT_CURRENT_EVENT_HIGH_TEMP_SWELLING ||
+				battery->sleep_mode)
 #endif
 				wpc_vout_level = WIRELESS_VOUT_5_5V_STEP;
 

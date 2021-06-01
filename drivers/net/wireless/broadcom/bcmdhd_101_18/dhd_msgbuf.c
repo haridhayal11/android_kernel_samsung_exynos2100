@@ -889,7 +889,7 @@ dhd_prot_get_h2d_rx_post_active(dhd_pub_t *dhd)
 	wr = flow_ring->wr;
 
 	if (dhd->dma_d2h_ring_upd_support) {
-		rd = dhd_prot_dma_indx_get(dhd, D2H_DMA_INDX_RD_UPD, flow_ring->idx);
+		rd = dhd_prot_dma_indx_get(dhd, H2D_DMA_INDX_RD_UPD, flow_ring->idx);
 	} else {
 		dhd_bus_cmn_readshared(dhd->bus, &rd, RING_RD_UPD, flow_ring->idx);
 	}
@@ -4160,6 +4160,8 @@ dhd_prot_reset(dhd_pub_t *dhd)
 extern void dhd_lb_rx_napi_dispatch(dhd_pub_t *dhdp);
 extern void dhd_lb_rx_pkt_enqueue(dhd_pub_t *dhdp, void *pkt, int ifidx);
 extern unsigned long dhd_read_lb_rxp(dhd_pub_t *dhdp);
+extern void dhd_rx_emerge_enqueue(dhd_pub_t *dhdp, void *pkt);
+extern void * dhd_rx_emerge_dequeue(dhd_pub_t *dhdp);
 
 #if defined(DHD_LB_RXP)
 /**
@@ -4172,6 +4174,12 @@ dhd_lb_dispatch_rx_process(dhd_pub_t *dhdp)
 	dhd_lb_rx_napi_dispatch(dhdp); /* dispatch rx_process_napi */
 }
 #endif /* DHD_LB_RXP */
+#else
+static INLINE void *
+dhd_rx_emerge_dequeue(dhd_pub_t *dhdp)
+{
+	return NULL;
+}
 #endif /* DHD_LB */
 
 void
@@ -4816,12 +4824,21 @@ BCMFASTPATH(dhd_prot_rxbuf_post)(dhd_pub_t *dhd, uint16 count, bool use_rsv_pkti
 	pktlen = (uint32 *)((uint8 *)pktbuf_pa + sizeof(dmaaddr_t) * RX_BUF_BURST);
 
 	for (i = 0; i < count; i++) {
-		if ((p = PKTGET(dhd->osh, pktsz, FALSE)) == NULL) {
+		/* First try to dequeue from emergency queue which will be filled
+		 * during rx flow control.
+		*/
+		p = dhd_rx_emerge_dequeue(dhd);
+		if ((p == NULL) && ((p = PKTGET(dhd->osh, pktsz, FALSE)) == NULL)) {
 			dhd->rx_pktgetfail++;
 			DHD_ERROR_RLMT(("%s:%d: PKTGET for rxbuf failed, rx_pktget_fail :%lu\n",
 				__FUNCTION__, __LINE__, dhd->rx_pktgetfail));
+			/* Try to get pkt from Rx reserve pool if monitor mode is not enabled as
+			 * the buffer size for monitor mode is larger(4k) than normal rx pkt(1920)
+			 */
 #if defined(WL_MONITOR)
-			if (!dhd_monitor_enabled(dhd, 0))
+			if (dhd_monitor_enabled(dhd, 0)) {
+				break;
+			} else
 #endif /* WL_MONITOR */
 			{
 #ifdef RX_PKT_POOL
@@ -5823,6 +5840,7 @@ static int dhd_prot_lb_rxp_flow_ctrl(dhd_pub_t *dhd)
 {
 	if ((dhd->lb_rxp_stop_thr == 0) || (dhd->lb_rxp_strt_thr == 0)) {
 		/* when either of stop and start thresholds are zero flow ctrl is not enabled */
+		atomic_set(&dhd->lb_rxp_flow_ctrl, FALSE);
 		return FALSE;
 	}
 
@@ -5874,12 +5892,7 @@ BCMFASTPATH(dhd_prot_process_msgbuf_rxcpl)(dhd_pub_t *dhd, uint bound, int ringt
 
 #ifdef DHD_LB_RXP
 	/* must be the first check in this function */
-	if (dhd_prot_lb_rxp_flow_ctrl(dhd)) {
-		/* DHD is holding a lot of RX packets.
-		 * Just give chance for netwrok stack to consumes RX packets.
-		 */
-		return FALSE;
-	}
+	(void)dhd_prot_lb_rxp_flow_ctrl(dhd);
 #endif /* DHD_LB_RXP */
 #ifdef DHD_PCIE_RUNTIMEPM
 	/* Set rx_pending_due_to_rpm if device is not in resume state */
@@ -5992,6 +6005,19 @@ BCMFASTPATH(dhd_prot_process_msgbuf_rxcpl)(dhd_pub_t *dhd, uint bound, int ringt
 			}
 #endif /* DHD_DBG_SHOW_METADATA */
 
+#ifdef DHD_LB_RXP
+			/* If flow control is hit, do not enqueue the pkt into napi queue,
+			 * rather enque it in emergency queue and same will be dequeued first
+			 * during PKTGET. This rxcpl packet will be dropped and will not be sent
+			 * to network stack.
+			 */
+			if (atomic_read(&dhd->lb_rxp_flow_ctrl)) {
+				/* Put back rx_metadata_offset which was pulled during rxpost */
+				PKTPUSH(dhd->osh, pkt, prot->rx_metadata_offset);
+				dhd_rx_emerge_enqueue(dhd, pkt);
+				continue;
+			}
+#endif /* DHD_LB_RXP */
 			/* data_offset from buf start */
 			if (ltoh16(msg->data_offset)) {
 				/* data offset given from dongle after split rx */

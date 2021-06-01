@@ -125,9 +125,6 @@ enum wl_cfgp2p_status {
 #define p2p_scan(cfg) ((cfg)->p2p->scan)
 #define p2p_is_on(cfg) ((cfg)->p2p && (cfg)->p2p->on)
 
-/* dword align allocation */
-#define WLC_IOCTL_MAXLEN 8192
-
 #if defined(CUSTOMER_DBG_PREFIX_ENABLE)
 #define USER_PREFIX_CFGP2P		"[cfgp2p][wlan] "
 #define CFGP2P_ERROR_TEXT		USER_PREFIX_CFGP2P

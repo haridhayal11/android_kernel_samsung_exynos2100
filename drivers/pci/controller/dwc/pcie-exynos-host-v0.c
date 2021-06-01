@@ -481,6 +481,20 @@ static unsigned long get_msi_base(int ch_num)
 	return exynos_pcie->rmem_msi_base;
 }
 
+#if IS_ENABLED(CONFIG_SOC_EXYNOS2100)
+static void exynos_gen4_nclkoff(void)
+{
+	void __iomem *nclk_gen4;
+	u32 nclk_val;
+
+	nclk_gen4 = ioremap(0x11021064, 0x4);
+	nclk_val = readl(nclk_gen4);
+	nclk_val = nclk_val & ~(0x1 << 1);
+	writel(nclk_val, nclk_gen4);
+	iounmap(nclk_gen4);
+}
+#endif
+
 #ifdef GEN3_PHY_OFF
 static void exynos_gen3_phy_pwrdn(struct exynos_pcie *exynos_pcie)
 {
@@ -1006,6 +1020,18 @@ static ssize_t store_pcie(struct device *dev,
 			dev_info(dev, "TCXO_FAR: 0x%x", readl(pppmu));
 
 			iounmap(pppmu);
+		}
+		break;
+	case 17:
+		{
+			void __iomem *testmem;
+
+			testmem = ioremap(iommu_addr, iommu_size);
+
+			dev_info(dev, "readl(0x%llx): 0x%llx",
+					iommu_addr, readl(testmem));
+
+			iounmap(testmem);
 		}
 		break;
 	default:
@@ -1716,6 +1742,12 @@ static irqreturn_t exynos_pcie_irq_handler(int irq, void *arg)
 	if (val & IRQ_LINK_DOWN) {
 		dev_info(pci->dev, "!!!PCIE LINK DOWN (state : 0x%x)!!!\n", val);
 		exynos_pcie->state = STATE_LINK_DOWN_TRY;
+
+		exynos_pcie_print_link_history(pp);
+
+		dev_info(pci->dev, "Current LTSSM: 0x%08x, PHY PLL LOCK: 0x%08x\n",
+				exynos_elbi_read(exynos_pcie, PCIE_ELBI_RDLH_LINKUP),
+				exynos_phy_read(exynos_pcie, 0xBC));
 
 		if (exynos_pcie->ep_device_type == EP_QC_WIFI) {
 			exynos_pcie->linkdown_cnt++;
@@ -2947,7 +2979,7 @@ void exynos_pcie_config_l1ss_bcm_wifi(struct pcie_port *pp)
 		val &= ~PCI_EXP_LNKCTL_ASPMC;
 		exynos_pcie_wr_own_conf(pp, exp_cap_off + PCI_EXP_LNKCTL,
 				4, val);
-		dev_err(pci->dev, "l1ss disabled(0x%x)\n",
+		dev_info(pci->dev, "l1ss disabled(0x%x)\n",
 				exynos_pcie->l1ss_ctrl_id_state);
 	}
 	dev_info(pci->dev, "%s: ---\n", __func__);
@@ -3486,6 +3518,8 @@ void exynos_pcie_pm_suspend(int ch_num)
 	struct dw_pcie *pci = exynos_pcie->pci;
 	unsigned long flags;
 
+	dev_info(pci->dev, "## exynos_pcie_pm_suspend(state: %d)\n", exynos_pcie->state);
+
 	if (exynos_pcie->state == STATE_LINK_DOWN) {
 		dev_info(pci->dev, "RC%d already off\n", exynos_pcie->ch_num);
 		return;
@@ -3509,6 +3543,9 @@ EXPORT_SYMBOL(exynos_pcie_pm_resume);
 static int exynos_pcie_suspend_noirq(struct device *dev)
 {
 	struct exynos_pcie *exynos_pcie = dev_get_drvdata(dev);
+	struct dw_pcie *pci = exynos_pcie->pci;
+
+	dev_info(pci->dev, "## exynos_pcie_suspend_noirq(state: %d)\n", exynos_pcie->state);
 
 	if (exynos_pcie->state == STATE_LINK_DOWN) {
 		dev_info(dev, "RC%d already off\n", exynos_pcie->ch_num);
@@ -3525,11 +3562,14 @@ static int exynos_pcie_resume_noirq(struct device *dev)
 {
 	struct exynos_pcie *exynos_pcie = dev_get_drvdata(dev);
 	struct dw_pcie *pci = exynos_pcie->pci;
-
 #ifdef NCLK_OFF_CONTROL
 	/* Set NCLK_OFF for Speculative access issue after resume. */
 	int i;
+#endif
 
+	dev_info(pci->dev, "## exynos_pcie_resume_noirq(state: %d)\n", exynos_pcie->state);
+
+#ifdef NCLK_OFF_CONTROL
 	for (i = 0; i < MAX_RC_NUM + 1; i++) {
 		if (elbi_nclk_reg[i] != NULL) {
 #if IS_ENABLED(CONFIG_SOC_EXYNOS9810)
@@ -3559,6 +3599,11 @@ static int exynos_pcie_resume_noirq(struct device *dev)
 		exynos_elbi_write(exynos_pcie, (0x1 << NCLK_OFF_OFFSET),
 							PCIE_L12ERR_CTRL);
 #endif
+
+#if IS_ENABLED(CONFIG_SOC_EXYNOS2100)
+	exynos_gen4_nclkoff();
+#endif
+
 #ifdef GEN3_PHY_OFF
 	if (g_gen3_phy_off)
 		exynos_gen3_phy_pwrdn(exynos_pcie);
@@ -3741,8 +3786,6 @@ static int __init pcie_init(void)
 	struct device_node __maybe_unused *np;
 	const char __maybe_unused *off;
 	char __maybe_unused *pci_name;
-	void __iomem *nclk_gen4;
-	u32 nclk_val;
 
 #ifdef NCLK_OFF_CONTROL
 	/*
@@ -3859,11 +3902,10 @@ static int __init pcie_init(void)
 
 	kfree(pci_name);
 #endif
-	nclk_gen4 = ioremap(0x11021064, 0x4);
-	nclk_val = readl(nclk_gen4);
-	nclk_val = nclk_val & ~(0x1 << 1);
-	writel(nclk_val, nclk_gen4);
-	iounmap(nclk_gen4);
+
+#if IS_ENABLED(CONFIG_SOC_EXYNOS2100)
+	exynos_gen4_nclkoff();
+#endif
 
 	return platform_driver_register(&exynos_pcie_driver);
 }

@@ -7678,7 +7678,7 @@ wl_nan_dp_cmn_event_data(struct bcm_cfg80211 *cfg, void *event_data,
 			 * as we donot support DP and RNG to same peer
 			 */
 			ret = wl_cfgnan_handle_dp_ranging_concurrency(cfg, &ev_dp->peer_nmi,
-					RTT_GEO_SUSPN_PEER_NDP_TRIGGER);
+				RTT_GEO_SUSPN_PEER_NDP_TRIGGER);
 			if (ret != BCME_OK) {
 				WL_ERR(("%s: failed to handler dp ranging concurrency,"
 				" peer addr: " MACDBG ", err = %d\n", __func__,

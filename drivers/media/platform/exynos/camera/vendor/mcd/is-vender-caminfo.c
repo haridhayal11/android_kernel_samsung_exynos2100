@@ -142,7 +142,7 @@ static int is_vender_caminfo_set_efs_data(void __user *p_efsdata_user)
 		goto EXIT;
 	}
 
-	if (efs_data.tilt_cal_tele_efs_size <= IS_TILT_CAL_TELE_EFS_MAX_SIZE) {
+	if (efs_data.tilt_cal_tele_efs_size <= IS_TILT_CAL_TELE_EFS_MAX_SIZE && efs_data.tilt_cal_tele_efs_size > 0) {
 		if (copy_from_user(specific->tilt_cal_tele_efs_data, efs_data.tilt_cal_tele_efs_buf, sizeof(uint8_t) * efs_data.tilt_cal_tele_efs_size)) {
 			err("%s : failed to copy data from user", __func__);
 			ret = -EINVAL;
@@ -155,7 +155,20 @@ static int is_vender_caminfo_set_efs_data(void __user *p_efsdata_user)
 		ret = -EFAULT;
 	}
 
-	if (efs_data.gyro_efs_size <= IS_GYRO_EFS_MAX_SIZE) {
+	if (efs_data.tilt_cal_tele2_efs_size <= IS_TILT_CAL_TELE_EFS_MAX_SIZE && efs_data.tilt_cal_tele2_efs_size > 0) {
+		if (copy_from_user(specific->tilt_cal_tele2_efs_data, efs_data.tilt_cal_tele2_efs_buf, sizeof(uint8_t) * efs_data.tilt_cal_tele2_efs_size)) {
+			err("%s : failed to copy data from user", __func__);
+			ret = -EINVAL;
+			goto EXIT;
+		}
+
+		specific->tilt_cal_tele2_efs_size = efs_data.tilt_cal_tele2_efs_size;
+	} else {
+		err("wrong tilt cal tele2 data size : data size must be smaller than max size.(%d)", efs_data.tilt_cal_tele2_efs_size);
+		ret = -EFAULT;
+	}
+
+	if (efs_data.gyro_efs_size <= IS_GYRO_EFS_MAX_SIZE && efs_data.gyro_efs_size > 0) {
 		if (copy_from_user(specific->gyro_efs_data, efs_data.gyro_efs_buf, sizeof(uint8_t) * efs_data.gyro_efs_size)) {
 			err("%s : failed to copy data from user", __func__);
 			ret = -EINVAL;

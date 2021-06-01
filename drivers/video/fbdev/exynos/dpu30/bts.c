@@ -185,7 +185,7 @@ static u64 dpu_bts_get_resol_clock(u32 xres, u32 yres, u32 fps)
 	 */
 	margin = 1100 + (48000 + 20000) / xres;
 	/* convert to kHz unit */
-	resol_khz = (xres * yres * op_fps * margin / 1000) / 1000;
+	resol_khz = (xres * yres * (u64)op_fps * margin / 1000) / 1000;
 
 	return resol_khz;
 }
@@ -545,6 +545,14 @@ void dpu_bts_calc_bw(struct decon_device *decon, struct decon_reg_data *regs)
 	DPU_DEBUG_BTS("%s + : DECON%d\n", __func__, decon->id);
 
 	memset(&bts_info, 0, sizeof(struct bts_decon_info));
+
+	if (decon->dt.out_type == DECON_OUT_WB) {
+		decon->lcd_info->xres = regs->dpp_config[decon->dt.wb_win].dst.w;
+		decon->lcd_info->yres = regs->dpp_config[decon->dt.wb_win].dst.h;
+		if (regs->lib_requested)
+			decon->lcd_info->fps = decon->bts.sbwc_lib_boost;
+	}
+
 #if defined(CONFIG_DECON_BTS_VRR_ASYNC)
 	if (decon->dt.out_type == DECON_OUT_DSI) {
 		if ((decon->bts.fps < decon->bts.next_fps) ||
@@ -666,6 +674,7 @@ void dpu_bts_update_bw(struct decon_device *decon, struct decon_reg_data *regs,
 		u32 is_after)
 {
 	struct bts_bw bw = { 0, };
+	int i;
 #if defined(CONFIG_EXYNOS_DISPLAYPORT)
 	struct displayport_device *displayport = get_displayport_drvdata();
 	videoformat cur = V640X480P60;
@@ -688,8 +697,8 @@ void dpu_bts_update_bw(struct decon_device *decon, struct decon_reg_data *regs,
 	bw.peak = (u64)decon->bts.peak * decon->bts.bw_weight / 100UL;
 	bw.read = (u64)decon->bts.read_bw * decon->bts.bw_weight / 100UL;
 	bw.write = (u64)decon->bts.write_bw * decon->bts.bw_weight / 100UL;
-	DPU_DEBUG_BTS("\tpeak = %d, read = %d, write = %d\n",
-			bw.peak, bw.read, bw.write);
+	DPU_DEBUG_BTS("\tpeak = %d, read = %d, write = %d, lib_requested = %d\n",
+			bw.peak, bw.read, bw.write, regs->lib_requested);
 
 	/* for high fps, add weight to read bw to prevent underrun */
 	if ((decon->bts.fps >= FPS_FOR_HIGH_INTCLK)
@@ -703,6 +712,20 @@ void dpu_bts_update_bw(struct decon_device *decon, struct decon_reg_data *regs,
 	}
 
 	if (is_after) { /* after DECON h/w configuration */
+		if (regs->lib_requested) {
+			for (i = 0; i < BTS_DPU_MAX; i++)
+				decon->bts.ch_bw[decon->id][i] = 0;
+			/* update bw for other decons */
+			dpu_bts_share_bw_info(decon->id);
+			decon->bts.total_bw = 0;
+			bw.peak = 0;
+			bw.read = 0;
+			bw.write = 0;
+			decon->bts.max_disp_freq = 0;
+			decon->lcd_info->fps = LCD_REFRESH_RATE;
+			regs->lib_requested = false;
+			decon->bts.fps = decon->lcd_info->fps;
+		}
 		if (decon->bts.total_bw <= decon->bts.prev_total_bw)
 			bts_update_bw(decon->bts.bw_idx, bw);
 
@@ -820,7 +843,7 @@ void dpu_bts_acquire_bw(struct decon_device *decon)
 			DPU_ERR_BTS("%s int qos setting error\n", __func__);
 
 		if (exynos_pm_qos_request_active(&decon->bts.disp_qos))
-			exynos_pm_qos_update_request(&decon->bts.disp_qos, 400 * 1000);
+			exynos_pm_qos_update_request(&decon->bts.disp_qos, 533 * 1000);
 		else
 			DPU_ERR_BTS("%s int qos setting error\n", __func__);
 

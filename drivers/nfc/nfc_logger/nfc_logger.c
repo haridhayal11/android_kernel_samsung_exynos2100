@@ -38,6 +38,7 @@ static unsigned int g_curpos;
 static int is_nfc_logger_init;
 static int is_buf_full;
 static int log_max_count = -1;
+static void (*print_nfc_status)(void);
 
 /* set max log count, if count is -1, no limit */
 void nfc_logger_set_max_count(int count)
@@ -103,6 +104,11 @@ void nfc_logger_print(const char *fmt, ...)
 	g_curpos += len;
 }
 
+void nfc_logger_register_nfc_stauts_func(void (*print_status_callback)(void))
+{
+	print_nfc_status = print_status_callback;
+}
+
 void nfc_print_hex_dump(void *buf, void *pref, size_t size)
 {
 	uint8_t *ptr = buf;
@@ -149,6 +155,9 @@ static ssize_t nfc_logger_read(struct file *file, char __user *buf, size_t len, 
 
 	if (pos >= size)
 		return 0;
+
+	if (print_nfc_status && !pos)
+		print_nfc_status();
 
 	count = min(len, size);
 

@@ -153,6 +153,7 @@ static void npu_memory_dma_buf_va_unmap(struct npu_memory_buffer *buffer)
 
 
 struct system_pwr sysPwr;
+struct npu_system *g_system_info;
 
 #define OFFSET_END	0xFFFFFFFF
 
@@ -999,6 +1000,7 @@ int npu_system_probe(struct npu_system *system, struct platform_device *pdev)
 #endif
 	init_waitqueue_head(&sysPwr.wq);
 	sysPwr.system_result.result_code = NPU_SYSTEM_JUST_STARTED;
+
 	goto p_exit;
 p_qos_err:
 	pm_runtime_disable(dev);
@@ -1144,7 +1146,6 @@ static void print_all_iomem_area(const struct npu_system *system)
 			print_iomem_area(system->io_area[i].name, system->io_area[i].area_info);
 	}
 	npu_dbg("end in IOMEM mapping\n");
-
 }
 
 static int npu_system_soc_resume(struct npu_system *system, u32 mode)

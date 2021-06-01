@@ -446,7 +446,7 @@ static int sec_abc_get_diff_time(struct abc_buffer *buffer)
 	front_time = buffer->abc_element[(buffer->front + 1) % buffer->size].cur_time;
 	rear_time = buffer->abc_element[buffer->rear].cur_time;
 
-	ABC_PRINT("front time : %d(%d) rear_time %d(%d) diff : %d\n",
+	ABC_PRINT("front time : %d sec (%d) rear_time %d sec (%d) diff : %d\n",
 		  front_time,
 		  buffer->front + 1,
 		  rear_time,
@@ -559,7 +559,7 @@ static void sec_abc_work_func(struct work_struct *work)
 		pmipi_overflow = pinfo->pdata->mipi_overflow_items;
 		/* GPU fault */
 		if (pgpu->buffer.size && !strncasecmp(event_type, "gpu_fault", 9)) {
-			in.cur_time = (unsigned long)ktime / USEC_PER_SEC;
+			in.cur_time = (unsigned long)ktime;
 			in.cur_cnt = pgpu->fail_cnt++;
 
 			ABC_PRINT("gpu fail count : %d\n", pgpu->fail_cnt);
@@ -574,7 +574,7 @@ static void sec_abc_work_func(struct work_struct *work)
 				}
 				pgpu->fail_cnt = 0;
 				sec_abc_dequeue(&pgpu->buffer, &out);
-				ABC_PRINT("cur_time : %lu cur_cnt : %d\n", out.cur_time, out.cur_cnt);
+				ABC_PRINT("cur_time : %lu sec cur_cnt : %d\n", out.cur_time, out.cur_cnt);
 			/* Case 2 : Check front and rear node in queue. Because it's occurred within max count */
 			} else if (sec_abc_is_full(&pgpu->buffer)) {
 				if (sec_abc_get_diff_time(&pgpu->buffer) < pgpu->threshold_time) {
@@ -582,7 +582,7 @@ static void sec_abc_work_func(struct work_struct *work)
 					kobject_uevent_env(&sec_abc->kobj, KOBJ_CHANGE, uevent_str);
 				}
 				sec_abc_dequeue(&pgpu->buffer, &out);
-				ABC_PRINT("cur_time : %lu cur_cnt : %d\n", out.cur_time, out.cur_cnt);
+				ABC_PRINT("cur_time : %lu sec cur_cnt : %d\n", out.cur_time, out.cur_cnt);
 			}
 
 #ifdef ABC_WARNING_REPORT
@@ -591,7 +591,7 @@ static void sec_abc_work_func(struct work_struct *work)
 			kobject_uevent_env(&sec_abc->kobj, KOBJ_CHANGE, uevent_str);
 #endif
 		} else if (pgpu_page->buffer.size && !strncasecmp(event_type, "gpu_page_fault", 14)) { /* gpu page fault */
-			in.cur_time = (unsigned long)ktime / USEC_PER_SEC;
+			in.cur_time = (unsigned long)ktime;
 			in.cur_cnt = pgpu_page->fail_cnt++;
 
 			ABC_PRINT("gpu_page fail count : %d\n", pgpu_page->fail_cnt);
@@ -606,7 +606,7 @@ static void sec_abc_work_func(struct work_struct *work)
 				}
 				pgpu_page->fail_cnt = 0;
 				sec_abc_dequeue(&pgpu_page->buffer, &out);
-				ABC_PRINT("cur_time : %lu cur_cnt : %d\n", out.cur_time, out.cur_cnt);
+				ABC_PRINT("cur_time : %lu sec cur_cnt : %d\n", out.cur_time, out.cur_cnt);
 			/* Case 2 : Check front and rear node in queue. Because it's occurred within max count */
 			} else if (sec_abc_is_full(&pgpu_page->buffer)) {
 				if (sec_abc_get_diff_time(&pgpu_page->buffer) < pgpu_page->threshold_time) {
@@ -614,10 +614,10 @@ static void sec_abc_work_func(struct work_struct *work)
 					kobject_uevent_env(&sec_abc->kobj, KOBJ_CHANGE, uevent_str);
 				}
 				sec_abc_dequeue(&pgpu_page->buffer, &out);
-				ABC_PRINT("cur_time : %lu cur_cnt : %d\n", out.cur_time, out.cur_cnt);
+				ABC_PRINT("cur_time : %lu sec cur_cnt : %d\n", out.cur_time, out.cur_cnt);
 			}
 		} else if (paicl->buffer.size && !strncasecmp(event_type, "aicl", 4)) { /* AICL fault */
-			in.cur_time = (unsigned long)ktime / USEC_PER_SEC;
+			in.cur_time = (unsigned long)ktime;
 			in.cur_cnt = paicl->fail_cnt++;
 
 			ABC_PRINT("aicl fail count : %d\n", paicl->fail_cnt);
@@ -634,11 +634,11 @@ static void sec_abc_work_func(struct work_struct *work)
 				} else {
 					paicl->fail_cnt--;
 					sec_abc_dequeue(&paicl->buffer, &out);
-					ABC_PRINT("cur_time : %lu cur_cnt : %d\n", out.cur_time, out.cur_cnt);
+					ABC_PRINT("cur_time : %lu sec cur_cnt : %d\n", out.cur_time, out.cur_cnt);
 				}
 			}
 		} else if (pmipi_overflow->buffer.size && !strncasecmp(event_type, "mipi_overflow", 13)) { /* mipi overflow */
-			in.cur_time = (unsigned long)ktime / USEC_PER_SEC;
+			in.cur_time = (unsigned long)ktime;
 			in.cur_cnt = pmipi_overflow->fail_cnt++;
 
 			ABC_PRINT("mipi_overflow fail count : %d\n", pmipi_overflow->fail_cnt);
@@ -653,7 +653,7 @@ static void sec_abc_work_func(struct work_struct *work)
 				}
 				pmipi_overflow->fail_cnt = 0;
 				sec_abc_dequeue(&pmipi_overflow->buffer, &out);
-				ABC_PRINT("cur_time : %lu cur_cnt : %d\n", out.cur_time, out.cur_cnt);
+				ABC_PRINT("cur_time : %lu sec cur_cnt : %d\n", out.cur_time, out.cur_cnt);
 			/* Case 2 : Check front and rear node in queue. Because it's occurred within max count */
 			} else if (sec_abc_is_full(&pmipi_overflow->buffer)) {
 				if (sec_abc_get_diff_time(&pmipi_overflow->buffer) < pmipi_overflow->threshold_time) {
@@ -661,7 +661,7 @@ static void sec_abc_work_func(struct work_struct *work)
 					kobject_uevent_env(&sec_abc->kobj, KOBJ_CHANGE, uevent_str);
 				}
 				sec_abc_dequeue(&pmipi_overflow->buffer, &out);
-				ABC_PRINT("cur_time : %lu cur_cnt : %d\n", out.cur_time, out.cur_cnt);
+				ABC_PRINT("cur_time : %lu sec cur_cnt : %d\n", out.cur_time, out.cur_cnt);
 			}
 		} else {
 			/* Others */

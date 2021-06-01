@@ -913,6 +913,133 @@ static void dhd_module_s2mpu_register(struct device *dev);
 #endif /* CONFIG_ARCH_EXYNOS */
 
 #if defined(CONFIG_PM_SLEEP)
+#ifdef WL_TWT
+#define TWT_NOMINAL_RESUME	(5U * 1024U) /* 5ms */
+
+int dhd_send_twt_info_suspend(dhd_pub_t *dhdp, bool suspend)
+{
+	int ret = BCME_OK;
+	wl_twt_info_t ti;
+	u8 buf[WLC_IOCTL_SMLEN] = {0};
+
+	uint8 *pbuf = buf;
+	uint16 param_len  = sizeof(buf);
+
+	bzero(&ti, sizeof(ti));
+	ti.version = WL_TWT_INFO_VER;
+	ti.length = sizeof(ti.version) + sizeof(ti.length);
+
+	if (!dhdp || dhdp->up == 0) {
+		return ret;
+	}
+
+	/* if it's not associated, skip send info */
+	if (!dhd_is_associated(dhdp, 0, NULL)) {
+		return ret;
+	}
+
+	/* Default values, Overide Below */
+	ti.infodesc.flow_id = 0xFF;
+	ti.desc.next_twt_h = 0xFFFFFFFF;
+	ti.desc.next_twt_l = 0xFFFFFFFF;
+
+	/* Set allTWT info suspend, ConfigID = 0 */
+	ti.configID = 0;
+
+	/* resume TWT session in resume */
+	if (suspend == FALSE) {
+		/* Resume TWT session */
+		ti.infodesc.next_twt_h = htod32((u32)((u64)TWT_NOMINAL_RESUME >> 32));
+		ti.infodesc.next_twt_l = htod32((u32)TWT_NOMINAL_RESUME);
+		ti.infodesc.flow_flags |= WL_TWT_INFO_FLAG_RESUME;
+	}
+
+	/* Packing parameters */
+	ret = bcm_pack_xtlv_entry(&pbuf, &param_len, WL_TWT_CMD_INFO,
+			sizeof(ti), (uint8 *)&ti, BCM_XTLV_OPTION_ALIGN32);
+	if (ret != BCME_OK) {
+		DHD_ERROR(("%s : parameter packing error \n", __FUNCTION__));
+		return ret;
+	}
+
+	ret = dhd_iovar(dhdp, 0, "twt", buf, sizeof(buf) - param_len, NULL, 0, TRUE);
+	if (ret) {
+		DHD_ERROR(("%s : TWT info failed ret : %d\n", __FUNCTION__, ret));
+	}
+	return ret;
+
+}
+int dhd_config_twt_event_mask_in_suspend(dhd_pub_t *dhdp, bool suspend)
+{
+	int ret = BCME_OK;
+	u8 buf[WLC_IOCTL_SMLEN] = {0};
+	eventmsgs_ext_t *eventmask_msg = NULL;
+
+	int msglen = WL_EVENTING_MASK_EXT_LEN + EVENTMSGS_EXT_STRUCT_SIZE;
+
+	if (!dhdp || dhdp->up == 0) {
+		return ret;
+	}
+
+	/* if it's not associated in suspend, skip teardown */
+	if (suspend && !dhd_is_associated(dhdp, 0, NULL)) {
+		return ret;
+	}
+
+	/* TWT_E_TWT event mask configuration */
+	eventmask_msg = (eventmsgs_ext_t *)MALLOC(dhdp->osh, msglen);
+	if (eventmask_msg == NULL) {
+		DHD_ERROR(("%s : failed to allocate for event_msg_ext\n", __FUNCTION__));
+		return ret;
+	}
+
+	bzero(eventmask_msg, msglen);
+	eventmask_msg->ver = EVENTMSGS_VER;
+	eventmask_msg->len = ROUNDUP(WLC_E_LAST, NBBY)/NBBY;
+
+	/* Read event_msgs_ext mask */
+	ret = dhd_iovar(dhdp, 0, "event_msgs_ext", (char *)eventmask_msg, msglen, buf,
+			WLC_IOCTL_SMLEN, FALSE);
+	/* event_msgs_ext must be supported */
+	if (ret != BCME_OK) {
+		DHD_ERROR(("%s read event mask ext failed %d\n", __FUNCTION__, ret));
+		goto fail;
+	}
+
+	bcopy(buf, eventmask_msg, msglen);
+
+	/* suspend */
+	if (suspend) {
+		/* Clear TWT EVENT bit mask */
+		clrbit(eventmask_msg->mask, WLC_E_TWT);
+	} else {
+	/* resume */
+		/* Set TWT EVENT bit mask */
+		setbit(eventmask_msg->mask, WLC_E_TWT);
+	}
+
+	/* Write updated Event mask */
+	eventmask_msg->ver = EVENTMSGS_VER;
+	eventmask_msg->command = EVENTMSGS_SET_MASK;
+	eventmask_msg->len = WL_EVENTING_MASK_EXT_LEN;
+
+	ret = dhd_iovar(dhdp, 0, "event_msgs_ext", (char *)eventmask_msg, msglen,
+			NULL, 0, TRUE);
+	if (ret < 0) {
+		DHD_ERROR(("%s write event mask ext failed %d\n", __FUNCTION__, ret));
+		goto fail;
+	}
+
+fail:
+	if (eventmask_msg) {
+		MFREE(dhdp->osh, eventmask_msg, msglen);
+	}
+
+	return ret;
+
+}
+#endif /* WL_TWT */
+
 static int dhd_pm_callback(struct notifier_block *nfb, unsigned long action, void *ignored)
 {
 	int ret = NOTIFY_DONE;
@@ -922,10 +1049,18 @@ static int dhd_pm_callback(struct notifier_block *nfb, unsigned long action, voi
 	BCM_REFERENCE(dhdinfo);
 	BCM_REFERENCE(suspend);
 
+#if defined(WL_TWT) || (defined(SUPPORT_P2P_GO_PS) && defined(PROP_TXSTATUS))
+	dhdinfo = container_of(nfb, dhd_info_t, pm_notifier);
+#endif /* WL_TWT || SUPPORT_P2P_GO_PS && PROP_TXSTATUS */
+
 	switch (action) {
 	case PM_HIBERNATION_PREPARE:
 	case PM_SUSPEND_PREPARE:
 		suspend = TRUE;
+#ifdef WL_TWT
+		dhd_config_twt_event_mask_in_suspend(&dhdinfo->pub, TRUE);
+		dhd_send_twt_info_suspend(&dhdinfo->pub, TRUE);
+#endif /* WL_TWT */
 		break;
 
 	case PM_POST_HIBERNATION:
@@ -935,7 +1070,6 @@ static int dhd_pm_callback(struct notifier_block *nfb, unsigned long action, voi
 	}
 
 #if defined(SUPPORT_P2P_GO_PS) && defined(PROP_TXSTATUS)
-	dhdinfo = container_of(nfb, const dhd_info_t, pm_notifier);
 	if (suspend) {
 		DHD_OS_WAKE_LOCK_WAIVE(&dhdinfo->pub);
 		dhd_wlfc_suspend(&dhdinfo->pub);
@@ -5108,6 +5242,7 @@ void dhd_dpc_enable(dhd_pub_t *dhdp)
 
 #ifdef DHD_LB_RXP
 	__skb_queue_head_init(&dhd->rx_pend_queue);
+	skb_queue_head_init(&dhd->rx_emerge_queue);
 #endif /* DHD_LB_RXP */
 
 #ifdef DHD_LB_TXP
@@ -5142,6 +5277,7 @@ dhd_dpc_kill(dhd_pub_t *dhdp)
 #ifdef DHD_LB_RXP
 	cancel_work_sync(&dhd->rx_napi_dispatcher_work);
 	__skb_queue_purge(&dhd->rx_pend_queue);
+	skb_queue_purge(&dhd->rx_emerge_queue);
 #endif /* DHD_LB_RXP */
 #ifdef DHD_LB_TXP
 	cancel_work_sync(&dhd->tx_dispatcher_work);
@@ -6682,6 +6818,7 @@ dhd_stop(struct net_device *net)
 
 #if defined(DHD_LB_RXP)
 			__skb_queue_purge(&dhd->rx_pend_queue);
+			skb_queue_purge(&dhd->rx_emerge_queue);
 #endif /* DHD_LB_RXP */
 
 #if defined(DHD_LB_TXP)
@@ -6871,6 +7008,18 @@ dhd_verify_firmware_mode_change(dhd_info_t *dhd)
 void
 dhd_force_collect_init_fail_dumps(dhd_pub_t *dhdp)
 {
+
+#ifdef CUSTOMER_HW4_DEBUG
+#ifdef DEBUG_DNGL_INIT_FAIL
+	/* As HAL is not inited, do force crash and collect from host dram */
+	dhdp->memdump_enabled = DUMP_MEMONLY;
+#else
+	DHD_ERROR(("%s: As DEBUG_DNGL_INIT_FAIL is not enabled, and HAL not inited,"
+		" cannot collect dumps\n", __FUNCTION__));
+	return;
+#endif /* DEBUG_DNGL_INIT_FAIL */
+#endif /* CUSTOMER_HW4_DEBUG */
+
 #ifdef DHD_FW_COREDUMP
 	/* save core dump or write to a file */
 	if (dhdp->memdump_enabled && (dhdp->busstate != DHD_BUS_DOWN)) {
@@ -6885,12 +7034,6 @@ dhd_force_collect_init_fail_dumps(dhd_pub_t *dhdp)
 		}
 		dhdp->collect_sssr = TRUE;
 #endif /* DHD_SSSR_DUMP */
-#ifdef CUSTOMER_HW4_DEBUG
-#ifdef DEBUG_DNGL_INIT_FAIL
-		/* As HAL is not inited, do force crash and collect from host dram */
-		dhdp->memdump_enabled = DUMP_MEMONLY;
-#endif /* DEBUG_DNGL_INIT_FAIL */
-#endif /* CUSTOMER_HW4_DEBUG */
 		dhdp->memdump_type = DUMP_TYPE_DONGLE_INIT_FAILURE;
 		dhd_bus_mem_dump(dhdp);
 	}
@@ -6993,6 +7136,7 @@ dhd_open(struct net_device *net)
 	dhd->pub.iface_op_failed = 0;
 	dhd->pub.scan_timeout_occurred = 0;
 	dhd->pub.scan_busy_occurred = 0;
+	dhd->pub.p2p_disc_busy_occurred = 0;
 	dhd->pub.smmu_fault_occurred = 0;
 #ifdef DHD_LOSSLESS_ROAMING
 	dhd->pub.dequeue_prec_map = ALLPRIO;
@@ -7163,6 +7307,7 @@ dhd_open(struct net_device *net)
 
 #if defined(DHD_LB_RXP)
 		__skb_queue_head_init(&dhd->rx_pend_queue);
+		skb_queue_head_init(&dhd->rx_emerge_queue);
 		if (dhd->rx_napi_netdev == NULL) {
 			dhd->rx_napi_netdev = dhd->iflist[ifidx]->net;
 			memset(&dhd->rx_napi_struct, 0, sizeof(struct napi_struct));
@@ -9261,6 +9406,7 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 	/* Initialize the Load Balancing Tasklets and Napi object */
 #if defined(DHD_LB_RXP)
 	__skb_queue_head_init(&dhd->rx_pend_queue);
+	skb_queue_head_init(&dhd->rx_emerge_queue);
 	skb_queue_head_init(&dhd->rx_napi_queue);
 	__skb_queue_head_init(&dhd->rx_process_queue);
 	/* Initialize the work that dispatches NAPI job to a given core */
@@ -9734,6 +9880,7 @@ dhd_bus_start(dhd_pub_t *dhdp)
 	dhd->pub.iface_op_failed = 0;
 	dhd->pub.scan_timeout_occurred = 0;
 	dhd->pub.scan_busy_occurred = 0;
+	dhd->pub.p2p_disc_busy_occurred = 0;
 	/* Retain BH induced errors and clear induced error during initialize */
 	if (dhd->pub.dhd_induce_error) {
 		dhd->pub.dhd_induce_bh_error = dhd->pub.dhd_induce_error;
@@ -12883,7 +13030,6 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	dhd->fw_preinit = FALSE;
 	ret = dhd_legacy_preinit_ioctls(dhd);
 #endif /* DHD_PREINIT_OPTIMISATION */
-
 	if (!ret && dhd_query_bus_erros(dhd)) {
 		DHD_ERROR(("%s: retrun error due to query errors\n", __FUNCTION__));
 		ret = BCME_ERROR;
@@ -13454,6 +13600,7 @@ dhd_register_if(dhd_pub_t *dhdp, int ifidx, bool need_rtnl_lock)
 #endif /* WL_CFG80211 */
 #if defined(DHD_LB_RXP)
 			__skb_queue_purge(&dhd->rx_pend_queue);
+			skb_queue_purge(&dhd->rx_emerge_queue);
 #endif /* DHD_LB_RXP */
 
 #if defined(DHD_LB_TXP)
@@ -13728,6 +13875,7 @@ void dhd_detach(dhd_pub_t *dhdp)
 #ifdef DHD_LB_RXP
 		cancel_work_sync(&dhd->rx_napi_dispatcher_work);
 		__skb_queue_purge(&dhd->rx_pend_queue);
+		skb_queue_purge(&dhd->rx_emerge_queue);
 #endif /* DHD_LB_RXP */
 #ifdef DHD_LB_TXP
 		cancel_work_sync(&dhd->tx_dispatcher_work);
@@ -15059,6 +15207,7 @@ dhd_net_bus_devreset(struct net_device *dev, uint8 flag)
 		dhd->pub.iface_op_failed = 0;
 		dhd->pub.scan_timeout_occurred = 0;
 		dhd->pub.scan_busy_occurred = 0;
+		dhd->pub.p2p_disc_busy_occurred = 0;
 	}
 
 	if (ret == BCME_NOMEM) {
@@ -18794,7 +18943,10 @@ dhd_mem_dump(void *handle, void *event_info, u8 event)
 				__FUNCTION__, fis_enab, dhdp->sssr_reg_info->rev3.fis_enab));
 			dhdpcie_sssr_dump(dhdp);
 		}
-
+#ifndef DHD_FIS_DUMP
+		/* Reset fis_enab flag after fis collection which was set for init failure debug */
+		fis_enab = FALSE;
+#endif /* DHD_FIS_DUMP */
 		/* Print sssr buffer address for debugging */
 		if (dhdp->sssr_dump_collected) {
 			dhdpcie_sssr_dump_get_before_after_len(dhdp, arr_len);

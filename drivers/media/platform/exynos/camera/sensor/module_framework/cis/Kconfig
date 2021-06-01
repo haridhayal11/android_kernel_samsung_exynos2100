@@ -277,6 +277,13 @@ config CAMERA_CIS_IMX333_OBJ
 	help
 	  Use to build IMX333 camera sensor.
 
+config CAMERA_CIS_IMX555_OBJ
+	tristate "Use IMX555 camera cis"
+	depends on CAMERA_CIS_SELECT
+	default n
+	help
+	  Use to build IMX555 camera sensor.
+
 config CAMERA_CIS_2L7_OBJ
 	tristate "Use 2L7 camera cis"
 	depends on CAMERA_CIS_SELECT

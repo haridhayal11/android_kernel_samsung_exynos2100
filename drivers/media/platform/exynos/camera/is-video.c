@@ -1963,13 +1963,6 @@ void is_queue_buffer_finish(struct vb2_buffer *vb)
 					video->id, DBG_DMA_DUMP_META);
 	}
 
-#ifdef DBG_IMAGE_DUMP
-	is_debug_dma_dump(&vctx->queue, vb->index, vctx->video->id, DBG_DMA_DUMP_IMAGE);
-#endif
-#ifdef DBG_META_DUMP
-	is_debug_dma_dump(&vctx->queue, vb->index, vctx->video->id, DBG_DMA_DUMP_META);
-#endif
-
 #ifdef ENABLE_LOGICAL_VIDEO_NODE
 	if (queue->mode == CAMERA_NODE_LOGICAL) {
 		mdbgv_lvn(3, "[%s][I%d]buf_finish: queue 0x%lx\n",

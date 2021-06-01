@@ -39,12 +39,10 @@
 #include <linux/regulator/pmic_class.h>
 #if IS_ENABLED(CONFIG_SEC_PM)
 #include <linux/sec_class.h>
-#if IS_ENABLED(CONFIG_SEC_FACTORY)
 #include <linux/fb.h>
-#endif /* CONFIG_SEC_FACTORY */
 #endif /* CONFIG_SEC_PM */
 
-#if IS_ENABLED(CONFIG_SEC_FACTORY) && IS_ENABLED(CONFIG_SEC_PM_QCOM)
+#if IS_ENABLED(CONFIG_SEC_PM_QCOM)
 extern int msm_drm_register_notifier_client(struct notifier_block *nb);
 extern int msm_drm_unregister_notifier_client(struct notifier_block *nb);
 #endif
@@ -59,12 +57,10 @@ struct s2dos05_data {
 	struct device *dev;
 #endif
 #if IS_ENABLED(CONFIG_SEC_PM)
-#if IS_ENABLED(CONFIG_SEC_FACTORY)
 	struct notifier_block fb_block;
 #if IS_ENABLED(CONFIG_SEC_PM_QCOM)
 	struct delayed_work fd_work;
 #endif
-#endif /* CONFIG_SEC_FACTORY */
 #endif /* CONFIG_SEC_PM */
 };
 
@@ -179,7 +175,8 @@ static int s2m_enable(struct regulator_dev *rdev)
 	struct i2c_client *i2c = info->iodev->i2c;
 
 	return s2dos05_update_reg(i2c, rdev->desc->enable_reg,
-				  rdev->desc->enable_mask, rdev->desc->enable_mask);
+					rdev->desc->enable_mask,
+					rdev->desc->enable_mask);
 }
 
 static int s2m_disable_regmap(struct regulator_dev *rdev)
@@ -754,7 +751,6 @@ static ssize_t enable_fd_store(struct device *dev, struct device_attribute *attr
 
 static DEVICE_ATTR(enable_fd, 0664, enable_fd_show, enable_fd_store);
 
-#if IS_ENABLED(CONFIG_SEC_FACTORY)
 #if IS_ENABLED(CONFIG_SEC_PM_QCOM)
 static void handle_fd_work(struct work_struct *work)
 {
@@ -822,7 +818,6 @@ static int fb_state_change(struct notifier_block *nb, unsigned long val,
 
 	return NOTIFY_OK;
 }
-#endif /* CONFIG_SEC_FACTORY */
 
 #if IS_ENABLED(CONFIG_SEC_FACTORY)
 #define VALID_REG	S2DOS05_REG_EN	/* Register address for validation */
@@ -895,7 +890,6 @@ static int s2dos05_sec_pm_init(struct s2dos05_data *info)
 		return ret;
 	}
 
-#if IS_ENABLED(CONFIG_SEC_FACTORY)
 	dev_info(dev, "%s: Enable FD\n", __func__);
 	ret = s2dos05_update_reg(iodev->i2c, S2DOS05_REG_UVLO_FD, 0, 1);
 	if (ret < 0) {
@@ -909,7 +903,6 @@ static int s2dos05_sec_pm_init(struct s2dos05_data *info)
 #else
 	fb_register_client(&info->fb_block);
 #endif
-#endif /* CONFIG_SEC_FACTORY */
 
 	ret = device_create_file(iodev->sec_disp_pmic_dev, &dev_attr_enable_fd);
 	if (ret) {
@@ -942,10 +935,10 @@ remove_sec_disp_pmic_dev:
 static void s2dos05_sec_pm_deinit(struct s2dos05_data *info)
 {
 	device_remove_file(info->iodev->sec_disp_pmic_dev, &dev_attr_enable_fd);
-#if IS_ENABLED(CONFIG_SEC_FACTORY)
 #if IS_ENABLED(CONFIG_SEC_PM_QCOM)
 	msm_drm_unregister_notifier_client(&info->fb_block);
 #endif
+#if IS_ENABLED(CONFIG_SEC_FACTORY)
 	device_remove_file(info->iodev->sec_disp_pmic_dev, &dev_attr_validation);
 #endif /* CONFIG_SEC_FACTORY */
 	sec_device_destroy(info->iodev->sec_disp_pmic_dev->devt);

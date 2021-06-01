@@ -289,6 +289,12 @@ extern void secdbg_softdog_show_info(void);
 #define secdbg_softdog_show_info()		do { } while (0)
 #endif
 
+#if IS_ENABLED(CONFIG_SEC_DEBUG_HANDLE_BAD_STACK)
+extern void secdbg_base_built_check_handle_bad_stack(void);
+#else
+static inline void secdbg_base_built_check_handle_bad_stack(void) { }
+#endif
+
 #ifdef CONFIG_SEC_DEBUG_MEMTAB
 #define SDBG_KNAME_LEN	64
 

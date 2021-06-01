@@ -25,13 +25,13 @@
 #include <linux/pm_wakeup.h>
 #include "../common/sec_charging_common.h"
 
-#define MFC_FW_BIN_VERSION			0x144
-#define MFC_FW_BIN_FULL_VERSION		0x01440000
+#define MFC_FW_BIN_VERSION			0x146
+#define MFC_FW_BIN_FULL_VERSION		0x01460000
 #define MFC_FW_BIN_VERSION_ADDR		0x0084 //fw rev85 address
 #define MTP_MAX_PROGRAM_SIZE 0x4000
 #define MTP_VERIFY_ADDR			0x0000
 #define MTP_VERIFY_SIZE			0x4680
-#define MTP_VERIFY_CHKSUM		0x0274
+#define MTP_VERIFY_CHKSUM		0x3B5E
 
 #define MFC_FLASH_FW_HEX_PATH		"mfc/mfc_fw_flash.bin"
 #define MFC_FW_SDCARD_BIN_PATH		"wpc_fw_sdcard.bin"
@@ -1151,6 +1151,7 @@ struct mfc_charger_data {
 	mfc_charger_platform_data_t 	*pdata;
 	struct mutex io_lock;
 	struct mutex wpc_en_lock;
+	struct mutex fw_lock;
 	const struct firmware *firm_data_bin;
 
 	int wc_w_state;
@@ -1248,6 +1249,7 @@ struct mfc_charger_data {
 
 	bool req_tx_id;
 	bool is_abnormal_pad;
+	bool afc_tx_done;
 
 	bool sleep_mode;
 #if defined(CONFIG_WIRELESS_IC_PARAM)

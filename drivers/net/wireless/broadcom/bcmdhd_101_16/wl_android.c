@@ -1,7 +1,7 @@
 /*
  * Linux cfg80211 driver - Android related functions
  *
- * Copyright (C) 2020, Broadcom.
+ * Copyright (C) 2021, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -4915,11 +4915,11 @@ exit:
 	return ret;
 }
 
-int wl_android_wifi_off(struct net_device *dev, bool on_failure)
+int wl_android_wifi_off(struct net_device *dev, bool force_off)
 {
 	int ret = 0;
 
-	DHD_ERROR(("%s g_wifi_on=%d on_failure=%d\n", __FUNCTION__, g_wifi_on, on_failure));
+	DHD_ERROR(("%s g_wifi_on=%d force_off=%d\n", __FUNCTION__, g_wifi_on, force_off));
 	if (!dev) {
 		DHD_TRACE(("wl_android_wifi_off: dev is null\n"));
 		return -EINVAL;
@@ -4933,7 +4933,7 @@ int wl_android_wifi_off(struct net_device *dev, bool on_failure)
 	}
 #endif	/* BCMPCIE && DHD_DEBUG_UART */
 	dhd_net_if_lock(dev);
-	if (g_wifi_on || on_failure) {
+	if (g_wifi_on || force_off) {
 #if defined(BCMSDIO) || defined(BCMPCIE)
 		ret = dhd_net_bus_devreset(dev, TRUE);
 #ifdef BCMSDIO
@@ -10455,6 +10455,7 @@ _wl_android_bcnrecv_start(struct bcm_cfg80211 *cfg, struct net_device *ndev, boo
 {
 	s32 err = BCME_OK;
 	struct net_device *pdev = bcmcfg_to_prmry_ndev(cfg);
+	dhd_pub_t *dhd = cfg->pub;
 
 	/* check any scan is in progress before beacon recv scan trigger IOVAR */
 	if (wl_get_drv_status_all(cfg, SCANNING)) {
@@ -10495,6 +10496,17 @@ _wl_android_bcnrecv_start(struct bcm_cfg80211 *cfg, struct net_device *ndev, boo
 		goto exit;
 	}
 #endif /* WL_NAN */
+
+	if (dhd->early_suspended) {
+		/* Set BEACON_RECV in suspend mode */
+		WL_INFORM_MEM(("Already suspend mode, Aborting beacon recv start\n"));
+		cfg->bcnrecv_info.bcnrecv_state = BEACON_RECV_SUSPENDED;
+		if ((err = wl_android_bcnrecv_event(pdev, BCNRECV_ATTR_STATUS,
+			WL_BCNRECV_SUSPENDED, WL_BCNRECV_SUSPEND, NULL, 0)) != BCME_OK) {
+			WL_ERR(("failed to send bcnrecv event, error:%d\n", err));
+		}
+		goto exit;
+	}
 
 	/* Triggering an sendup_bcn iovar */
 	err = wldev_iovar_setint(pdev, "sendup_bcn", 1);

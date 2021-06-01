@@ -509,10 +509,6 @@ ssize_t write_data_to_file(char *name, char *buf, size_t count, loff_t *pos)
 	ssize_t tx = -ENOENT;
 #ifdef USE_KERNEL_VFS_READ_WRITE
 	struct file *fp;
-	mm_segment_t old_fs;
-
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
 
 	if (force_caldata_dump) {
 		fp = filp_open(name, O_RDONLY, 0);
@@ -532,11 +528,10 @@ ssize_t write_data_to_file(char *name, char *buf, size_t count, loff_t *pos)
 
 	if (IS_ERR(fp)) {
 		err("open file error: %s", name);
-		set_fs(old_fs);
 		return -EINVAL;
 	}
 
-	tx = vfs_write(fp, buf, count, pos);
+	tx = kernel_write(fp, buf, count, pos);
 	if (tx != count) {
 		err("fail to write %s. ret %zd", name, tx);
 		tx = -ENOENT;
@@ -545,7 +540,6 @@ ssize_t write_data_to_file(char *name, char *buf, size_t count, loff_t *pos)
 	fput(fp);
 
 	filp_close(fp, NULL);
-	set_fs(old_fs);
 #endif
 	return tx;
 }
@@ -554,21 +548,16 @@ ssize_t read_data_rom_file(char *name, char *buf, size_t count, loff_t *pos)
 {
 #ifdef USE_KERNEL_VFS_READ_WRITE
 	struct file *fp;
-	mm_segment_t old_fs;
 	ssize_t tx;
-
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
 
 	fp = filp_open(name, O_RDONLY, 0);
 
 	if (IS_ERR(fp)) {
 		info("%s: error %d, failed to open %s\n", __func__, PTR_ERR(fp), name);
-		set_fs(old_fs);
 		return -EINVAL;
 	}
 
-	tx = vfs_read(fp, buf, count, pos);
+	tx = kernel_read(fp, buf, count, pos);
 
 	if (tx != count) {
 		err("fail to read %s. ret %zd", name, tx);
@@ -577,7 +566,6 @@ ssize_t read_data_rom_file(char *name, char *buf, size_t count, loff_t *pos)
 
 	fput(fp);
 	filp_close(fp, NULL);
-	set_fs(old_fs);
 #endif
 	return count;
 }
@@ -2765,8 +2753,6 @@ int is_sec_check_bin_files(struct is_core *core)
 		IS_FW_DUMP_PATH, finfo->load_rta_fw_name);
 	info("Camera: f-rom fw version: %s\n", finfo->header_ver);
 
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
 	fp = filp_open(dump_fw_path, O_RDONLY, 0);
 	if (IS_ERR(fp)) {
 		info("Camera: There is no dumped firmware(%s)\n", dump_fw_path);
@@ -2782,7 +2768,7 @@ int is_sec_check_bin_files(struct is_core *core)
 
 	fp->f_pos = fsize - IS_HEADER_VER_OFFSET;
 	fsize = IS_HEADER_VER_SIZE;
-	nread = vfs_read(fp, (char __user *)temp_buf, fsize, &fp->f_pos);
+	nread = kernel_read(fp, temp_buf, fsize, &fp->f_pos);
 	if (nread != fsize) {
 		err("failed to read firmware file, %ld Bytes", nread);
 		ret = -EIO;
@@ -2798,13 +2784,8 @@ read_phone_fw:
 		fp = NULL;
 	}
 
-	set_fs(old_fs);
-
 	if (ret < 0)
 		goto exit;
-
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
 
 	fp = filp_open(fw_path, O_RDONLY, 0);
 	if (IS_ERR(fp)) {
@@ -2818,7 +2799,7 @@ read_phone_fw:
 
 	fp->f_pos = fsize - IS_HEADER_VER_OFFSET;
 	fsize = IS_HEADER_VER_SIZE;
-	nread = vfs_read(fp, (char __user *)temp_buf, fsize, &fp->f_pos);
+	nread = kernel_read(fp, temp_buf, fsize, &fp->f_pos);
 	if (nread != fsize) {
 		err("failed to read firmware file, %ld Bytes", nread);
 		ret = -EIO;
@@ -2834,8 +2815,6 @@ read_phone_fw_exit:
 		filp_close(fp, current->files);
 		fp = NULL;
 	}
-
-	set_fs(old_fs);
 
 	if (ret < 0)
 		goto exit;

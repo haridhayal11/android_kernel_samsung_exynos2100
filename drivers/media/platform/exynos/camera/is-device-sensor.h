@@ -176,6 +176,8 @@ enum is_sensor_subdev_ioctl {
 	SENSOR_IOCTL_G_HW_FCOUNT,
 	SENSOR_IOCTL_DISABLE_VC1_VOTF,
 	SENSOR_IOCTL_CSI_DMA_DISABLE,
+	SENSOR_IOCTL_CSI_DMA_ATTACH,
+	SENSOR_IOCTL_G_DMA_CH,
 
 	SENSOR_IOCTL_CSI_S_CTRL,
 	SENSOR_IOCTL_CSI_G_CTRL,
@@ -240,7 +242,7 @@ struct is_sensor_cfg {
 	u32 votf;
 	u32 vvalid_time; /* unit(us) */
 	u32 req_vvalid_time; /* unit(us) */
-	u32 scm; /* sensor DMA ch mode: default mode(0), spetail mode(1) */
+	unsigned int wdma_ch_hint; /* Designated CSI WDMA ch for special function */
 	u32 binning; /* binning ratio */
 	int special_mode;
 	enum is_img_pd_ratio img_pd_ratio;
@@ -341,7 +343,6 @@ enum is_sensor_state {
 	IS_SENSOR_RUNTIME_MODULE_SELECTED,
 	IS_SENSOR_I2C_DUMMY_MODULE_SELECTED,
 	IS_SENSOR_ESD_RECOVERY,
-	IS_SENSOR_NEED_VOTF_FLUSH,
 };
 
 enum sensor_subdev_internel_use {

@@ -20,6 +20,16 @@ config SEC_KQ_NAD_X
 	  you want to test.
 	  This feature depends on SEC_KQ_NAD.
 
+comment "Samsung NAD ver5.5 Support Options"
+config SEC_KQ_NAD_55
+	tristate "Samsung TN NAD USB Feature"
+	depends on SEC_KQ_NAD
+	default n
+	help
+	  Samsung TN NAD Feature, Enable NAD USB
+	  This feature support NAD 5.5
+	  This feature depends on SEC_KQ_NAD.
+
 comment "Samsung NAD vdd_cal Support Options"
 config SEC_KQ_NAD_VDD_CAL
 	tristate "Samsung TN NAD VDD CAL Feature"

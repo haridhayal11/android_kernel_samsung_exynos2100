@@ -261,7 +261,6 @@ enum {
 #ifdef CONFIG_EVASION_DISP_DET
 	PANEL_WORK_EVASION_DISP_DET,
 #endif
-	PANEL_WORK_FIRST_FRAME,
 	PANEL_WORK_MAX,
 };
 
@@ -638,7 +637,6 @@ int panel_fast_discharge_set(struct panel_device *panel);
 #ifdef CONFIG_SUPPORT_MASK_LAYER
 #define PANEL_IOC_SET_MASK_LAYER		_IOW(PANEL_IOC_BASE, 61, struct mask_layer_data *)
 #endif
-#define PANEL_IOC_FIRST_FRAME			_IOW(PANEL_IOC_BASE, 62, void *)
 
 #ifdef CONFIG_DYNAMIC_MIPI
 #define MAGIC_DF_UPDATED				(0x0A55AA55)

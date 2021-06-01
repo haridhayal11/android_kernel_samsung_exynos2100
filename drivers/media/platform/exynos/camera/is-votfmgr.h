@@ -18,10 +18,10 @@
 
 int is_votf_check_wait_con(struct is_group *group);
 int is_votf_check_invalid_state(struct is_group *group);
-int is_votf_flush(struct is_group *group);
+int is_votf_create_link_sensor(struct is_group *group, u32 width, u32 height);
+int is_votf_destroy_link_sensor(struct is_group *group);
 int is_votf_create_link(struct is_group *group, u32 width, u32 height);
 int is_votf_destroy_link(struct is_group *group);
-int is_votf_change_link(struct is_group *group, u32 prev_group_id);
 struct is_framemgr *is_votf_get_framemgr(struct is_group *group, enum votf_service type,
 	unsigned long id);
 struct is_frame *is_votf_get_frame(struct is_group *group, enum votf_service type,

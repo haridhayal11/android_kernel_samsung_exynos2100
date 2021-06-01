@@ -2229,6 +2229,9 @@ void usb_disconnect(struct usb_device **pdev)
 	 */
 	dev_dbg(&udev->dev, "unregistering device\n");
 	usb_disable_device(udev, 0);
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+	dev_dbg(&udev->dev, "usb disable device end\n");
+#endif
 	usb_hcd_synchronize_unlinks(udev);
 
 	if (udev->parent) {

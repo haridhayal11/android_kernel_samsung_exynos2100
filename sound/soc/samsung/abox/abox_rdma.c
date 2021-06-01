@@ -1348,13 +1348,23 @@ static int abox_rdma_progress(struct abox_dma_data *data)
 	return !!(val & ABOX_RDMA_PROGRESS_MASK);
 }
 
+static int abox_rdma_discrete(struct abox_dma_data *data)
+{
+	unsigned int val = 0;
+
+	regmap_read(data->abox_data->regmap, ABOX_RDMA_CTRL(data->id), &val);
+
+	return !!(val & ABOX_DMA_BUF_TYPE_MASK);
+}
+
 static void abox_rdma_disable_barrier(struct device *dev,
 		struct abox_dma_data *data)
 {
 	struct abox_data *abox_data = data->abox_data;
 	u64 timeout = local_clock() + abox_get_waiting_ns(true);
 
-	while (abox_rdma_progress(data) || abox_rdma_enabled(data)) {
+	while (abox_rdma_progress(data) ||
+		(abox_rdma_enabled(data) && !abox_rdma_discrete(data))) {
 		if (local_clock() <= timeout) {
 			cond_resched();
 			continue;

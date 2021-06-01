@@ -406,6 +406,12 @@ static void odma_reg_set_ic_max(u32 id, u32 ic_max)
 			ODMA_IC_MAX_MASK);
 }
 
+static void odma_reg_set_format(u32 id, u32 fmt)
+{
+	dma_write_mask(id, WDMA_OUT_CTRL_0, ODMA_IMG_FORMAT(fmt),
+			ODMA_IMG_FORMAT_MASK);
+}
+
 static void odma_reg_set_sub_con(u32 id)
 {
 	u32 val, mask;
@@ -415,12 +421,6 @@ static void odma_reg_set_sub_con(u32 id)
 
 	dpp_write_mask(id, DPP_COM_SUB_CON, val, mask);
 	dpp_dbg("Sub sampling 0x%08x\n", dpp_read(id, DPP_COM_SUB_CON));
-}
-
-static void odma_reg_set_format(u32 id, u32 fmt)
-{
-	dma_write_mask(id, WDMA_OUT_CTRL_0, ODMA_IMG_FORMAT(fmt),
-			ODMA_IMG_FORMAT_MASK);
 }
 
 /****************** DPP CAL functions ******************/
@@ -940,8 +940,12 @@ static int dma_dpp_reg_set_format(u32 id, struct dpp_params_info *p,
 			mask = DPP_ALPHA_SEL_MASK | DPP_IMG_FORMAT_MASK;
 			dpp_write_mask(id, DPP_COM_IO_CON, val, mask);
 		}
-		if (IS_YUV(fmt_info))
-			odma_reg_set_sub_con(id);
+		if (IS_YUV(fmt_info)) {
+#if IS_ENABLED(CONFIG_EXYNOS_SBWC_LIBREQ)
+			if (p->lib_requested == false)
+#endif
+				odma_reg_set_sub_con(id);
+		}
 	}
 
 	return 0;

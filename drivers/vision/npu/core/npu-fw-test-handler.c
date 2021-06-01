@@ -7,6 +7,7 @@
 
 #include "npu-vs4l.h"
 #include "npu-log.h"
+#include "npu-device.h"
 #include "npu-common.h"
 #include "npu-session.h"
 #include "npu-qos.h"

@@ -69,6 +69,11 @@ static u32 llc_id[6];
 static u32 llc_addr_match;
 static u32 llc_addr_mask;
 
+void set_exynos_sci_llc_debug_mode(int enable)
+{
+	exynos_sci_llc_debug_mode = enable;
+}
+
 bool get_exynos_sci_llc_debug_mode(void)
 {
 	return exynos_sci_llc_debug_mode;

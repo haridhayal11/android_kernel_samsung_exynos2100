@@ -1911,6 +1911,7 @@ int is_group_close(struct is_groupmgr *groupmgr,
 	u32 stream, slot, i;
 	struct is_group_task *gtask;
 	struct is_group_framemgr *gframemgr;
+	int state_vlink;
 
 	FIMC_BUG(!groupmgr);
 	FIMC_BUG(!group);
@@ -1930,27 +1931,18 @@ int is_group_close(struct is_groupmgr *groupmgr,
 	if (ret)
 		mgerr("is_group_task_stop is fail(%d)", group, group, ret);
 
-	if (test_bit(IS_GROUP_VOTF_CONN_LINK, &group->state)) {
-		struct is_device_ischain *device;
+	mutex_lock(&group->mlock_votf);
+	state_vlink = test_and_clear_bit(IS_GROUP_VOTF_CONN_LINK, &group->state);
+	mutex_unlock(&group->mlock_votf);
 
-		FIMC_BUG(!group->device);
-
-		device = group->device;
+	if (state_vlink) {
 		mginfo("destroy votf_link forcely at group_close", group, group);
 
-		/* internal buffer free */
-		if (test_bit(IS_GROUP_VOTF_INPUT, &group->state)) {
-			ret = is_subdev_internal_stop(device, 0, &group->leader);
-			if (ret)
-				merr("subdev internal stop is fail(%d)", device, ret);
-
-			clear_bit(IS_SUBDEV_INTERNAL_USE, &group->leader.state);
-
+		if (group->head->device_type != IS_DEVICE_SENSOR) {
 			ret = is_votf_destroy_link(group);
 			if (ret)
 				mgerr("is_votf_destroy_link is fail(%d)", group, group, ret);
 		}
-		clear_bit(IS_GROUP_VOTF_CONN_LINK, &group->state);
 	}
 
 	ret = is_subdev_close(&group->leader);
@@ -2271,11 +2263,9 @@ int is_group_start(struct is_groupmgr *groupmgr,
 	struct is_framemgr *framemgr = NULL;
 	struct is_group_task *gtask;
 	struct is_group *child;
-	struct is_subdev *leader;
 	u32 sensor_fcount;
 	u32 framerate;
 	u32 width, height;
-	u32 bits_per_pixel;
 
 	FIMC_BUG(!groupmgr);
 	FIMC_BUG(!group);
@@ -2348,38 +2338,14 @@ int is_group_start(struct is_groupmgr *groupmgr,
 
 	child = group;
 	while (child) {
-		leader = &child->leader;
-
-		/* internal buffer allocation */
 		if (test_bit(IS_GROUP_VOTF_INPUT, &child->state)) {
-			if (test_bit(IS_GROUP_VOTF_CONN_LINK, &child->state)) {
-				mgwarn("already connected votf link", device, group);
+			width = child->head->leader.input.width;
+			height =  child->head->leader.input.height;
+
+			if (test_and_set_bit(IS_GROUP_VOTF_CONN_LINK, &child->state)) {
+				mgwarn("already connected votf link", group, group);
+				child = child->child;
 				continue;
-			}
-
-			if (child->head->sensor) {
-				width = is_sensor_g_bns_width(device->sensor);
-				height = is_sensor_g_bns_height(device->sensor);
-			} else {
-				width = child->head->leader.input.width;
-				height =  child->head->leader.input.height;
-			}
-
-			set_bit(IS_SUBDEV_INTERNAL_USE, &child->leader.state);
-
-			bits_per_pixel = is_subdev_internal_g_bpp(device,
-				IS_DEVICE_ISCHAIN, leader, sensor_cfg);
-			ret = is_subdev_internal_s_format(device, IS_DEVICE_ISCHAIN,
-				leader, width, height, bits_per_pixel, NUM_OF_VOTF_BUF, "VOTF");
-			if (ret) {
-				merr("is_subdev_internal_s_format is fail(%d)", device, ret);
-				goto p_err;
-			}
-
-			ret = is_subdev_internal_start(device, IS_DEVICE_ISCHAIN, leader);
-			if (ret) {
-				merr("subdev internal start is fail(%d)", device, ret);
-				goto p_err;
 			}
 
 			ret = is_votf_create_link(child, width, height);
@@ -2477,6 +2443,7 @@ int is_group_stop(struct is_groupmgr *groupmgr,
 	struct is_group *child;
 	struct is_subdev *subdev;
 	struct is_group_task *gtask;
+	int state_vlink;
 
 	FIMC_BUG(!groupmgr);
 	FIMC_BUG(!group);
@@ -2604,14 +2571,16 @@ int is_group_stop(struct is_groupmgr *groupmgr,
 			}
 		}
 
-		/* internal buffer free */
-		if (test_bit(IS_GROUP_VOTF_INPUT, &child->state)
-			&& test_bit(IS_GROUP_VOTF_CONN_LINK, &child->state)) {
-			ret = is_subdev_internal_stop(device, 0, &child->leader);
-			if (ret)
-				merr("subdev internal stop is fail(%d)", device, ret);
+		if (test_bit(IS_GROUP_VOTF_INPUT, &child->state)) {
+			mutex_lock(&child->mlock_votf);
+			state_vlink = test_and_clear_bit(IS_GROUP_VOTF_CONN_LINK, &child->state);
+			mutex_unlock(&child->mlock_votf);
 
-			clear_bit(IS_SUBDEV_INTERNAL_USE, &child->leader.state);
+			if (!state_vlink) {
+				mgwarn("already destory votf link", child, child);
+				child = child->child;
+				continue;
+			}
 
 			ret = is_votf_destroy_link(child);
 			if (ret)
@@ -3881,14 +3850,6 @@ int is_group_change_chain(struct is_groupmgr *groupmgr, struct is_group *group, 
 		mginfo("%s: done (%d --> %d)\n", child, child, __func__, curr_id, next_id);
 
 		child->id = base_id + next_id;
-
-		if (test_bit(IS_GROUP_VOTF_INPUT, &child->state)) {
-			ret = is_votf_change_link(child, base_id + curr_id);
-			if (ret) {
-				mgerr("is_votf_change_link is fail(%d)", child, child, ret);
-				goto p_err;
-			}
-		}
 
 		child = child->child;
 	}

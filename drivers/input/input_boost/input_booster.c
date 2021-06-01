@@ -65,10 +65,6 @@ void trigger_input_booster(struct work_struct *work)
 		return;
 	}
 
-	pr_info(ITAG" IB Trigger :: %s(%d) %s || key_id : %d",
-	ib_device_trees[p_IbTrigger->dev_type].label, p_IbTrigger->dev_type,
-	(p_IbTrigger->event_type) ? "PRESS" : "RELEASE", p_IbTrigger->key_id);
-
 	mutex_lock(&trigger_ib_lock);
 
 	// Input booster On/Off handling
@@ -664,6 +660,7 @@ void input_booster_init(void)
 	debug_flag = 0;
 	enable_event_booster = INIT_ZERO;
 	max_resource_count = 0;
+	allowed_res_count = 0;
 	device_count = 0;
 	evdev_mt_slot = 0;
 	trigger_cnt = 0;

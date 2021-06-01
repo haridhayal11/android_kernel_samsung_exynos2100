@@ -178,6 +178,10 @@ struct dpp_config {
 	bool hwfc_enable;
 	u32 hwfc_idx;
 #endif
+#if IS_ENABLED(CONFIG_EXYNOS_SBWC_LIBREQ)
+	bool lib_requested;
+#endif
+
 #if IS_ENABLED(CONFIG_MCD_PANEL)
 	struct mcd_dpp_config mcd_config;
 #endif

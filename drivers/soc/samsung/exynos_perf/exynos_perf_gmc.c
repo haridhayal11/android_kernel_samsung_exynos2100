@@ -44,6 +44,7 @@ static int mid_thd_h = 600;
 static int boost_timer = 5;
 static int debug = 0;
 static int gpu_util_thd = 80;
+static int safe_timer = 60;
 
 
 static uint cpu_util_avgs[NR_CPUS];
@@ -78,6 +79,7 @@ static int gmc_thread(void *data)
 	int big_avg, mid_avg;
 	int boost_cnt = 0;
 	int gpu_util = 0;
+	int safe_cnt = 0;
 
 	if (is_running) {
 		pr_info("[%s] gmc already running!!\n", prefix);
@@ -141,6 +143,19 @@ static int gmc_thread(void *data)
 			big_avg_sum = 0;
 			mid_avg_sum = 0;
 		}
+
+		safe_cnt = (boost_vals_old[GMC_T1] == 1)? (safe_cnt + 1) : 0;
+		if (safe_cnt >= safe_timer) {
+			// reset
+			boost_vals[GMC_T1] = 0;
+			snprintf(msg, sizeof(msg), "GMC_TYPE=%d,GMC_BOOST=%d", GMC_T1, boost_vals[GMC_T1]);
+			ret = kobject_uevent_env(gmc_kobj->parent, KOBJ_CHANGE, envp);
+			boost_vals_old[GMC_T1] = boost_vals[GMC_T1];
+			boost_cnt = 0;
+			big_avg_sum = 0;
+			mid_avg_sum = 0;
+		}
+
 		msleep(polling_ms);
 	}
 
@@ -228,6 +243,7 @@ DEF_NODE(mid_thd_h)
 DEF_NODE(boost_timer)
 DEF_NODE(debug)
 DEF_NODE(gpu_util_thd)
+DEF_NODE(safe_timer)
 
 
 // run
@@ -260,6 +276,7 @@ static struct attribute *gmc_attrs[] = {
 	&boost_timer_attr.attr,
 	&debug_attr.attr,
 	&gpu_util_thd_attr.attr,
+	&safe_timer_attr.attr,
 	NULL
 };
 

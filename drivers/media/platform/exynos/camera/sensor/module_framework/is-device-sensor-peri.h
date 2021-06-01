@@ -365,6 +365,7 @@ struct is_mcu {
 	char						load_fw_name[50];
 	bool						support_photo_fastae;
 	bool						skip_video_fastae;
+	bool						off_during_uwonly_mode;
 	struct is_ois			*ois;
 	struct v4l2_subdev			*subdev_ois;
 	struct is_actuator 			*actuator;

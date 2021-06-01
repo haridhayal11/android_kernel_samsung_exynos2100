@@ -17,7 +17,6 @@
 #include <asm/barrier.h>
 
 #include "npu-log.h"
-
 #include "npu-util-autosleepthr.h"
 #include "npu-util-common.h"
 

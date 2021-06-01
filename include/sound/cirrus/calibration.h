@@ -50,6 +50,8 @@
 #define CS35L41_CAL_RTLOG_ID_I_PEAK	948
 #define CIRRUS_CAL_RTLOG_ID_V_PEAK	1064
 #define CIRRUS_CAL_RTLOG_ID_I_PEAK	1065
+#define CIRRUS_CAL_RTLOG_ID_TEMP	111
+#define CIRRUS_CAL_RTLOG_RADIX_TEMP	14
 
 #define CS35L41_MPU_UNLOCK_CODE_0		0x5555
 #define CS35L41_MPU_UNLOCK_CODE_1		0xaaaa
@@ -62,6 +64,7 @@
 
 #define CIRRUS_CAL_NUM_ATTRS_AMP	7
 
+int cirrus_cal_read_temp(const char *mfd_suffix);
 int cirrus_cal_apply(const char *mfd_suffix);
 int cirrus_cal_init(void);
 void cirrus_cal_exit(void);

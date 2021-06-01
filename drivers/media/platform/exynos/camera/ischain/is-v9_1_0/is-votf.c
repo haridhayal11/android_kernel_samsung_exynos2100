@@ -120,6 +120,7 @@ u32 is_votf_get_token_size(struct votf_info *vinfo)
 int is_hw_pdp_set_votf_config(struct is_group *group, struct is_sensor_cfg *s_cfg)
 {
 	int ret = 0;
+	struct is_device_sensor *sensor;
 	struct votf_info src_info, dst_info;
 	struct is_group *src_gr;
 	unsigned int src_gr_id;
@@ -136,8 +137,14 @@ int is_hw_pdp_set_votf_config(struct is_group *group, struct is_sensor_cfg *s_cf
 	 * The sensor group id should be re calculated,
 	 * because CSIS WDMA is not matched with sensor group id.
 	 */
+	sensor = src_gr->sensor;
+	ret = v4l2_subdev_call(sensor->subdev_csi, core, ioctl,
+				SENSOR_IOCTL_G_DMA_CH, &dma_ch);
+	if (ret) {
+		mgerr("failed to get dma_ch", group, group);
+		return ret;
+	}
 
-	dma_ch = src_sd->dma_ch[s_cfg->scm];
 	src_gr_id = GROUP_ID_SS0 + dma_ch;
 
 	width = s_cfg->input[CSI_VIRTUAL_CH_0].width;

@@ -1407,7 +1407,7 @@ static void otg_notify_state(struct otg_notify *n,
 			u_notify->typec_status.doing_drswap = 0;
 			mutex_unlock(&u_notify->state_lock);
 			if (n->is_host_wakelock)
-				__pm_relax(&u_notify->ws);
+				__pm_stay_awake(&u_notify->ws);
 			host_state_notify(&u_notify->ndev, NOTIFY_HOST_ADD);
 			if (gpio_is_valid(n->redriver_en_gpio))
 				gpio_direction_output
@@ -1489,7 +1489,7 @@ static void otg_notify_state(struct otg_notify *n,
 		if (enable) {
 			u_notify->ndev.mode = NOTIFY_HOST_MODE;
 			if (n->is_host_wakelock)
-				__pm_relax(&u_notify->ws);
+				__pm_stay_awake(&u_notify->ws);
 			if (n->set_host)
 				n->set_host(true);
 		} else {

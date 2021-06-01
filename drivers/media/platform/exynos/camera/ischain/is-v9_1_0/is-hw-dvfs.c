@@ -185,6 +185,10 @@ DECLARE_DVFS_DT(IS_DVFS_SN_END,
 		.parse_scenario_nm	= "rear_single_wide_ssm_",
 		.scenario_id		= IS_DVFS_SN_REAR_SINGLE_WIDE_SSM,
 		.keep_frame_tick	= -1,
+	}, {
+		.parse_scenario_nm	= "rear_single_wide_vt_",
+		.scenario_id		= IS_DVFS_SN_REAR_SINGLE_WIDE_VT,
+		.keep_frame_tick	= -1,
 	},
 	/* tele sensor scenarios */
 	{
@@ -262,12 +266,24 @@ DECLARE_DVFS_DT(IS_DVFS_SN_END,
 		.scenario_id		= IS_DVFS_SN_REAR_SINGLE_ULTRAWIDE_VIDEO_FHD30,
 		.keep_frame_tick	= -1,
 	}, {
+		.parse_scenario_nm	= "rear_single_ultrawide_video_fhd30_supersteady_",
+		.scenario_id		= IS_DVFS_SN_REAR_SINGLE_ULTRAWIDE_VIDEO_FHD30_SUPERSTEADY,
+		.keep_frame_tick	= -1,
+	}, {
+		.parse_scenario_nm	= "rear_single_ultrawide_video_fhd30_hf_supersteady_",
+		.scenario_id		= IS_DVFS_SN_REAR_SINGLE_ULTRAWIDE_VIDEO_FHD30_HF_SUPERSTEADY,
+		.keep_frame_tick	= -1,
+	}, {
 		.parse_scenario_nm	= "rear_single_ultrawide_video_fhd60_",
 		.scenario_id		= IS_DVFS_SN_REAR_SINGLE_ULTRAWIDE_VIDEO_FHD60,
 		.keep_frame_tick	= -1,
 	}, {
 		.parse_scenario_nm	= "rear_single_ultrawide_video_fhd60_supersteady_",
 		.scenario_id		= IS_DVFS_SN_REAR_SINGLE_ULTRAWIDE_VIDEO_FHD60_SUPERSTEADY,
+		.keep_frame_tick	= -1,
+	}, {
+		.parse_scenario_nm	= "rear_single_ultrawide_video_fhd60_hf_supersteady_",
+		.scenario_id		= IS_DVFS_SN_REAR_SINGLE_ULTRAWIDE_VIDEO_FHD60_HF_SUPERSTEADY,
 		.keep_frame_tick	= -1,
 	}, {
 		.parse_scenario_nm	= "rear_single_ultrawide_video_fhd120_",
@@ -680,6 +696,8 @@ int is_hw_dvfs_get_sensor(struct is_device_ischain *device,
 					return IS_DVFS_SENSOR_WIDE_REMOSAIC;
 				if (vendor == IS_DVFS_SCENARIO_VENDOR_SSM)
 					return IS_DVFS_SENSOR_WIDE_SSM;
+				if (vendor == IS_DVFS_SCENARIO_VENDOR_LOW_POWER)
+					return IS_DVFS_SENSOR_WIDE_VT;
 				return IS_DVFS_SENSOR_WIDE;
 			} else if ((param->sensor_active_map & param->tele_mask)
 				|| (param->sensor_active_map & param->tele2_mask)) {
@@ -1046,11 +1064,33 @@ int is_hw_dvfs_get_rear_single_ultrawide_scenario(struct is_device_ischain *devi
 			switch (param->fps) {
 			case IS_DVFS_FPS_24:
 			case IS_DVFS_FPS_30:
-				return IS_DVFS_SN_REAR_SINGLE_ULTRAWIDE_VIDEO_FHD30;
+				switch (param->hf) {
+				case 0:
+					if (vendor == IS_DVFS_SCENARIO_VENDOR_SUPER_STEADY)
+						return IS_DVFS_SN_REAR_SINGLE_ULTRAWIDE_VIDEO_FHD30_SUPERSTEADY;
+					return IS_DVFS_SN_REAR_SINGLE_ULTRAWIDE_VIDEO_FHD30;
+				case 1:
+					if (vendor == IS_DVFS_SCENARIO_VENDOR_SUPER_STEADY)
+						return IS_DVFS_SN_REAR_SINGLE_ULTRAWIDE_VIDEO_FHD30_HF_SUPERSTEADY;
+					else
+						goto dvfs_err;
+				default:
+					goto dvfs_err;
+				}
 			case IS_DVFS_FPS_60:
-				if (vendor == IS_DVFS_SCENARIO_VENDOR_SUPER_STEADY)
-					return IS_DVFS_SN_REAR_SINGLE_ULTRAWIDE_VIDEO_FHD60_SUPERSTEADY;
-				return IS_DVFS_SN_REAR_SINGLE_ULTRAWIDE_VIDEO_FHD60;
+				switch (param->hf) {
+				case 0:
+					if (vendor == IS_DVFS_SCENARIO_VENDOR_SUPER_STEADY)
+						return IS_DVFS_SN_REAR_SINGLE_ULTRAWIDE_VIDEO_FHD60_SUPERSTEADY;
+					return IS_DVFS_SN_REAR_SINGLE_ULTRAWIDE_VIDEO_FHD60;
+				case 1:
+					if (vendor == IS_DVFS_SCENARIO_VENDOR_SUPER_STEADY)
+						return IS_DVFS_SN_REAR_SINGLE_ULTRAWIDE_VIDEO_FHD60_HF_SUPERSTEADY;
+					else
+						goto dvfs_err;
+				default:
+					goto dvfs_err;
+				}
 			/* use the same scenario as that of wide sensor */
 			case IS_DVFS_FPS_120:
 				return IS_DVFS_SN_REAR_SINGLE_ULTRAWIDE_VIDEO_FHD120;
@@ -1391,6 +1431,8 @@ int is_hw_dvfs_get_scenario(struct is_device_ischain *device, int flag_capture)
 				return IS_DVFS_SN_REAR_SINGLE_WIDE_VIDEOHDR;
 			case IS_DVFS_SENSOR_WIDE_SSM:
 				return IS_DVFS_SN_REAR_SINGLE_WIDE_SSM;
+			case IS_DVFS_SENSOR_WIDE_VT:
+				return IS_DVFS_SN_REAR_SINGLE_WIDE_VT;
 			/* tele sensor scenarios */
 			case IS_DVFS_SENSOR_TELE:
 				return is_hw_dvfs_get_rear_single_tele_scenario(device, &param);

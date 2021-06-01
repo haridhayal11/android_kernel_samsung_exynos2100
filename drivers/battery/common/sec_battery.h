@@ -947,6 +947,8 @@ struct sec_battery_info {
 	struct wakeup_source *wc_headroom_ws;
 	struct wakeup_source *wpc_tx_ws;
 	struct delayed_work wpc_tx_work;
+	struct wakeup_source *wpc_tx_en_ws;
+	struct delayed_work wpc_tx_en_work;
 #if defined(CONFIG_UPDATE_BATTERY_DATA)
 	struct delayed_work batt_data_work;
 	struct wakeup_source *batt_data_ws;
@@ -1031,10 +1033,9 @@ struct sec_battery_info {
 	bool skip_chg_temp_check;
 	bool skip_wpc_temp_check;
 	bool wpc_temp_mode;
-	bool charging_block;
 	bool wpc_vout_ctrl_lcd_on;
 	char *hv_chg_name;
-#if IS_ENABLED(CONFIG_WIRELESS_CHARGER_MFC)
+#if IS_ENABLED(CONFIG_WIRELESS_CHARGING)
 	int tx_avg_curr;
 	int tx_time_cnt;
 	int tx_total_power;
@@ -1186,7 +1187,7 @@ extern void sec_bat_change_default_current(struct sec_battery_info *battery, int
 extern void sec_bat_change_pdo(struct sec_battery_info *battery, int vol);
 extern int sec_bat_set_charge(void *data, int chg_mode);
 
-#if IS_ENABLED(CONFIG_WIRELESS_CHARGER_MFC)
+#if IS_ENABLED(CONFIG_WIRELESS_CHARGING)
 extern void sec_bat_get_wireless_current(struct sec_battery_info *battery);
 extern void sec_bat_mfc_work(struct work_struct *work);
 extern int sec_bat_check_wc_available(struct sec_battery_info *battery);
@@ -1194,6 +1195,7 @@ extern bool sec_bat_hv_wc_normal_mode_check(struct sec_battery_info *battery);
 extern void sec_bat_ext_event_work_content(struct sec_battery_info *battery);
 extern void sec_bat_wc_headroom_work_content(struct sec_battery_info *battery);
 extern void sec_bat_wpc_tx_work_content(struct sec_battery_info *battery);
+extern void sec_bat_wpc_tx_en_work_content(struct sec_battery_info *battery);
 extern void sec_bat_set_wireless20_current(struct sec_battery_info *battery, int rx_power);
 extern void sec_wireless_otg_control(struct sec_battery_info *battery, int enable);
 extern void set_wireless_otg_input_current(struct sec_battery_info *battery);

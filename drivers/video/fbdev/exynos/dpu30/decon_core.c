@@ -412,7 +412,7 @@ static void decon_tui_acquire_bw(struct decon_device *decon, bool acquire_bw)
 #endif
 }
 
-int decon_tui_protection(bool tui_en)
+static int decon_tui_protection_no_lock(bool tui_en)
 {
 	int ret = 0;
 	int win_idx;
@@ -425,7 +425,6 @@ int decon_tui_protection(bool tui_en)
 
 	decon_info("%s:state %d: out_type %d:+\n", __func__,
 				tui_en, decon->dt.out_type);
-	mutex_lock(&decon->lock);
 	if (tui_en) {
 		decon_hiber_block_exit(decon);
 
@@ -482,9 +481,20 @@ int decon_tui_protection(bool tui_en)
 #endif
 		decon_hiber_unblock(decon);
 	}
-	mutex_unlock(&decon->lock);
 	decon_info("%s:state %d: out_type %d:-\n", __func__,
 				tui_en, decon->dt.out_type);
+	return ret;
+}
+
+int decon_tui_protection(bool tui_en)
+{
+	int ret = 0;
+	struct decon_device *decon = decon_drvdata[0];
+
+	mutex_lock(&decon->lock);
+	ret = decon_tui_protection_no_lock(tui_en);
+	mutex_unlock(&decon->lock);
+
 	return ret;
 }
 EXPORT_SYMBOL(decon_tui_protection);
@@ -976,6 +986,8 @@ static int decon_disable(struct decon_device *decon)
 	enum decon_state prev_state = decon->state;
 	enum decon_state next_state = DECON_STATE_OFF;
 
+	mutex_lock(&decon->lock);
+
 	if (decon->state == next_state) {
 		decon_warn("decon-%d %s already %s state\n", decon->id,
 				__func__, decon_state_names[decon->state]);
@@ -983,9 +995,7 @@ static int decon_disable(struct decon_device *decon)
 	}
 
 	if (decon->state == DECON_STATE_TUI)
-		decon_tui_protection(false);
-
-	mutex_lock(&decon->lock);
+		decon_tui_protection_no_lock(false);
 
 	DPU_EVENT_LOG(DPU_EVT_BLANK, &decon->sd, ktime_set(0, 0));
 	if (decon->dt.out_type != DECON_OUT_WB)
@@ -994,16 +1004,16 @@ static int decon_disable(struct decon_device *decon)
 	if (ret < 0) {
 		decon_err("decon-%d failed to set %s (ret %d)\n",
 				decon->id, decon_state_names[next_state], ret);
-		goto out1;
+		goto out;
 	}
 	if (decon->dt.out_type != DECON_OUT_WB)
 		decon_info("decon-%d %s - (state:%s -> %s)\n", decon->id, __func__,
 			decon_state_names[prev_state],
 			decon_state_names[decon->state]);
 
-out1:
-	mutex_unlock(&decon->lock);
 out:
+	mutex_unlock(&decon->lock);
+
 	return ret;
 }
 
@@ -1947,6 +1957,9 @@ static int decon_set_dpp_config(struct decon_device *decon,
 		memset(&dpp_config, 0, sizeof(struct dpp_config));
 		memcpy(&dpp_config.config, &regs->dpp_config[i], sizeof(struct decon_win_config));
 		dpp_config.rcv_num = aclk_khz;
+#if IS_ENABLED(CONFIG_EXYNOS_SBWC_LIBREQ)
+		dpp_config.lib_requested = regs->lib_requested;
+#endif
 
 #if IS_ENABLED(CONFIG_MCD_PANEL)
 		mcd_fill_hdr_info(i, &dpp_config, regs);
@@ -1976,6 +1989,9 @@ static int decon_set_dpp_config(struct decon_device *decon,
 #if defined(CONFIG_EXYNOS_SUPPORT_HWFC)
 		dpp_config.hwfc_enable = regs->hwfc_enable;
 		dpp_config.hwfc_idx = regs->hwfc_idx;
+#endif
+#if IS_ENABLED(CONFIG_EXYNOS_SBWC_LIBREQ)
+		dpp_config.lib_requested = regs->lib_requested;
 #endif
 		ret = v4l2_subdev_call(sd, core, ioctl, DPP_WIN_CONFIG,
 				&dpp_config);
@@ -2245,9 +2261,11 @@ static void decon_release_old_bufs(struct decon_device *decon,
 #else
 	if (decon->dt.out_type == DECON_OUT_WB) {
 #endif
-		for (j = 0; j < plane_cnt[decon->dt.wb_win]; ++j)
+		for (j = 0; j < plane_cnt[decon->dt.wb_win]; ++j) {
+			dma_buf_begin_cpu_access(regs->dma_buf_data[decon->dt.wb_win][j].dma_buf, DMA_FROM_DEVICE);
 			decon_free_dma_buf(decon,
 					&regs->dma_buf_data[decon->dt.wb_win][j]);
+		}
 	}
 
 	if (decon->dt.out_type == DECON_OUT_DSI) {
@@ -2497,9 +2515,14 @@ void decon_readback_wq(struct work_struct *work)
 					memset(buf_addr, 0x00, buf_size);
 				}
 			}
+			/* Must be called before accessing a dma_buf from the
+			 * CPU in the kernel context
+			 */
 
-			for (i = 0; i < data->num_buffers; ++i)
+			for (i = 0; i < data->num_buffers; ++i) {
+				dma_buf_begin_cpu_access(data->dma_buf_data[i].dma_buf, DMA_FROM_DEVICE);
 				decon_free_dma_buf(decon, &data->dma_buf_data[i]);
+			}
 			decon_signal_fence(decon, data->fence);
 			dma_fence_put(data->fence);
 		}
@@ -3099,7 +3122,8 @@ void decon_set_full_size_win(struct decon_device *decon,
  *	: otherwise returns -EPERM for HW-wise not permitted
  */
 int decon_check_global_limitation(struct decon_device *decon,
-		struct decon_win_config *config)
+		struct decon_win_config *config,
+		struct decon_reg_data *regs)
 {
 	int i, j;
 	int ret = 0;
@@ -3111,6 +3135,7 @@ int decon_check_global_limitation(struct decon_device *decon,
 	int win_num;
 #endif
 
+	regs->lib_requested = false;
 	for (i = 0, num_win_en = 0; i < MAX_DECON_WIN; i++) {
 		if (config[i].state == DECON_WIN_STATE_BUFFER ||
 				config[i].state == DECON_WIN_STATE_COLOR)
@@ -3152,6 +3177,7 @@ int decon_check_global_limitation(struct decon_device *decon,
 	}
 	for (i = 0, lib_req = 0; i < MAX_DECON_WIN; i++) {
 		if (config[i].state == DECON_WIN_STATE_BUFFER_LIBREQ) {
+			regs->lib_requested = true;
 			config[i].state = DECON_WIN_STATE_BUFFER;
 			num_win_en++;
 
@@ -3198,6 +3224,9 @@ int decon_check_global_limitation(struct decon_device *decon,
 	ret = decon_reg_check_global_limitation(decon, config);
 
 err:
+	if (ret)
+		regs->lib_requested = false;
+
 	return ret;
 }
 
@@ -3219,7 +3248,7 @@ static int decon_prepare_win_config(struct decon_device *decon,
 
 	decon_dbg("%s +\n", __func__);
 
-	ret = decon_check_global_limitation(decon, win_config);
+	ret = decon_check_global_limitation(decon, win_config, regs);
 	if (ret)
 		goto config_err;
 
@@ -3375,7 +3404,6 @@ static int decon_set_vrr(struct decon_device *decon,
 }
 #endif
 
-int boot_first_frame;
 static int decon_set_win_config(struct decon_device *decon,
 		struct decon_win_config_data *win_data)
 {
@@ -3387,9 +3415,6 @@ static int decon_set_win_config(struct decon_device *decon,
 #if defined(CONFIG_EXYNOS_SUPPORT_READBACK)
 	struct sync_file *sync_ofile;
 	int readback_fence = -1;
-#endif
-#if IS_ENABLED(CONFIG_MCD_PANEL)
-	struct dsim_device *dsim;
 #endif
 
 	decon_dbg("%s +\n", __func__);
@@ -3447,15 +3472,7 @@ static int decon_set_win_config(struct decon_device *decon,
 		win_data->retire_fence = decon_create_fence(decon, &sync_ifile);
 		if (win_data->retire_fence < 0)
 			goto err_prepare;
-#if IS_ENABLED(CONFIG_MCD_PANEL)
-		//send first frame ioctl to panel
-		if (unlikely(boot_first_frame == 0 && decon->dt.out_type == DECON_OUT_DSI)) {
-			++boot_first_frame;
-			decon_info("frame_cnt %d\n", decon->frame_cnt);
-			dsim = container_of(decon->out_sd[0], struct dsim_device, sd);
-			dsim_call_panel_ops(dsim, EXYNOS_PANEL_IOC_FIRST_FRAME, NULL);
-		}
-#endif
+
 #if defined(CONFIG_EXYNOS_SUPPORT_READBACK)
 		if (readback_req) {
 			regs->readback_entry.request = readback_req;
@@ -5170,6 +5187,15 @@ static void decon_parse_dt(struct decon_device *decon)
 			decon->bts.dfs_lv[i] = dfs_lv[i];
 			decon_info(KERN_CONT "%6d ", dfs_lv[i]);
 		}
+	}
+
+	if (decon->dt.out_type == DECON_OUT_WB) {
+		if (of_property_read_u32(dev->of_node, "sbwc_lib_boost",
+					&decon->bts.sbwc_lib_boost)) {
+			decon->bts.sbwc_lib_boost = 660UL;
+			decon_warn("WARN: sbwc library boost is not defined in DT.\n");
+		}
+		decon_info("sbwc library boost(%d)\n", decon->bts.sbwc_lib_boost);
 	}
 
 	of_property_read_u32(dev->of_node, "chip_ver", &decon->dt.chip_ver);

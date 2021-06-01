@@ -553,7 +553,7 @@ static ssize_t slsi_ts_fod_info_show(struct device *dev,
 	struct sec_cmd_data *sec = dev_get_drvdata(dev);
 	struct slsi_ts_data *ts = container_of(sec, struct slsi_ts_data, sec);
 
-	return sec_input_get_fod_info(ts->client, buf);
+	return sec_input_get_fod_info(&ts->client->dev, buf);
 }
 
 static ssize_t aod_active_area(struct device *dev,
@@ -1638,11 +1638,11 @@ static void get_checksum_data(void *device_data)
 
 	disable_irq(ts->client->irq);
 
-	ts->plat_data->power(ts->client, false);
+	ts->plat_data->power(&ts->client->dev, false);
 	ts->plat_data->power_state = SEC_INPUT_STATE_POWER_OFF;
 	sec_delay(50);
 
-	ts->plat_data->power(ts->client, true);
+	ts->plat_data->power(&ts->client->dev, true);
 	ts->plat_data->power_state = SEC_INPUT_STATE_POWER_ON;
 	sec_delay(70);
 
@@ -3875,6 +3875,10 @@ static void run_sram_test(void *device_data)
 
 	sec_delay(10);
 
+	rc = ts->slsi_ts_i2c_write(ts, SLSI_TS_CMD_SENSE_ON, NULL, 0);
+	if (rc < 0)
+		input_err(true, &ts->client->dev, "%s: fail to write Sense_on ret:%d\n", __func__, rc);
+
 	input_info(true, &ts->client->dev, "%s: result:%d\n", __func__, result);
 
 	enable_irq(ts->client->irq);
@@ -3884,8 +3888,10 @@ static void run_sram_test(void *device_data)
 	if (sec->cmd_all_factory_state == SEC_CMD_STATUS_RUNNING)
 		sec_cmd_set_cmd_result_all(sec, buff, strnlen(buff, sizeof(buff)), "SRAM");
 	return;
-
 err:
+	rc = ts->slsi_ts_i2c_write(ts, SLSI_TS_CMD_SENSE_ON, NULL, 0);
+	if (rc < 0)
+		input_err(true, &ts->client->dev, "%s: fail to write Sense_on ret:%d\n", __func__, rc);
 	enable_irq(ts->client->irq);
 err_power_state:
 	snprintf(buff, sizeof(buff), "NG");
@@ -3893,6 +3899,76 @@ err_power_state:
 	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
 	if (sec->cmd_all_factory_state == SEC_CMD_STATUS_RUNNING)
 		sec_cmd_set_cmd_result_all(sec, buff, strnlen(buff, sizeof(buff)), "SRAM");
+
+	input_info(true, &ts->client->dev, "%s: %s\n", __func__, buff);
+}
+
+static void run_differential_test(void *device_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
+	struct slsi_ts_data *ts = container_of(sec, struct slsi_ts_data, sec);
+	char buff[SEC_CMD_STR_LEN] = {0};
+	int ret;
+	u8 result;
+	u8 para = 0x01;
+
+	sec_cmd_set_default_result(sec);
+
+	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF)
+		goto err_power_state;
+
+	disable_irq(ts->client->irq);
+
+	ret = ts->slsi_ts_i2c_write(ts, SLSI_TS_CMD_CLEAR_EVENT_STACK, NULL, 0);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev, "%s: clear event stack failed\n", __func__);
+		goto err;
+	}
+
+	sec_delay(30);
+
+	ret = ts->slsi_ts_i2c_write(ts, SLSI_TS_CMD_DIFFERENTIAL_TEST, &para, 1);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev, "%s: diffrential test failed\n", __func__);
+		goto err;
+	}
+
+	sec_delay(500);
+
+	ret = ts->slsi_ts_i2c_read(ts, SLSI_TS_CMD_DIFFERENTIAL_TEST, &result, sizeof(result));
+	if (ret < 0) {
+		input_err(true, &ts->client->dev, "%s: SLSI_TS_CMD_DIFFERENTIAL_TEST failed\n", __func__);
+		goto err;
+	}
+
+	sec_delay(30);
+	para = TO_TOUCH_MODE;
+	ret = ts->slsi_ts_i2c_write(ts, SLSI_TS_CMD_SET_POWER_MODE, &para, 1);
+	if (ret < 0)
+		input_err(true, &ts->client->dev, "%s: set rawdata type failed!\n", __func__);
+
+	input_info(true, &ts->client->dev, "%s: result:%d\n", __func__, result);
+
+	enable_irq(ts->client->irq);
+	snprintf(buff, sizeof(buff), "%d", result);
+	sec->cmd_state = SEC_CMD_STATUS_OK;
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+	if (sec->cmd_all_factory_state == SEC_CMD_STATUS_RUNNING)
+		sec_cmd_set_cmd_result_all(sec, buff, strnlen(buff, sizeof(buff)), "DIFFERENTIAL_CHECK");
+	return;
+
+err:
+	para = TO_TOUCH_MODE;
+	ret = ts->slsi_ts_i2c_write(ts, SLSI_TS_CMD_SET_POWER_MODE, &para, 1);
+	if (ret < 0)
+		input_err(true, &ts->client->dev, "%s: set rawdata type failed!\n", __func__);
+	enable_irq(ts->client->irq);
+err_power_state:
+	snprintf(buff, sizeof(buff), "NG");
+	sec->cmd_state = SEC_CMD_STATUS_FAIL;
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+	if (sec->cmd_all_factory_state == SEC_CMD_STATUS_RUNNING)
+		sec_cmd_set_cmd_result_all(sec, buff, strnlen(buff, sizeof(buff)), "DIFFERENTIAL_CHECK");
 
 	input_info(true, &ts->client->dev, "%s: %s\n", __func__, buff);
 }
@@ -3936,6 +4012,7 @@ static void factory_cmd_result_all(void *device_data)
 	get_cmoffset_set_proximity(sec);
 	get_idle_dvdd(sec);
 	run_sram_test(sec);
+	run_differential_test(sec);
 
 	sec->cmd_all_factory_state = SEC_CMD_STATUS_OK;
 
@@ -4633,7 +4710,7 @@ static void set_wirelesscharger_mode(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	ret = sec_input_check_wirelesscharger_mode(ts->client, sec->cmd_param[0], sec->cmd_param[1]);
+	ret = sec_input_check_wirelesscharger_mode(&ts->client->dev, sec->cmd_param[0], sec->cmd_param[1]);
 	if (ret == SEC_ERROR)
 		goto NG;
 	else if (ret == SEC_SKIP)
@@ -4673,7 +4750,7 @@ static void set_temperature(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	ret = sec_input_set_temperature(ts->client, SEC_INPUT_SET_TEMPERATURE_FORCE);
+	ret = sec_input_set_temperature(&ts->client->dev, SEC_INPUT_SET_TEMPERATURE_FORCE);
 	if (ret < 0)
 		goto NG;
 
@@ -4880,7 +4957,7 @@ static void set_fod_rect(void *device_data)
 		return;
 	}
 
-	if (!sec_input_set_fod_rect(ts->client, sec->cmd_param))
+	if (!sec_input_set_fod_rect(&ts->client->dev, sec->cmd_param))
 		goto NG;
 
 	if (ts->plat_data->power_state == SEC_INPUT_STATE_POWER_OFF) {
@@ -5127,7 +5204,7 @@ static void set_grip_data(void *device_data)
 		}
 
 		mode = mode | G_SET_EDGE_HANDLER;
-		set_grip_data_to_ic(ts->client, mode);
+		slsi_set_grip_data_to_ic(&ts->client->dev, mode);
 	} else if (sec->cmd_param[0] == 1) {	// normal mode
 		if (ts->plat_data->grip_data.edge_range != sec->cmd_param[1])
 			mode = mode | G_SET_EDGE_ZONE;
@@ -5144,7 +5221,7 @@ static void set_grip_data(void *device_data)
 			ts->plat_data->grip_data.landscape_mode = 0;
 			mode = mode | G_CLR_LANDSCAPE_MODE;
 		}
-		set_grip_data_to_ic(ts->client, mode);
+		slsi_set_grip_data_to_ic(&ts->client->dev, mode);
 	} else if (sec->cmd_param[0] == 2) {	// landscape mode
 		if (sec->cmd_param[1] == 0) {	// normal mode
 			ts->plat_data->grip_data.landscape_mode = 0;
@@ -5163,7 +5240,7 @@ static void set_grip_data(void *device_data)
 					__func__, sec->cmd_param[1], __LINE__);
 			goto err_grip_data;
 		}
-		set_grip_data_to_ic(ts->client, mode);
+		slsi_set_grip_data_to_ic(&ts->client->dev, mode);
 	} else {
 		input_err(true, &ts->client->dev, "%s: cmd0 is abnormal, %d", __func__, sec->cmd_param[0]);
 		goto err_grip_data;
@@ -5546,6 +5623,7 @@ static struct sec_cmd sec_cmds[] = {
 	{SEC_CMD("get_wet_mode", get_wet_mode),},
 	{SEC_CMD("get_idle_dvdd", get_idle_dvdd),},
 	{SEC_CMD("run_sram_test", run_sram_test),},
+	{SEC_CMD("run_differential_test", run_differential_test),},
 	{SEC_CMD("get_cmoffset_set_proximity", get_cmoffset_set_proximity),},
 	{SEC_CMD("run_cmoffset_set_proximity_read_all", run_cmoffset_set_proximity_read_all),},
 	{SEC_CMD("get_x_num", get_x_num),},
@@ -5681,6 +5759,8 @@ exit:
 void slsi_ts_fn_remove(struct slsi_ts_data *ts)
 {
 	input_err(true, &ts->client->dev, "%s\n", __func__);
+
+	sec_input_sysfs_remove(&ts->plat_data->input_dev->dev.kobj);
 
 	sysfs_remove_link(&ts->sec.fac_dev->kobj, "input");
 

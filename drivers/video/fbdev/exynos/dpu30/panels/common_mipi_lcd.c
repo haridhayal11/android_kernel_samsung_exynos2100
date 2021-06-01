@@ -1084,19 +1084,6 @@ static int common_panel_set_display_mode(struct exynos_panel_device *panel, void
 }
 #endif
 
-static int common_panel_first_frame(struct exynos_panel_device *panel, void *data)
-{
-	int ret;
-
-	ret = panel_drv_ioctl(panel, PANEL_IOC_FIRST_FRAME, NULL);
-	if (ret < 0) {
-		DPU_ERR_PANEL("%s: failed to set PANEL_IOC_FIRST_FRAME\n", __func__);
-		return ret;
-	}
-
-	return 0;
-}
-
 struct exynos_panel_ops common_panel_ops = {
 	.init		= common_panel_init,
 	.probe		= common_panel_probe,
@@ -1123,5 +1110,4 @@ struct exynos_panel_ops common_panel_ops = {
 	.get_display_mode = common_panel_get_display_mode,
 	.set_display_mode = common_panel_set_display_mode,
 #endif
-	.first_frame = common_panel_first_frame,
 };

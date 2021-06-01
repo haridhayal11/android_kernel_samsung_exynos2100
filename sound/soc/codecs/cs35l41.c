@@ -1894,8 +1894,10 @@ static int cs35l41_irq_gpio_config(struct cs35l41_private *cs35l41)
 
 	}
 
-	if (irq_gpio_cfg2->irq_src_sel ==
-			(CS35L41_GPIO_CTRL_ACTV_LO | CS35L41_VALID_PDATA))
+	if ((irq_gpio_cfg2->irq_src_sel ==
+			(CS35L41_GPIO_CTRL_ACTV_LO | CS35L41_VALID_PDATA)) ||
+		(irq_gpio_cfg2->irq_src_sel ==
+			(CS35L41_GPIO_CTRL_OPEN_INT | CS35L41_VALID_PDATA)))
 		irq_pol = IRQF_TRIGGER_LOW;
 	else if (irq_gpio_cfg2->irq_src_sel ==
 			(CS35L41_GPIO_CTRL_ACTV_HI | CS35L41_VALID_PDATA))

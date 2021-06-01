@@ -42,6 +42,7 @@ struct hcd_hw_info *g_hwinfo;
 EXPORT_SYMBOL_GPL(g_hwinfo);
 int xhci_free_hw_info(struct usb_hcd *hcd, struct usb_device *udev);
 #endif
+extern void __iomem *usb3_portsc;
 
 /* Some 0.95 hardware can't handle the chain bit on a Link TRB being cleared */
 static int link_quirk;
@@ -154,7 +155,7 @@ void xhci_quiesce(struct xhci_hcd *xhci)
  */
 int xhci_halt(struct xhci_hcd *xhci)
 {
-	int ret;
+	int ret, i, retry = 5;
 	xhci_dbg_trace(xhci, trace_xhci_dbg_init, "// Halt the HC");
 	xhci_quiesce(xhci);
 
@@ -162,8 +163,23 @@ int xhci_halt(struct xhci_hcd *xhci)
 			STS_HALT, STS_HALT, XHCI_MAX_HALT_USEC);
 	if (ret) {
 		xhci_warn(xhci, "Host halt failed, %d\n", ret);
+		xhci_info(xhci, "Resetting HCD\n");
+		/* Reset the internal HC memory state and registers. */
+		for (i = 0; i < retry; i++) {
+			ret = xhci_reset(xhci);
+			if (!ret) {
+				xhci_info(xhci, "Reset complete\n");
+				ret = xhci_handshake(&xhci->op_regs->status,
+						STS_HALT, STS_HALT, XHCI_MAX_HALT_USEC);
+				if (!ret)
+					goto out;
+			}
+		}
+		xhci_warn(xhci, "Host halt retry failed, %d\n", ret);
+		usb3_portsc = NULL;
 		return ret;
 	}
+out:
 	xhci->xhc_state |= XHCI_STATE_HALTED;
 	xhci->cmd_ring_state = CMD_RING_STATE_STOPPED;
 	return ret;

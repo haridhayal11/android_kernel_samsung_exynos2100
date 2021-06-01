@@ -383,8 +383,8 @@ enum sysreg_lme_reg_field {
 
 /* DDK DMA: 1.418MB */
 /* 247840 bytes per 1 3AA */
-/* Max 6 instances are supported */
-#define IS_TAAISP_SIZE		(0x0016B0C0)
+/* Max 10 instances are supported */
+#define IS_TAAISP_SIZE		(0x00200000)
 
 /* TNR DMA: 158.38 MB*/
 /* Image: ((Max width * Max height * 14 / 8) + 16) * 2 * 3 */

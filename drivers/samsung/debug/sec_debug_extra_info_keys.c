@@ -25,7 +25,7 @@ static char key64[][MAX_ITEM_KEY_LEN] = {
 static char key256[][MAX_ITEM_KEY_LEN] = {
 	"KLG", "BUS", "PANIC", "PC", "LR",
 	"BUG", "ESR", "SMU", "FREQ", "ODR",
-	"AUD", "UNFZ", "UP", "DOWN",
+	"AUD", "UNFZ", "UP", "DOWN", "WDGC"
 };
 
 static char key1024[][MAX_ITEM_KEY_LEN] = {
@@ -40,7 +40,7 @@ static char akeys[][MAX_ITEM_KEY_LEN] = {
 	"BUG", "PC", "LR", "STACK", "RR",
 	"RSTCNT", "PINFO", "SMU", "BUS", "DPM",
 	"ETC", "ESR", "MER", "PCB", "SMD",
-	"CHI", "LPI", "CDI", "KLG", "PANIC",
+	"CHI", "LPI", "CDI", "WDGC", "KLG", "PANIC",
 	"LEV", "DCN", "WAK", "BAT", "SMP",
 };
 

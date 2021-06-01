@@ -84,7 +84,7 @@ static int __mfc_rm_get_core_num_by_load(struct mfc_dev *dev, struct mfc_ctx *ct
 
 	curr_load = ctx->weighted_mb * 100 / core->core_pdata->max_mb;
 	mfc_debug(2, "[RMLB] load%s fixed (curr mb: %ld, load: %d%%)\n",
-			ctx->ts_is_full ? " " : " not", ctx->weighted_mb, curr_load);
+			ctx->src_ts.ts_is_full ? " " : " not", ctx->weighted_mb, curr_load);
 
 	/* 1) Default core has not yet been balanced */
 	if (total_load[default_core] < core_balance) {
@@ -214,7 +214,11 @@ static int __mfc_rm_move_core_running(struct mfc_ctx *ctx, int to_core_num, int 
 		return -EAGAIN;
 	}
 
-	mfc_get_corelock_migrate(ctx);
+	ret = mfc_get_corelock_migrate(ctx);
+	if (ret < 0) {
+		mfc_ctx_err("[RMLB] failed to get corelock\n");
+		return -EAGAIN;
+	}
 
 	/* 1. Change state on from_core */
 	ret = mfc_core_get_hwlock_dev(from_core);
@@ -431,6 +435,7 @@ static struct mfc_core *__mfc_rm_switch_to_single_mode(struct mfc_ctx *ctx, int 
 	mfc_core_qos_on(master, ctx);
 
 	mfc_debug(2, "[RM] switch single mode run with core%d\n", master->id);
+	MFC_TRACE_RM("[c:%d] switch single with core%d\n", ctx->num, master->id);
 
 	return master;
 }
@@ -922,6 +927,7 @@ static int __mfc_rm_switch_to_multi_mode(struct mfc_ctx *ctx)
 	/* Change done, it will be work with multi core mode */
 	mfc_change_op_mode(ctx, ctx->stream_op_mode);
 	mfc_debug(2, "[RM][2CORE] reset multi core op_mode: %d\n", ctx->op_mode);
+	MFC_TRACE_RM("[c:%d] reset multi core op_mode: %d\n", ctx->num, ctx->op_mode);
 
 	mutex_unlock(&ctx->op_mode_mutex);
 
@@ -1072,8 +1078,14 @@ void mfc_rm_load_balancing(struct mfc_ctx *ctx, int load_add)
 	/* check the MFC IOVA and control lazy unmap */
 	mfc_check_iova(dev);
 
-	if (!ctx->ts_is_full && load_add == MFC_RM_LOAD_ADD) {
+	if (!ctx->src_ts.ts_is_full && load_add == MFC_RM_LOAD_ADD) {
 		mfc_debug(2, "[RMLB] instance load is not yet fixed\n");
+		spin_unlock_irqrestore(&dev->ctx_list_lock, flags);
+		return;
+	}
+
+	if (ctx->boosting_time && load_add == MFC_RM_LOAD_ADD) {
+		mfc_debug(2, "[RMLB] instance is boosting\n");
 		spin_unlock_irqrestore(&dev->ctx_list_lock, flags);
 		return;
 	}
@@ -1234,6 +1246,8 @@ int mfc_rm_instance_init(struct mfc_dev *dev, struct mfc_ctx *ctx)
 	}
 
 	mfc_debug(2, "[RM] init instance core-%d\n",
+			ctx->op_core_num[MFC_CORE_MASTER]);
+	MFC_TRACE_RM("[c:%d] init instance core-%d\n", ctx->num,
 			ctx->op_core_num[MFC_CORE_MASTER]);
 	ret = core->core_ops->instance_init(core, ctx);
 	if (ret) {
@@ -1424,6 +1438,8 @@ static void __mfc_rm_inst_dec_src_stop(struct mfc_dev *dev, struct mfc_ctx *ctx)
 		} else {
 			mfc_debug(2, "[RM][2CORE] switch single for CSD parsing op_mode: %d\n",
 					ctx->op_mode);
+			MFC_TRACE_RM("[c:%d] switch single for CSD op_mode: %d\n",
+					ctx->num, ctx->op_mode);
 		}
 		core->core_ops->instance_csd_parsing(core, ctx);
 

@@ -149,6 +149,18 @@ __visible_for_testing char api_result_mparam[KQ_NAD_API_MPARAM_MAX_LEN];
 module_param_string(api_result, api_result_mparam, sizeof(api_result_mparam), 0440);
 #endif
 
+static ssize_t kq_nad_show_attrs(struct device *dev,
+	struct device_attribute *attr, char *buf);
+static ssize_t kq_nad_store_attrs(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count);
+
+#define KQ_NAD_ATTR(_name)	\
+{	\
+	.attr = { .name = #_name, .mode = 0664 },	\
+	.show = kq_nad_show_attrs,	\
+	.store = kq_nad_store_attrs,	\
+}
+
 static struct device_attribute kq_nad_attrs[] = {
 	KQ_NAD_ATTR(nad_stat),
 	KQ_NAD_ATTR(nad_erase),
@@ -178,6 +190,13 @@ __visible_for_testing bool kq_nad_state_is_nad_fail(void)
 	return false;
 }
 
+static bool kq_nad_state_is_dram_executed(void)
+{
+	if ((kq_sec_nad_env.status >> KQ_NAD_PHASE_DRAM) & 0x1)
+		return true;
+	return false;
+}
+
 __visible_for_testing bool kq_nad_state_is_acat_executed(void)
 {
 	if ((kq_sec_nad_env.status >> KQ_NAD_PHASE_ACAT_FIRST) & 0x1 ||
@@ -196,6 +215,42 @@ __visible_for_testing bool kq_nad_state_is_acat_info_exist(void)
 		return true;
 	return false;
 }
+
+#if IS_ENABLED(CONFIG_SEC_KQ_NAD_55)
+static bool kq_nad_state_is_nad_need_rework(void)
+{
+	if (kq_sec_nad_env.rework > 0)
+		return true;
+	return false;
+}
+
+static bool kq_nad_state_is_nad_sudden_power(void)
+{
+	if ((kq_sec_nad_env.smd.inform1 == 0)
+		&& (kq_sec_nad_env.smd_second.inform1 == 0))
+		return true;
+	return false;
+}
+
+static bool kq_nad_state_is_nad_first_fail_second_pass(void)
+{
+	if ((kq_sec_nad_env.smd.result == KQ_NAD_RESULT_FAIL)
+		&& (kq_sec_nad_env.smd_second.result == KQ_NAD_RESULT_PASS))
+		return true;
+	return false;
+}
+
+static bool kq_nad_state_is_rtc_timeout(void)
+{
+	if (((kq_sec_nad_env.smd.inform1 >> KQ_NAD_INFORM1_STATE) & 0x7) == KQ_NAD_RTC_TIMEOUT) {
+		if ((kq_sec_nad_env.smd.inform3 & 0xFF) <= KQ_NAD_REWORK_CHECK_TN)
+			return true;
+		else
+			return false;
+	}
+	return false;
+}
+#endif
 
 #if IS_ENABLED(CONFIG_SEC_KQ_NAD_X)
 __visible_for_testing bool kq_nad_state_is_nadx_pass(void)
@@ -223,7 +278,7 @@ static bool kq_nad_state_is_main_nad_fail(void)
 	return false;
 }
 
-__visible_for_testing bool kq_nad_state_is_nad_first_fail_second_pass(void)
+__visible_for_testing bool kq_nad_state_is_nadx_first_fail_second_pass(void)
 {
 	if ((kq_sec_nad_env.nadx.result == KQ_NAD_RESULT_FAIL)
 		&& (kq_sec_nad_env.nadx_second.result == KQ_NAD_RESULT_PASS))
@@ -270,11 +325,15 @@ __visible_for_testing bool kq_nad_result_type_is_constant(int type)
 		type == KQ_NAD_RESULT_INFO_SNAD_INFORM2 ||
 		type == KQ_NAD_RESULT_INFO_SNAD_INFORM3 ||
 		type == KQ_NAD_RESULT_INFO_IT ||
-		type == KQ_NAD_RESULT_INFO_MT
+		type == KQ_NAD_RESULT_INFO_MT ||
+		type == KQ_NAD_RESULT_INFO_TN
 #if IS_ENABLED(CONFIG_SEC_KQ_NAD_VDD_CAL)
 		|| type == KQ_NAD_RESULT_INFO_VDD_CAL0
 		|| type == KQ_NAD_RESULT_INFO_VDD_CAL1
 		|| type == KQ_NAD_RESULT_INFO_VDD_CAL2
+#endif
+#if IS_ENABLED(CONFIG_SEC_KQ_NAD_55)
+		|| type == KQ_NAD_RESULT_INFO_REWORK
 #endif
 		)
 		return true;
@@ -346,6 +405,13 @@ static int kq_nad_add_constant_type_data(char *buf, int maxlen,
 	struct kq_nad_mparam_inform *nminfo = NULL;
 	int len = 0;
 
+#if IS_ENABLED(CONFIG_SEC_KQ_NAD_VDD_CAL) && IS_ENABLED(CONFIG_SEC_KQ_NAD_55)
+	if (!(kq_nad_constant_type->type == KQ_NAD_RESULT_INFO_VDD_CAL0 ||
+		kq_nad_constant_type->type == KQ_NAD_RESULT_INFO_VDD_CAL1 ||
+		kq_nad_constant_type->type == KQ_NAD_RESULT_INFO_VDD_CAL2 ||
+		kq_nad_constant_type->type == KQ_NAD_RESULT_INFO_REWORK))
+		nminfo = kq_nad_get_inform_ptr(kq_nad_constant_type->phase);
+#else
 #if IS_ENABLED(CONFIG_SEC_KQ_NAD_VDD_CAL)
 	if (!(kq_nad_constant_type->type == KQ_NAD_RESULT_INFO_VDD_CAL0 ||
 		kq_nad_constant_type->type == KQ_NAD_RESULT_INFO_VDD_CAL1 ||
@@ -353,6 +419,7 @@ static int kq_nad_add_constant_type_data(char *buf, int maxlen,
 		nminfo = kq_nad_get_inform_ptr(kq_nad_constant_type->phase);
 #else
 	nminfo = kq_nad_get_inform_ptr(kq_nad_constant_type->phase);
+#endif
 #endif
 
 	if (kq_nad_constant_type->type == KQ_NAD_RESULT_INFO_NAD_INFORM1)
@@ -379,6 +446,14 @@ static int kq_nad_add_constant_type_data(char *buf, int maxlen,
 	else if (kq_nad_constant_type->type == KQ_NAD_RESULT_INFO_MT)
 		len = snprintf(buf, maxlen, kq_nad_constant_type->format,
 			(nminfo->inform2 >> 8) & 0xFF);
+	else if (kq_nad_constant_type->type == KQ_NAD_RESULT_INFO_TN)
+		len = snprintf(buf, maxlen, kq_nad_constant_type->format,
+			nminfo->inform3 & 0xFF);
+#if IS_ENABLED(CONFIG_SEC_KQ_NAD_55)
+	else if (kq_nad_constant_type->type == KQ_NAD_RESULT_INFO_REWORK)
+		len = snprintf(buf, maxlen, kq_nad_constant_type->format,
+			kq_sec_nad_env.rework);
+#endif
 #if IS_ENABLED(CONFIG_SEC_KQ_NAD_VDD_CAL)
 	else if (kq_nad_constant_type->type == KQ_NAD_RESULT_INFO_VDD_CAL0)
 		len = snprintf(buf, maxlen, kq_nad_constant_type->format,
@@ -626,6 +701,27 @@ __visible_for_testing int kq_nad_add_result_acat_fail(char *buf, int maxlen)
 	return len;
 }
 
+#if IS_ENABLED(CONFIG_SEC_KQ_NAD_55)
+static int kq_nad_add_result_nad_rework(char *buf, int maxlen)
+{
+	int len = 0;
+	int i;
+	int maxloop = sizeof(kq_nad_result_nad_rework)/sizeof(struct kq_nad_result);
+
+	for (i = 0; i < maxloop; i++) {
+		if (kq_nad_result_type_is_version(kq_nad_result_nad_rework[i].type))
+			len += kq_nad_add_version_type_data(buf + len, maxlen - len, &kq_nad_result_nad_rework[i]);
+		else if (kq_nad_result_type_is_constant(kq_nad_result_nad_rework[i].type))
+			len += kq_nad_add_constant_type_data(buf + len, maxlen - len, &kq_nad_result_nad_rework[i]);
+
+		if (i != (maxloop - 1))
+			len += kq_nad_add_result_delimiter(buf + len, maxlen - len);
+	}
+
+	return len;
+}
+#endif
+
 #if IS_ENABLED(CONFIG_SEC_KQ_NAD_X)
 __visible_for_testing int kq_nad_add_result_nadx_pass(char *buf, int maxlen)
 {
@@ -680,6 +776,20 @@ __visible_for_testing int kq_nad_add_result_nadx_fail(char *buf, int maxlen)
 }
 #endif
 
+#if IS_ENABLED(CONFIG_SEC_KQ_NAD_55)
+static void kq_nad_check_rework(void)
+{
+	if (kq_nad_state_is_nad_sudden_power())
+		kq_sec_nad_env.rework = KQ_NAD_REWORK_SUDDEN_POWER_OFF;
+	else if (kq_nad_state_is_nad_first_fail_second_pass())
+		kq_sec_nad_env.rework = KQ_NAD_REWORK_FIRST_FAIL;
+	else if (kq_nad_state_is_rtc_timeout())
+		kq_sec_nad_env.rework = KQ_NAD_REWORK_RTC_TIME_OVER;
+	else
+		kq_sec_nad_env.rework = 0;
+}
+#endif
+
 static ssize_t kq_nad_show_stat_attr(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -687,6 +797,10 @@ static ssize_t kq_nad_show_stat_attr(struct device *dev,
 
 	if (kq_nad_state_is_nad_fail())
 		len = kq_nad_add_result_nad_fail(buf, PAGE_SIZE);
+#if IS_ENABLED(CONFIG_SEC_KQ_NAD_55)
+	else if (kq_nad_state_is_nad_need_rework())
+		len = kq_nad_add_result_nad_rework(buf, PAGE_SIZE);
+#endif
 	else
 		len = kq_nad_add_result_nad_pass(buf, PAGE_SIZE);
 
@@ -696,11 +810,11 @@ static ssize_t kq_nad_show_stat_attr(struct device *dev,
 static ssize_t kq_nad_show_erase_attr(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
-	u32 inform4_data;
+	u32 inform5_data;
 
-	inform4_data = readl(kq_sec_nad_env.inform4);
+	inform5_data = readl(kq_sec_nad_env.inform5);
 
-	if (inform4_data == KQ_NAD_MAGIC_ERASE)
+	if (inform5_data == KQ_NAD_MAGIC_ERASE)
 		return sprintf(buf, "OK\n");
 	else
 		return sprintf(buf, "NG\n");
@@ -726,7 +840,10 @@ static ssize_t kq_nad_show_acat_attr(struct device *dev,
 static ssize_t kq_nad_show_dram_attr(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
-	return sprintf(buf, "OK_DRAM\n");
+	if (kq_nad_state_is_dram_executed())
+		return sprintf(buf, "OK_DRAM\n");
+	else
+		return sprintf(buf, "NO_DRAMTEST\n");
 }
 
 static ssize_t kq_nad_show_all_attr(struct device *dev,
@@ -790,14 +907,14 @@ static ssize_t kq_nad_show_api_attr(struct device *dev,
 		strncpy(tmp_api_result, api_result_mparam + first_delimiter_idx + 1, len);
 
 		cur_idx += snprintf(buf, 4, (ret == KQ_NAD_API_SUCCESS) ? "OK_" : "NG_");
-		cur_idx += snprintf(buf + cur_idx, strlen(tmp_api_result) + 1, tmp_api_result);
+		cur_idx += snprintf(buf + cur_idx, strlen(tmp_api_result) + 1, "%s", tmp_api_result);
 
 		if (ret == KQ_NAD_API_FAIL) {
 			for (i = second_delimiter_idx + 1, pin_idx = 0; i < str_len; i++, pin_idx++) {
 				if (api_result_mparam[i] == '1') {
 					cur_idx += snprintf(buf + cur_idx, 2, ",");
 					cur_idx += snprintf(buf + cur_idx, strlen(kq_nad_api_pin_list[pin_idx].name) + 1,
-							kq_nad_api_pin_list[pin_idx].name);
+						"%s", kq_nad_api_pin_list[pin_idx].name);
 				}
 			}
 		}
@@ -824,7 +941,7 @@ static ssize_t kq_nad_show_fac_result_attr(struct device *dev,
 		return sprintf(buf, "%s\n", "NG,MAIN_NAD");
 	else if (kq_nad_state_is_nadx_fail())
 		return kq_nad_add_result_nadx_fail(buf, PAGE_SIZE);
-	else if (kq_nad_state_is_nad_first_fail_second_pass())
+	else if (kq_nad_state_is_nadx_first_fail_second_pass())
 		return kq_nad_add_result_nadx_pass(buf, PAGE_SIZE);
 	else
 		return sprintf(buf, "%s\n", "NONE");
@@ -913,7 +1030,7 @@ static ssize_t kq_nad_store_erase_attr(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
 {
 	if (!strncmp(buf, "erase", 5))
-		writel(KQ_NAD_MAGIC_ERASE, kq_sec_nad_env.inform4);
+		writel(KQ_NAD_MAGIC_ERASE, kq_sec_nad_env.inform5);
 	return count;
 }
 
@@ -975,7 +1092,10 @@ static ssize_t kq_nad_store_acat_attr(struct device *dev,
 				}
 			writel(inform4_data, kq_sec_nad_env.inform4);
 		}
-
+#if IS_ENABLED(CONFIG_SEC_KQ_NAD_55)
+		else if (loop_count == 0)
+			writel(KQ_NAD_MAGIC_ERASE_REWORK, kq_sec_nad_env.inform4);
+#endif
 		if (loop_count == KQ_NAD_LOOP_COUNT_NADX) {
 			pr_info("%s NADX test command.\n", __func__);
 			writel(KQ_NAD_MAGIC_NADX_TEST, kq_sec_nad_env.inform4);
@@ -1287,21 +1407,21 @@ static void __init kq_nad_correlation_mparam_to_driver_var(void)
 	pr_info("%s copy data\n", __func__);
 
 	sprintf(kq_sec_nad_env.correlation[KQ_NAD_MPARAM_CORRELATION_LOGIC_BLOCK_CL0].info,
-		correlation_info_mparam_cl0);
+		"%s", correlation_info_mparam_cl0);
 	sprintf(kq_sec_nad_env.correlation[KQ_NAD_MPARAM_CORRELATION_LOGIC_BLOCK_CL1].info,
-		correlation_info_mparam_cl1);
+		"%s", correlation_info_mparam_cl1);
 	sprintf(kq_sec_nad_env.correlation[KQ_NAD_MPARAM_CORRELATION_LOGIC_BLOCK_CL2].info,
-		correlation_info_mparam_cl2);
+		"%s", correlation_info_mparam_cl2);
 	sprintf(kq_sec_nad_env.correlation[KQ_NAD_MPARAM_CORRELATION_LOGIC_BLOCK_MIF].info,
-		correlation_info_mparam_mif);
+		"%s", correlation_info_mparam_mif);
 	sprintf(kq_sec_nad_env.correlation[KQ_NAD_MPARAM_CORRELATION_LOGIC_BLOCK_DSU].info,
-		correlation_info_mparam_dsu);
+		"%s", correlation_info_mparam_dsu);
 	sprintf(kq_sec_nad_env.correlation[KQ_NAD_MPARAM_CORRELATION_LOGIC_BLOCK_CP].info,
-		correlation_info_mparam_cp);
+		"%s", correlation_info_mparam_cp);
 	sprintf(kq_sec_nad_env.correlation[KQ_NAD_MPARAM_CORRELATION_LOGIC_BLOCK_G3D].info,
-		correlation_info_mparam_g3d);
+		"%s", correlation_info_mparam_g3d);
 	sprintf(kq_sec_nad_env.correlation[KQ_NAD_MPARAM_CORRELATION_LOGIC_BLOCK_SCI].info,
-		correlation_info_mparam_sci);
+		"%s", correlation_info_mparam_sci);
 }
 
 static void __init kq_nad_set_correlation_data(void)
@@ -1321,7 +1441,8 @@ __visible_for_testing void __init kq_nad_data_from_cmdline(void)
 
 	kq_sec_nad_env.status = nad_status;
 	kq_sec_nad_env.inform4 = ioremap(KQ_NAD_INFORM4_MAGIC, 0x10);
-
+	kq_sec_nad_env.inform5 = ioremap(KQ_NAD_INFORM5_MAGIC, 0x10);
+	
 	for (idx = 0; idx < KQ_NAD_PHASE_END; idx++) {
 		if ((kq_sec_nad_env.status >> idx) & 0x1)
 			kq_nad_set_data(idx);
@@ -1333,6 +1454,10 @@ __visible_for_testing void __init kq_nad_data_from_cmdline(void)
 
 #if IS_ENABLED(CONFIG_SEC_KQ_CORRELATION_RESULT)
 	kq_nad_set_correlation_data();
+#endif
+
+#if IS_ENABLED(CONFIG_SEC_KQ_NAD_55)
+	kq_nad_check_rework();
 #endif
 }
 
@@ -1382,6 +1507,7 @@ static void __exit kq_nad_exit(void)
 	pr_info("%s do nothing\n", __func__);
 
 	iounmap(kq_sec_nad_env.inform4);
+	iounmap(kq_sec_nad_env.inform5);
 }
 
 module_init(kq_nad_init);

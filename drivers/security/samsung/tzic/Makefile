@@ -16,6 +16,7 @@ endif
 tzic_driver-y += tzic64.o
 
 EXTRA_CFLAGS += -I$(src)
+
 tzic_driver-$(CONFIG_TZIC_USE_QSEECOM) += tzic_qsee.o
 tzic_driver-$(CONFIG_TZIC_USE_TZDEV) += tzic_tzdev.o
 ifneq ($(CONFIG_TZIC_EXYNOS7885),)
@@ -23,11 +24,13 @@ ifneq ($(CONFIG_TZIC_EXYNOS7885),)
 else
   ccflags-$(CONFIG_TZIC_USE_TZDEV) += -I$(srctree)/drivers/misc/tzdev
 endif
+
 ifeq ($(MTK_PLATFORM),mt6768)
-  tzic_driver-y += tzic_mtk_atf.o
+  tzic_driver-$(CONFIG_TZIC_USE_TRUSTONIC) += tzic_mtk_atf.o
 else
   tzic_driver-$(CONFIG_TZIC_USE_TRUSTONIC) += tzic_kinibi.o
-  tzic_driver-$(CONFIG_TZIC_DEFAULT) += tzic_default.o
 endif
+
+tzic_driver-$(CONFIG_TZIC_DEFAULT) += tzic_default.o
 
 ccflags-y += -Wformat

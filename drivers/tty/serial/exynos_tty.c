@@ -1216,6 +1216,11 @@ out:
 		uart_copy_to_local_buf(0, &ourport->uart_local_buf, trace_buf, trace_cnt);
 
 	spin_unlock_irqrestore(&port->lock, flags);
+
+	if ((ourport->port.line == BLUETOOTH_UART_PORT_LINE) &&
+			signal_pending(current))
+		clear_thread_flag(TIF_SIGPENDING);
+
 	return IRQ_HANDLED;
 }
 

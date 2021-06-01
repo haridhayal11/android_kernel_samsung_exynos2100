@@ -24,6 +24,30 @@ config SENSORS_FPRINT_SECURE
 	  If this feature enabled, spi communication is controlled by Trusted Application.
 	  Then it should be enabled in the user binary.
 
+config SENSORS_FINGERPRINT_MODULE
+	bool "module build"
+	default n
+	help
+	  You choose yes if you are using module build on fingerprint.
+
+config SENSORS_FINGERPRINT_LSI
+	tristate "System LSI AP support"
+	default n
+	help
+	  If you say yes here you get support for System LSI AP.
+
+config SENSORS_FINGERPRINT_QCOM
+	tristate "Qualcomm AP support"
+	default n
+	help
+	  If you say yes here you get support for Qualcomm AP.
+
+config SENSORS_FINGERPRINT_MTK
+	tristate "Mediatek AP support"
+	default n
+	help
+	  If you say yes here you get support for Mediatek AP.
+
 config SENSORS_QBT2000
 	tristate "QBT2000 fingerprint sensor support"
 	default n
@@ -32,7 +56,7 @@ config SENSORS_QBT2000
 	  fingerprint sensor QBT2000.
 
 config SENSORS_ET5XX
-	tristate "ET5XX fingerprint sensor supprot"
+	tristate "ET5XX fingerprint sensor support"
 	default n
 	help
 	  Fingerprint sensor driver.

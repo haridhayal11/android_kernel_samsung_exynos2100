@@ -554,9 +554,14 @@ void sec_vote_refresh(struct sec_vote *vote)
 	if (vote->res == -EINVAL && vote->id == -EINVAL) {
 		pr_info("%s: skip. not used before\n", __func__);
 	} else {
-		pr_info("%s: refresh (%s, %d)\n", vote->name,
-			(vote->id >= 0)?vote->voter_name[vote->id]: none_str, vote->res);
-		vote->cb(vote->data, vote->res);
+		if (vote->force_set) {
+			pr_info("%s: refresh (%s, %d)\n", vote->name, force_str, vote->force_val);
+			vote->cb(vote->data, vote->force_val);
+		} else {
+			pr_info("%s: refresh (%s, %d)\n", vote->name,
+					(vote->id >= 0) ? vote->voter_name[vote->id] : none_str, vote->res);
+			vote->cb(vote->data, vote->res);
+		}
 	}
 	mutex_unlock(&vote->lock);
 }

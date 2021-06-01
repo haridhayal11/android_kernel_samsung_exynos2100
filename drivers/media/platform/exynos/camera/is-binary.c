@@ -79,6 +79,7 @@ static const struct is_bin_ver_info bin_ver_info[] = {
 };
 
 #ifdef USE_KERNEL_VFS_READ_WRITE
+MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
 static noinline_for_stack long _get_file_size(struct file *file)
 {
 	struct kstat st;

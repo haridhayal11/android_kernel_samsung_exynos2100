@@ -117,7 +117,7 @@ static ssize_t SEC_UFS_##name##_show(struct device *dev, struct device_attribute
 {													\
 	return sprintf(buf, fmt, args);									\
 }													\
-static DEVICE_ATTR(name, (S_IRUGO|S_IWUSR|S_IWGRP), SEC_UFS_##name##_show, NULL)
+static DEVICE_ATTR(name, 0444, SEC_UFS_##name##_show, NULL)
 
 #define SEC_UFS_ERR_COUNT_INC(count, max) ((count) += ((count) < (max)) ? 1 : 0)
 

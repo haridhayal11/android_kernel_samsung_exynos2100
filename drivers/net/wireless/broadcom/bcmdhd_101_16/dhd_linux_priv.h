@@ -1,7 +1,7 @@
 /*
  * DHD Linux header file - contains private structure definition of the Linux specific layer
  *
- * Copyright (C) 2020, Broadcom.
+ * Copyright (C) 2021, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -485,7 +485,8 @@ extern uint fis_enab;
 	(defined(CONFIG_SOC_EXYNOS9820) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 187))) \
 	|| (defined(CONFIG_ARCH_MSM) && (((LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 170)) && \
 	(LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 0))) || (LINUX_VERSION_CODE >= \
-	KERNEL_VERSION(4, 19, 110))))
+	KERNEL_VERSION(4, 19, 110)))) || ((defined(CONFIG_SOC_EXYNOS9110) || \
+	defined(CONFIG_SOC_S5E5515)) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 151)))
 #define WAKELOCK_BACKPORT
 #endif /* WAKELOCK_BACKPORT */
 

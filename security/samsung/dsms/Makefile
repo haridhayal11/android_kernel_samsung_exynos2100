@@ -14,16 +14,7 @@ obj-$(CONFIG_SECURITY_DSMS) += dsms_netlink.o
 obj-$(CONFIG_SECURITY_DSMS) += dsms_message_list.o
 
 # kunit tests options:
-GCOV_PROFILE := $(CONFIG_KUNIT)
 ifeq ($(CONFIG_KUNIT), y)
-    ifneq ($(wildcard  $(srctree)/$(src)/test),)
-        ccflags-y += -DDSMS_KUNIT_ENABLED
-        obj-y += test/security_dsms_access_control_test.o
-        obj-y += test/security_dsms_debug_test.o
-        obj-y += test/security_dsms_init_test.o
-        obj-y += test/security_dsms_kernel_api_test.o
-        obj-y += test/security_dsms_policy_test.o
-        obj-y += test/security_dsms_rate_limit_test.o
-        obj-y += test/security_dsms_test_utils.o
-    endif
+    GCOV_PROFILE := y
+    ccflags-y += -DDSMS_KUNIT_ENABLED
 endif

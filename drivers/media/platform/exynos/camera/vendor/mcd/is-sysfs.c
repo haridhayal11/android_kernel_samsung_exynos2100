@@ -1907,7 +1907,7 @@ static ssize_t camera_rear_tof_get_validation_data_show(struct device *dev,
 	is_sec_get_sysfs_finfo(&finfo, rom_id);
 	is_sec_get_cal_buf(&cal_buf, rom_id);
 
-	val_data[0] = *(u16*)&cal_buf[finfo->rom_tof_cal_validation_addr[1]]; 		/* 2Byte from 11EE (300mm validation) */
+	val_data[0] = *(u16*)&cal_buf[finfo->rom_tof_cal_validation_addr[1]];		/* 2Byte from 11EE (300mm validation) */
 	val_data[1] = *(u16*)&cal_buf[finfo->rom_tof_cal_validation_addr[0]];		/* 2Byte from 11D0 (500mm validation) */
 
 	return sprintf(buf, "%d,%d", val_data[0]/100, val_data[1]/100);
@@ -3112,7 +3112,7 @@ static bool read_ois_version(void)
 #endif
 	}
 
- 	return ret;
+	return ret;
 }
 
 static ssize_t camera_ois_power_store(struct device *dev,
@@ -3249,7 +3249,7 @@ static ssize_t camera_ois_rear3_gain_show(struct device *dev,
 
 	info("%s xgain/ygain = 0x%08x/0x%08x", __func__, xgain, ygain);
 
-	if ((ois_pinfo->tele_romdata.xgg[0] == 0xFF) && (ois_pinfo->tele_romdata.ygg[0] == 0xFF)) {
+	if ((xgain == 0xFFFFFFFF) && (ygain == 0xFFFFFFFF)) {
 		return sprintf(buf, "%d\n", 2);
 	} else if (ois_pinfo->tele_romdata.cal_mark[0] != 0xBB) {
 		return sprintf(buf, "%d\n", 1);
@@ -3272,7 +3272,7 @@ static ssize_t camera_ois_rear3_supperssion_ratio_show(struct device *dev,
 
 	info("%s xratio/yratio = %d.%d/%d.%d", __func__, xratio / 100, xratio % 100, yratio / 100, yratio % 100);
 
-	if ((ois_pinfo->tele_romdata.supperssion_xratio[0] == 0xFF) && (ois_pinfo->tele_romdata.supperssion_yratio[0] == 0xFF)) {
+	if ((xratio == 0xFFFF) && (yratio == 0xFFFF)) {
 		return sprintf(buf, "%d\n", 2);
 	} else if (ois_pinfo->tele_romdata.cal_mark[0] != 0xBB) {
 		return sprintf(buf, "%d\n", 1);
@@ -3296,7 +3296,7 @@ static ssize_t camera_ois_rear4_gain_show(struct device *dev,
 
 	info("%s xgain/ygain = 0x%08x/0x%08x", __func__, xgain, ygain);
 
-	if ((ois_pinfo->tele2_romdata.xgg[0] == 0xFF) && (ois_pinfo->tele2_romdata.ygg[0] == 0xFF)) {
+	if ((xgain == 0xFFFFFFFF) && (ygain == 0xFFFFFFFF)) {
 		return sprintf(buf, "%d\n", 2);
 	} else if (ois_pinfo->tele2_romdata.cal_mark[0] != 0xBB) {
 		return sprintf(buf, "%d\n", 1);
@@ -3319,7 +3319,7 @@ static ssize_t camera_ois_rear4_supperssion_ratio_show(struct device *dev,
 
 	info("%s xratio/yratio = %d.%d/%d.%d", __func__, xratio / 100, xratio % 100, yratio / 100, yratio % 100);
 
-	if ((ois_pinfo->tele2_romdata.supperssion_xratio[0] == 0xFF) && (ois_pinfo->tele2_romdata.supperssion_yratio[0] == 0xFF)) {
+	if ((xratio == 0xFFFF) && (yratio == 0xFFFF)) {
 		return sprintf(buf, "%d\n", 2);
 	} else if (ois_pinfo->tele2_romdata.cal_mark[0] != 0xBB) {
 		return sprintf(buf, "%d\n", 1);
@@ -3588,7 +3588,7 @@ static ssize_t camera_ois_rear_gain_show(struct device *dev,
 
 	info("%s xgain/ygain = 0x%08x/0x%08x", __func__, xgain, ygain);
 
-	if ((ois_pinfo->wide_romdata.xgg[0] == 0xFF) && (ois_pinfo->wide_romdata.ygg[0] == 0xFF)) {
+	if ((xgain == 0xFFFFFFFF) && (ygain == 0xFFFFFFFF)) {
 		return sprintf(buf, "%d\n", 2);
 	} else if (ois_pinfo->wide_romdata.cal_mark[0]!= 0xBB) {
 		return sprintf(buf, "%d\n", 1);
@@ -3611,7 +3611,7 @@ static ssize_t camera_ois_rear_supperssion_ratio_show(struct device *dev,
 
 	info("%s xratio/yratio = %d.%d/%d.%d", __func__, xratio / 100, xratio % 100, yratio / 100, yratio % 100);
 
-	if ((ois_pinfo->wide_romdata.supperssion_xratio[0] == 0xFF) && (ois_pinfo->wide_romdata.supperssion_yratio[0] == 0xFF)) {
+	if ((xratio == 0xFFFF) && (yratio == 0xFFFF)) {
 		return sprintf(buf, "%d\n", 2);
 	} else if (ois_pinfo->wide_romdata.cal_mark[0] != 0xBB) {
 		return sprintf(buf, "%d\n", 1);
@@ -3711,6 +3711,50 @@ static ssize_t camera_ois_check_cross_talk_show(struct device *dev,
 
 	return sprintf(buf, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", result, hall_data[0], hall_data[1],
 		hall_data[2], hall_data[3], hall_data[4], hall_data[5], hall_data[6], hall_data[7], hall_data[8], hall_data[9]);
+}
+
+static ssize_t camera_ois_check_hall_cal_show(struct device *dev,
+				    struct device_attribute *attr, char *buf)
+{
+	u16 hall_cal_data[9] = {0, };
+	int result = 0;
+
+	if (check_ois_power) {
+		is_ois_check_hall_cal(sysfs_core, hall_cal_data);
+		result = 1;
+
+		info("[%s] %d,%d,%d,%d,%d,%d,%d,%d\n", __func__, hall_cal_data[0], hall_cal_data[1],
+			hall_cal_data[2], hall_cal_data[3], hall_cal_data[4], hall_cal_data[5], hall_cal_data[6], hall_cal_data[7]);
+	} else {
+		err("OIS power is not enabled.");
+		result = 0;
+	}
+
+	return sprintf(buf, "%d,%d,%d,%d,%d,%d,%d,%d,%d\n", result, hall_cal_data[0], hall_cal_data[1],
+		hall_cal_data[2], hall_cal_data[3], hall_cal_data[4], hall_cal_data[5], hall_cal_data[6], hall_cal_data[7]);
+}
+
+static ssize_t camera_ois_check_valid_show(struct device *dev,
+				    struct device_attribute *attr, char *buf)
+{
+	u8 value = 0;
+	u8 wide_val = 0;
+	u8 tele_val = 0;
+	u8 tele2_val = 0;
+
+	if (check_ois_power) {
+		is_ois_check_valid(sysfs_core, &value);
+
+		wide_val = value & 0x06;
+		tele_val = value & 0x18;
+		tele2_val = value & 0x60;
+
+		info("[%s] 0x%02x,0x%02x,0x%02x\n", __func__, wide_val, tele_val, tele2_val);
+		return sprintf(buf, "0x%02x,0x%02x,0x%02x\n", wide_val, tele_val, tele2_val);
+	} else {
+		err("OIS power is not enabled.");
+		return sprintf(buf, "0x%02x,0x%02x,0x%02x\n", 0x06, 0x18, 0x60);
+	}
 }
 
 static ssize_t camera_ois_read_ext_clock_show(struct device *dev,
@@ -4721,6 +4765,8 @@ static DEVICE_ATTR(ois_supperssion_ratio_rear, S_IRUGO, camera_ois_rear_supperss
 static DEVICE_ATTR(reset_check, S_IRUGO, camera_ois_reset_check, NULL);
 static DEVICE_ATTR(prevent_shaking_noise, S_IWUSR, NULL, camera_ois_shaking_noise_store);
 static DEVICE_ATTR(check_cross_talk, S_IRUGO, camera_ois_check_cross_talk_show, NULL);
+static DEVICE_ATTR(check_hall_cal, S_IRUGO, camera_ois_check_hall_cal_show, NULL);
+static DEVICE_ATTR(check_ois_valid, S_IRUGO, camera_ois_check_valid_show, NULL);
 static DEVICE_ATTR(ois_ext_clk, S_IRUGO, camera_ois_read_ext_clock_show, NULL);
 static DEVICE_ATTR(rear3_read_cross_talk, S_IRUGO, camera_ois_rear3_read_cross_talk_show, NULL);
 #endif
@@ -5586,6 +5632,14 @@ int is_create_sysfs(struct is_core *core)
 			pr_err("failed to create ois device file, %s\n",
 				dev_attr_check_cross_talk.attr.name);
 		}
+		if (device_create_file(camera_ois_dev, &dev_attr_check_hall_cal) < 0) {
+			pr_err("failed to create ois device file, %s\n",
+				dev_attr_check_hall_cal.attr.name);
+		}
+		if (device_create_file(camera_ois_dev, &dev_attr_check_ois_valid) < 0) {
+			pr_err("failed to create ois device file, %s\n",
+				dev_attr_check_ois_valid.attr.name);
+		}
 		if (device_create_file(camera_ois_dev, &dev_attr_ois_ext_clk) < 0) {
 			pr_err("failed to create ois device file, %s\n",
 				dev_attr_ois_ext_clk.attr.name);
@@ -5894,6 +5948,8 @@ int is_destroy_sysfs(struct is_core *core)
 		device_remove_file(camera_ois_dev, &dev_attr_reset_check);
 		device_remove_file(camera_ois_dev, &dev_attr_prevent_shaking_noise);
 		device_remove_file(camera_ois_dev, &dev_attr_check_cross_talk);
+		device_remove_file(camera_ois_dev, &dev_attr_check_hall_cal);
+		device_remove_file(camera_ois_dev, &dev_attr_check_ois_valid);
 		device_remove_file(camera_ois_dev, &dev_attr_ois_ext_clk);
 		device_remove_file(camera_ois_dev, &dev_attr_rear3_read_cross_talk);
 	}

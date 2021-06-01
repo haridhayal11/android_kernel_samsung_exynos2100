@@ -400,9 +400,9 @@ void max77705_set_fw_ship_mode(int enable)
 	struct max77705_usbc_platform_data *pusbpd = g_usbc_data;
 	usbc_cmd_data value;
 
-	pusbpd->ship_mode_en = enable;
 	if (!enable) {
-		pr_info("%s: Set ship_mode_en(%d)\n", __func__, pusbpd->ship_mode_en);
+		pr_info("%s: not support disable. current ship_mode_en(%d)\n",
+			__func__, pusbpd->ship_mode_en);
 		return;
 	}
 
@@ -418,6 +418,15 @@ void max77705_set_fw_ship_mode(int enable)
 		__func__, value.opcode, value.write_length, value.read_length, value.write_data[0]);
 }
 EXPORT_SYMBOL(max77705_set_fw_ship_mode);
+
+int max77705_get_fw_ship_mode(void)
+{
+	if (!g_usbc_data)
+		return 0;
+
+	return g_usbc_data->ship_mode_en;
+}
+EXPORT_SYMBOL(max77705_get_fw_ship_mode);
 #endif
 
 static void max77705_set_snkcap(struct max77705_usbc_platform_data *usbc_data)

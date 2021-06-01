@@ -332,6 +332,9 @@ static int dpp_get_params(struct dpp_device *dpp, struct dpp_params_info *p)
 	p->votf_buffer_idx = config->votf_buf_idx;
 #endif
 
+#if IS_ENABLED(CONFIG_EXYNOS_SBWC_LIBREQ)
+	p->lib_requested = dpp->dpp_config->lib_requested;
+#endif
 	return 0;
 }
 

@@ -30,7 +30,7 @@
 struct muic_platform_data muic_pdata2;
 #endif
 
-#if IS_ENABLED(CONFIG_ANDROID_SWITCH)
+#if IS_ENABLED(CONFIG_ANDROID_SWITCH) || IS_ENABLED(CONFIG_SWITCH)
 static struct switch_dev switch_dock = {
 	.name = "dock",
 };
@@ -44,7 +44,7 @@ struct switch_dev switch_attached_muic_cable = {
 	.name = "attached_muic_cable", /* sys/class/switch/attached_muic_cable/state */
 };
 #endif
-#endif /* CONFIG_ANDROID_SWITCH */
+#endif /* CONFIG_ANDROID_SWITCH || CONFIG_SWITCH */
 
 #if IS_ENABLED(CONFIG_MUIC_NOTIFIER)
 static struct notifier_block dock_notifier_block;
@@ -53,7 +53,7 @@ static struct notifier_block cable_data_notifier_block;
 void muic_send_dock_intent(int type)
 {
 	pr_info("%s: MUIC dock type(%d)\n", __func__, type);
-#if IS_ENABLED(CONFIG_ANDROID_SWITCH)
+#if IS_ENABLED(CONFIG_ANDROID_SWITCH) || IS_ENABLED(CONFIG_SWITCH)
 	switch_set_state(&switch_dock, type);
 #endif
 }
@@ -63,7 +63,7 @@ EXPORT_SYMBOL(muic_send_dock_intent);
 void muic_send_attached_muic_cable_intent(int type)
 {
 	pr_info("%s: MUIC attached_muic_cable type(%d)\n", __func__, type);
-#ifdef CONFIG_ANDROID_SWITCH
+#if IS_ENABLED(CONFIG_ANDROID_SWITCH) || IS_ENABLED(CONFIG_SWITCH)
 	switch_set_state(&switch_attached_muic_cable, type);
 #endif
 }
@@ -210,7 +210,7 @@ static int muic_handle_cable_data_notification(struct notifier_block *nb,
 	}
 
 	pr_info("%s: MUIC uart type(%d)\n", __func__, jig_state);
-#if IS_ENABLED(CONFIG_ANDROID_SWITCH)
+#if IS_ENABLED(CONFIG_ANDROID_SWITCH) || IS_ENABLED(CONFIG_SWITCH)
 	switch_set_state(&switch_uart3, jig_state);
 #endif
 	return NOTIFY_DONE;
@@ -219,7 +219,7 @@ static int muic_handle_cable_data_notification(struct notifier_block *nb,
 
 static void muic_init_switch_dev_cb(void)
 {
-#if IS_ENABLED(CONFIG_ANDROID_SWITCH)
+#if IS_ENABLED(CONFIG_ANDROID_SWITCH) || IS_ENABLED(CONFIG_SWITCH)
 	int ret;
 
 	/* for DockObserver */
@@ -247,7 +247,7 @@ static void muic_init_switch_dev_cb(void)
 		return;
 	}
 #endif
-#endif /* CONFIG_ANDROID_SWITCH */
+#endif /* CONFIG_ANDROID_SWITCH || CONFIG_SWITCH */
 
 #if IS_ENABLED(CONFIG_MUIC_NOTIFIER)
 	muic_notifier_register(&dock_notifier_block,
@@ -261,7 +261,7 @@ static void muic_init_switch_dev_cb(void)
 
 static void muic_cleanup_switch_dev_cb(void)
 {
-#if IS_ENABLED(CONFIG_ANDROID_SWITCH)
+#if IS_ENABLED(CONFIG_ANDROID_SWITCH) || IS_ENABLED(CONFIG_SWITCH)
 #ifdef CONFIG_SEC_FACTORY
 	/* for cable type event */
 	switch_dev_unregister(&switch_attached_muic_cable);
@@ -270,7 +270,7 @@ static void muic_cleanup_switch_dev_cb(void)
 	switch_dev_unregister(&switch_uart3);
 	/* for DockObserver */
 	switch_dev_unregister(&switch_dock);
-#endif /* CONFIG_ANDROID_SWITCH */
+#endif /* CONFIG_ANDROID_SWITCH || CONFIG_SWITCH */
 #if IS_ENABLED(CONFIG_MUIC_NOTIFIER)
 	muic_notifier_unregister(&dock_notifier_block);
 	muic_notifier_unregister(&cable_data_notifier_block);
@@ -479,7 +479,7 @@ static int muic_init_gpio_cb(int switch_sel)
 	}
 
 	if (pdata->set_gpio_usb_sel)
-		ret = pdata->set_gpio_usb_sel(pdata->uart_path);
+		ret = pdata->set_gpio_usb_sel(pdata->drv_data, pdata->usb_path);
 
 	if (switch_sel & SWITCH_SEL_UART_MASK) {
 		pdata->uart_path = MUIC_PATH_UART_AP;
@@ -492,10 +492,15 @@ static int muic_init_gpio_cb(int switch_sel)
 	/* These flags MUST be updated again from probe function */
 	pdata->rustproof_on = false;
 
+#if !defined(CONFIG_SEC_FACTORY) && defined(CONFIG_MUIC_SUPPORT_TYPEB)
+	if (!(switch_sel & SWITCH_SEL_RUSTPROOF_MASK))
+		pdata->rustproof_on = true;
+#endif
+
 	pdata->afc_disable = false;
 
 	if (pdata->set_gpio_uart_sel)
-		ret = pdata->set_gpio_uart_sel(pdata->uart_path);
+		ret = pdata->set_gpio_uart_sel(pdata->drv_data, pdata->uart_path);
 
 	pr_info("%s: usb_path(%s), uart_path(%s)\n", __func__,
 			usb_mode, uart_mode);
@@ -554,10 +559,10 @@ static int muic_init_gpio_cb(void)
 	pdata->afc_disable = false;
 
 	if (pdata->set_gpio_usb_sel)
-		ret = pdata->set_gpio_usb_sel(pdata->uart_path);
+		ret = pdata->set_gpio_usb_sel(pdata->drv_data, pdata->usb_path);
 
 	if (pdata->set_gpio_uart_sel)
-		ret = pdata->set_gpio_uart_sel(pdata->uart_path);
+		ret = pdata->set_gpio_uart_sel(pdata->drv_data, pdata->uart_path);
 
 	pr_info("%s: usb_path(%s), uart_path(%s)\n", __func__,
 			usb_mode, uart_mode);
@@ -565,6 +570,20 @@ static int muic_init_gpio_cb(void)
 	return ret;
 }
 #endif
+
+int muic_afc_get_voltage(void)
+{
+	struct muic_platform_data *pdata = &muic_pdata;
+	int vol = -ENODEV;
+
+	pr_info("%s : %dV\n", __func__, vol);
+
+	if (pdata && pdata->muic_afc_get_voltage_cb)
+		vol = pdata->muic_afc_get_voltage_cb();
+
+	return vol;
+}
+EXPORT_SYMBOL(muic_afc_get_voltage);
 
 #if !defined(CONFIG_DISCRETE_CHARGER)
 int muic_afc_set_voltage(int voltage)

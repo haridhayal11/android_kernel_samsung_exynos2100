@@ -519,6 +519,12 @@ dhd_query_bus_erros(dhd_pub_t *dhdp)
 		ret = TRUE;
 	}
 
+	if (dhdp->p2p_disc_busy_occurred) {
+		DHD_ERROR_RLMT(("%s: p2p_disc_busy_occurred, cannot proceed\n",
+			__FUNCTION__));
+		ret = TRUE;
+	}
+
 #ifdef DNGL_AXI_ERROR_LOGGING
 	if (dhdp->axi_error) {
 		DHD_ERROR_RLMT(("%s: AXI error occurred, cannot proceed\n",
@@ -569,6 +575,7 @@ dhd_clear_bus_errors(dhd_pub_t *dhdp)
 	dhdp->iface_op_failed = FALSE;
 	dhdp->scan_timeout_occurred = FALSE;
 	dhdp->scan_busy_occurred = FALSE;
+	dhdp->p2p_disc_busy_occurred = FALSE;
 }
 
 #ifdef DHD_SSSR_DUMP
@@ -9453,6 +9460,9 @@ dhd_convert_memdump_type_to_str(uint32 type, char *buf, size_t buf_len, int subs
 			break;
 		case DUMP_TYPE_INVALID_SHINFO_NRFRAGS:
 			type_str = "INVALID_SHINFO_NRFRAGS";
+			break;
+		case DUMP_TYPE_P2P_DISC_BUSY:
+			type_str = "P2P_DISC_BUSY";
 			break;
 		default:
 			type_str = "Unknown_type";

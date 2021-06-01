@@ -990,23 +990,6 @@ int panel_seq_cmdlog_dump(struct panel_device *panel)
 }
 #endif
 
-static int __panel_seq_init_boot(struct panel_device *panel)
-{
-	int ret;
-
-	if (check_seqtbl_exist(&panel->panel_data, PANEL_INIT_BOOT_SEQ) == 1) {
-		panel_info("PANEL_INIT_BOOT_SEQ\n");
-		ret = panel_do_seqtbl_by_index(panel, PANEL_INIT_BOOT_SEQ);
-		if (unlikely(ret < 0)) {
-			panel_err("failed to seqtbl(PANEL_INIT_BOOT_SEQ)\n");
-			return ret;
-		}
-	}
-
-	return 0;
-}
-
-
 int panel_display_on(struct panel_device *panel)
 {
 	int ret = 0;
@@ -3161,7 +3144,6 @@ static int panel_notify_frame_done_mafpc(struct panel_device *panel)
 }
 #endif
 
-int self_grid_off_req;
 static long panel_core_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 {
 	int ret = 0;
@@ -3286,15 +3268,6 @@ static long panel_core_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg
 			ret = panel_display_on(panel);
 			panel_check_ready(panel);
 		}
-#ifdef CONFIG_EXTEND_LIVE_CLOCK
-		if (unlikely(self_grid_off_req == 1)) {
-			ret = panel_aod_black_grid_off(panel);
-			if (ret)
-				panel_info("PANEL_ERR:failed to black grid on\n");
-			else
-				self_grid_off_req = 0;
-		}
-#endif
 #ifdef CONFIG_EXYNOS_DECON_LCD_COPR
 		copr_update_start(&panel->copr, 3);
 #endif
@@ -3335,15 +3308,6 @@ static long panel_core_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg
 		ret = panel_dm_off_ffc(panel);
 		break;
 #endif
-	case PANEL_IOC_FIRST_FRAME:
-		panel_info("PANEL_IOC_FIRST_FRAME\n");
-
-		ret = __panel_seq_init_boot(panel);
-		if (ret)
-			panel_err("failed to set init_boot seq\n");
-		self_grid_off_req = 1;
-
-		break;
 	default:
 		panel_err("undefined command\n");
 		ret = -EINVAL;
@@ -4358,7 +4322,6 @@ static int panel_input_notifier_callback(struct notifier_block *nb,
 #if defined(CONFIG_SUPPORT_FAST_DISCHARGE)
 int panel_fast_discharge_set(struct panel_device *panel)
 {
-	struct panel_gpio *gpio = panel->gpio;
 	int ret = 0;
 
 	mutex_lock(&panel->io_lock);

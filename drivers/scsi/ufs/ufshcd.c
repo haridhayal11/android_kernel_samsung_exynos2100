@@ -7787,7 +7787,8 @@ out:
 	spin_lock_irqsave(hba->host->host_lock, flags);
 	if (ret)
 		hba->ufshcd_state = UFSHCD_STATE_ERROR;
-	else if (hba->ufshcd_state == UFSHCD_STATE_RESET)
+	else if (hba->ufshcd_state == UFSHCD_STATE_RESET ||
+			hba->ufshcd_state == UFSHCD_STATE_ERROR)
 		hba->ufshcd_state = UFSHCD_STATE_OPERATIONAL;
 	spin_unlock_irqrestore(hba->host->host_lock, flags);
 

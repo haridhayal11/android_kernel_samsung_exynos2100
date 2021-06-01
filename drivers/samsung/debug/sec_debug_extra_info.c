@@ -475,7 +475,7 @@ static void __init sec_debug_extra_info_copy_shared_buffer(bool mflag)
 	backup_base = secdbg_base_get_ncva(slot_base + total_size);
 
 	pr_info("%s: dst: %llx src: %llx (%x)\n",
-				__func__, backup_base, secdbg_base_get_ncva(slot_base), total_size);
+				__func__, (u64)backup_base, (u64)secdbg_base_get_ncva(slot_base), total_size);
 	memcpy(backup_base, secdbg_base_get_ncva(slot_base), total_size);
 
 	/* backup shared buffer header info */

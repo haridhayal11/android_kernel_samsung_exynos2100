@@ -563,19 +563,24 @@ static void process_file(struct task_struct *task,
 
 	xattr_len = five_read_xattr(d_real_comp(file->f_path.dentry),
 			&xattr_value);
-	if (xattr_value && xattr_len) {
-		rc = five_cert_fillout(&cert, xattr_value, xattr_len);
-		if (rc) {
-			pr_err("FIVE: certificate is incorrect inode=%lu\n",
+	if (xattr_value) {
+		if (xattr_len) {
+			rc = five_cert_fillout(&cert, xattr_value, xattr_len);
+			if (rc) {
+				pr_err("FIVE: certificate is incorrect inode=%lu\n",
 								inode->i_ino);
-			goto out;
-		}
+				goto out;
+			}
 
-		pcert = &cert;
+			pcert = &cert;
 
-		if (file->f_flags & O_DIRECT) {
-			rc = -EACCES;
-			goto out;
+			if (file->f_flags & O_DIRECT) {
+				rc = -EACCES;
+				goto out;
+			}
+		} else {
+			five_audit_info(task, file, "zero length", 0, 0,
+						"Found a dummy-cert", rc);
 		}
 	}
 
@@ -790,7 +795,7 @@ int five_file_open(struct file *file)
 		bool is_signing = false;
 
 		if (!unlink_on_error) {
-			five_audit_info(current, file, "five_unlink", 0, 0,
+			five_audit_verbose(current, file, "five_unlink", 0, 0,
 					"Found a dummy-cert", 0);
 			return 0;
 		}

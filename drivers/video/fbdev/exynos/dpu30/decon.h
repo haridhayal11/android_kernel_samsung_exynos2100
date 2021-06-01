@@ -671,6 +671,7 @@ struct decon_reg_data {
 	bool hwfc_enable;
 	u32 hwfc_idx;
 #endif
+	bool lib_requested;
 };
 
 #if IS_ENABLED(CONFIG_MCD_PANEL)
@@ -1276,6 +1277,7 @@ struct decon_bts {
 	u32 bw_weight;
 	u32 dfs_lv_cnt;
 	u32 dfs_lv[BTS_DFS_MAX];
+	u32 sbwc_lib_boost;
 #if IS_ENABLED(CONFIG_EXYNOS_BTS) || IS_ENABLED(CONFIG_EXYNOS_BTS_MODULE)
 	struct decon_bts_bw bw[BTS_DPP_MAX];
 

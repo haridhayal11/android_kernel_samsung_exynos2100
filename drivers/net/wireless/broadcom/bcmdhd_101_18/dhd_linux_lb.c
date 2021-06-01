@@ -680,7 +680,8 @@ uint64 dhd_lb_mem_usage(dhd_pub_t *dhdp, struct bcmstrbuf *strbuf)
 	if (rxbufpost_sz == 0) {
 		rxbufpost_sz = DHD_FLOWRING_RX_BUFPOST_PKTSZ;
 	}
-	rx_path_memory_usage = rxbufpost_sz * (skb_queue_len(&dhd->rx_pend_queue) +
+	rx_path_memory_usage = rxbufpost_sz * (skb_queue_len(&dhd->rx_emerge_queue) +
+		skb_queue_len(&dhd->rx_pend_queue) +
 		skb_queue_len(&dhd->rx_napi_queue) +
 		skb_queue_len(&dhd->rx_process_queue));
 	rx_post_active = dhd_prot_get_h2d_rx_post_active(dhdp);
@@ -695,9 +696,10 @@ uint64 dhd_lb_mem_usage(dhd_pub_t *dhdp, struct bcmstrbuf *strbuf)
 
 	dhdp->rxpath_mem = rx_path_memory_usage;
 	bcm_bprintf(strbuf, "\nrxbufpost_sz: %d rx_post_active: %d rx_cmpl_active: %d "
-		"pend_queue_len: %d napi_queue_len: %d process_queue_len: %d\n",
+		"emerge_queue_len: %d pend_queue_len: %d napi_queue_len: %d"
+		" process_queue_len: %d\n",
 		rxbufpost_sz, rx_post_active, rx_cmpl_active,
-		skb_queue_len(&dhd->rx_pend_queue),
+		skb_queue_len(&dhd->rx_emerge_queue), skb_queue_len(&dhd->rx_pend_queue),
 		skb_queue_len(&dhd->rx_napi_queue), skb_queue_len(&dhd->rx_process_queue));
 	bcm_bprintf(strbuf, "DHD rx-path memory_usage: %llubytes %lluKB \n",
 		rx_path_memory_usage, (rx_path_memory_usage/ 1024));
@@ -1255,6 +1257,26 @@ dhd_lb_rx_napi_dispatch(dhd_pub_t *dhdp)
 	DHD_LB_STATS_INCR(dhd->napi_sched_cnt);
 
 	put_cpu();
+}
+
+/**
+ * dhd_rx_emerge_enqueue - Enqueue the packet into the ememrgency queue for repost
+ */
+void
+dhd_rx_emerge_enqueue(dhd_pub_t *dhdp, void *pkt)
+{
+	dhd_info_t *dhd = dhdp->info;
+	skb_queue_tail(&dhd->rx_emerge_queue, pkt);
+}
+
+/**
+ * dhd_rx_emerge_dequeue - Deueue the packet from the emergency queue for repost
+ */
+void *
+dhd_rx_emerge_dequeue(dhd_pub_t *dhdp)
+{
+	dhd_info_t *dhd = dhdp->info;
+	return skb_dequeue(&dhd->rx_emerge_queue);
 }
 
 /**

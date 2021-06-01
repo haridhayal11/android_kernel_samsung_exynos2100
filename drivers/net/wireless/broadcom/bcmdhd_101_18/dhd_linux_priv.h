@@ -234,6 +234,11 @@ typedef struct dhd_info {
 	struct work_struct    tx_dispatcher_work;
 	struct work_struct    rx_compl_dispatcher_work;
 
+	/* Emergency queue to hold pkts when flow control is enabled and
+	 * same pkts will be posted back to the dongle till flow control is disabled.
+	*/
+	struct sk_buff_head   rx_emerge_queue	____cacheline_aligned;
+
 	/* Number of times DPC Tasklet ran */
 	uint32	dhd_dpc_cnt;
 	/* Number of times NAPI processing got scheduled */

@@ -358,7 +358,7 @@ static void mblk_init(struct lib_mem_block *mblk, struct is_priv_buf *pb,
 	strlcpy(mblk->name, name, sizeof(mblk->name));
 	mblk->type = type;
 
-	info_lib("memory block %s - kva: 0x%lx, dva: %pad, size: %zu\n",
+	info_lib("memory block %s - kva: 0x%pK, dva: %pad, size: %zu\n",
 			mblk->name, mblk->kva_base,
 			&mblk->dva_base, mblk->pb->size);
 
@@ -723,7 +723,7 @@ static void __maybe_unused is_free_dma_pb(void *kva)
 static int mblk_dva(struct lib_mem_block *mblk, ulong kva, u32 *dva)
 {
 	if ((kva < mblk->kva_base) || (kva >= (mblk->kva_base + mblk->pb->size))) {
-		err_lib("invalid DVA request - kva: 0x%lx", kva);
+		err_lib("invalid DVA request - kva: 0x%pK", kva);
 		*dva = 0;
 		WARN_ON(1);
 

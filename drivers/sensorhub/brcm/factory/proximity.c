@@ -682,14 +682,14 @@ static ssize_t proximity_trim_check_show(struct device *dev,
 	struct ssp_msg *msg;
 	u8 buffer[8] = {0,};
 	int trim;
-
+retries:
 	msg = kzalloc(sizeof(*msg), GFP_KERNEL);
 	msg->cmd = MSG2SSP_AP_GET_PROX_TRIM;
 	msg->length = 1;
 	msg->options = AP2HUB_READ;
 	msg->buffer = buffer;
 	msg->free_buffer = 0;
-retries:
+
 	iRet = ssp_spi_async(data, msg);
 	if (iRet != SUCCESS) {
 		pr_err("[SSP] %s fail %d\n", __func__, iRet);

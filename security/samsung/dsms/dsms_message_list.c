@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Samsung Electronics Co., Ltd. All Rights Reserved
+ * Copyright (c) 2020-2021 Samsung Electronics Co., Ltd. All Rights Reserved
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2
@@ -11,7 +11,9 @@
 #include <linux/llist.h>
 #include <linux/kernel.h>
 #include <linux/semaphore.h>
+#include <linux/slab.h>
 #include <linux/string.h>
+#include "dsms_init.h"
 #include "dsms_kernel_api.h"
 #include "dsms_message_list.h"
 #include "dsms_netlink.h"
@@ -27,7 +29,7 @@ __visible_for_testing atomic_t list_counter = ATOMIC_INIT(0);
 static struct llist_head dsms_linked_messages = LLIST_HEAD_INIT(dsms_linked_messages);
 static struct semaphore sem_count_message;
 
-static struct dsms_message_node *create_node(struct dsms_message *message)
+__visible_for_testing struct dsms_message_node *create_node(struct dsms_message *message)
 {
 	struct dsms_message_node *node;
 
@@ -45,9 +47,12 @@ struct dsms_message *get_dsms_message(void)
 {
 	struct dsms_message_node *node;
 	struct dsms_message *message;
+	int ret;
 
-	down(&sem_count_message);
-	if (atomic_read(&list_counter) == 0)
+	if (!dsms_is_initialized())
+		return NULL;
+	ret = down_interruptible(&sem_count_message);
+	if (ret != 0 || atomic_read(&list_counter) == 0 || !dsms_is_initialized())
 		return NULL;
 	node = llist_entry(llist_del_first(&dsms_linked_messages),
 					   struct dsms_message_node, llist);
@@ -80,12 +85,19 @@ int process_dsms_message(struct dsms_message *message)
 	return 0;
 }
 
-noinline void init_semaphore_list(void)
+int __kunit_init dsms_message_list_init(void)
 {
 	sema_init(&sem_count_message, 0);
+	return 0;
 }
 
-noinline int dsms_check_message_list_limit(void)
+void __kunit_exit dsms_message_list_exit(void)
+{
+	/* unlock anyone waiting for messages */
+	up(&sem_count_message);
+}
+
+int dsms_check_message_list_limit(void)
 {
 	return atomic_read(&list_counter) < LIST_COUNT_LIMIT ? DSMS_SUCCESS : DSMS_DENY;
 }

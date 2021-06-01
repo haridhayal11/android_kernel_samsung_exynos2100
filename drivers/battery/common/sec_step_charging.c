@@ -38,8 +38,7 @@ EXPORT_SYMBOL(sec_bat_reset_step_charging);
 void sec_bat_exit_step_charging(struct sec_battery_info *battery)
 {
 	sec_vote(battery->fcc_vote, VOTER_STEP_CHARGE, false, 0);
-	if ((battery->step_chg_type & STEP_CHARGING_CONDITION_FLOAT_VOLTAGE) &&
-		(battery->thermal_zone == BAT_THERMAL_NORMAL))
+	if (battery->step_chg_type & STEP_CHARGING_CONDITION_FLOAT_VOLTAGE)
 		sec_vote(battery->fv_vote, VOTER_STEP_CHARGE, false, 0);
 	sec_bat_reset_step_charging(battery);
 }
@@ -60,16 +59,14 @@ bool sec_bat_check_step_charging(struct sec_battery_info *battery)
 	if (!battery->step_chg_en_in_factory)
 		return false;
 #endif
-
+	if (!battery->step_chg_type)
+		return false;
 #if defined(CONFIG_ENG_BATTERY_CONCEPT)
 	if (battery->test_charge_current)
 		return false;
 	if (battery->test_step_condition <= 4500)
 		battery->pdata->step_chg_cond[0][0] = battery->test_step_condition;
 #endif
-
-	if (!battery->step_chg_type)
-		return false;
 
 	if (battery->siop_level < 100 || battery->lcd_status)
 		lcd_status = 1;
@@ -118,8 +115,7 @@ bool sec_bat_check_step_charging(struct sec_battery_info *battery)
 				sec_vote(battery->fcc_vote, VOTER_STEP_CHARGE, true,
 					battery->pdata->step_chg_curr[age_step][battery->step_chg_step - 1]);
 
-				if ((battery->step_chg_type & STEP_CHARGING_CONDITION_FLOAT_VOLTAGE) &&
-					(battery->thermal_zone == BAT_THERMAL_NORMAL)) {
+				if (battery->step_chg_type & STEP_CHARGING_CONDITION_FLOAT_VOLTAGE) {
 					pr_info("%s : float voltage = %d\n", __func__,
 						battery->pdata->step_chg_vfloat[age_step][battery->step_chg_step - 1]);
 					sec_vote(battery->fv_vote, VOTER_STEP_CHARGE, true,
@@ -197,8 +193,7 @@ bool sec_bat_check_step_charging(struct sec_battery_info *battery)
 		battery->step_chg_status = i;
 		skip_lcd_on_changed = false;
 
-		if ((battery->step_chg_type & STEP_CHARGING_CONDITION_FLOAT_VOLTAGE) &&
-			(battery->thermal_zone == BAT_THERMAL_NORMAL)) {
+		if (battery->step_chg_type & STEP_CHARGING_CONDITION_FLOAT_VOLTAGE) {
 			pr_info("%s : float voltage = %d\n", __func__,
 				battery->pdata->step_chg_vfloat[age_step][i]);
 			sec_vote(battery->fv_vote, VOTER_STEP_CHARGE, true,
@@ -395,8 +390,7 @@ check_dc_step_change:
 		battery->pdata->charging_current[battery->cable_type].fast_charging_current =
 			battery->pdata->dc_step_chg_val_iout[age_step][step];
 
-		if ((battery->dc_step_chg_type & STEP_CHARGING_CONDITION_FLOAT_VOLTAGE) &&
-			(battery->thermal_zone == BAT_THERMAL_NORMAL)) {
+		if (battery->dc_step_chg_type & STEP_CHARGING_CONDITION_FLOAT_VOLTAGE) {
 			if (battery->step_chg_status < 0) {
 				pr_info("%s : step float voltage = %d\n", __func__,
 					battery->pdata->dc_step_chg_val_vfloat[age_step][step]);

@@ -555,8 +555,8 @@ static u8 unbound2_a3_s0_te_frame_sel_table[MAX_S6E3FAB_VRR][1] = {
 #ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
 static u8 unbound2_a3_s0_vddm_table[][1] = {
 	{0x00}, // VDDM ORIGINAL
-	{0x0F}, // VDDM LOW VOLTAGE
-	{0x2D}, // VDDM HIGH VOLTAGE
+	{0x12}, // VDDM LOW VOLTAGE
+	{0x31}, // VDDM HIGH VOLTAGE
 };
 static u8 unbound2_a3_s0_gram_img_pattern_table[][1] = {
 	{0x00}, // GCT_PATTERN_NONE

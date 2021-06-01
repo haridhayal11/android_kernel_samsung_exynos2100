@@ -871,7 +871,9 @@ static int mfc_dec_qbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
 			return -EIO;
 		}
 
-		mfc_qos_update_framerate(ctx, buf->m.planes[0].bytesused);
+		mfc_idle_update_queued(dev, ctx);
+		mfc_qos_update_bitrate(ctx, buf->m.planes[0].bytesused);
+		mfc_qos_update_framerate(ctx);
 		mfc_rm_qos_control(ctx, MFC_QOS_TRIGGER);
 
 		if (!buf->m.planes[0].bytesused) {
@@ -885,11 +887,12 @@ static int mfc_dec_qbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
 		ret = vb2_qbuf(&ctx->vq_src, NULL, buf);
 	} else {
 		mfc_debug(4, "dec dst buf[%d] Q\n", buf->index);
+		mfc_idle_update_queued(dev, ctx);
+		mfc_qos_update_disp_framerate(ctx);
+		mfc_qos_update_framerate(ctx);
 		mfc_rm_qos_control(ctx, MFC_QOS_TRIGGER);
 		ret = vb2_qbuf(&ctx->vq_dst, NULL, buf);
 	}
-
-	atomic_inc(&dev->queued_cnt);
 
 	mfc_debug_leave();
 	return ret;
@@ -1019,6 +1022,7 @@ static int mfc_dec_streamoff(struct file *file, void *priv,
 		ret = vb2_streamoff(&ctx->vq_src, type);
 	} else if (type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
 		mfc_debug(4, "dec dst streamoff\n");
+		mfc_qos_reset_disp_framerate(ctx);
 		ret = vb2_streamoff(&ctx->vq_dst, type);
 		if (!ret)
 			mfc_rm_qos_control(ctx, MFC_QOS_OFF);

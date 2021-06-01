@@ -60,7 +60,7 @@
 
 extern int displayport_log_level;
 extern int forced_resolution;
-extern int otg_connection;
+extern int phy_status;
 
 #define DISPLAYPORT_MODULE_NAME "exynos-displayport"
 

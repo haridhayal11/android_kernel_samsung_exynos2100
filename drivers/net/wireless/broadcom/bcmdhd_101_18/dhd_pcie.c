@@ -250,7 +250,9 @@ static void dhd_bus_idle_scan(dhd_bus_t *bus);
 #ifdef EXYNOS_PCIE_DEBUG
 extern void exynos_pcie_register_dump(int ch_num);
 #endif /* EXYNOS_PCIE_DEBUG */
-
+#ifdef PRINT_WAKEUP_GPIO_STATUS
+extern void exynos_pin_dbg_show(unsigned int pin, const char* str);
+#endif /* PRINT_WAKEUP_GPIO_STATUS */
 #if defined(DHD_H2D_LOG_TIME_SYNC)
 static void dhdpci_bus_rte_log_time_sync_poll(dhd_bus_t *bus);
 #endif /* DHD_H2D_LOG_TIME_SYNC */
@@ -2196,7 +2198,7 @@ dhdpcie_advertise_bus_cleanup(dhd_pub_t *dhdp)
 			dhdpcie_fw_trap(dhdp->bus);
 			OSL_DELAY(100 * 1000); // wait 100 msec
 			if (!dhdp->db7_trap.fw_db7w_trap_recieved) {
-				DHD_ERROR(("%s : Did not recieve DB7\n", __FUNCTION__));
+				DHD_ERROR(("%s : Did not recieve DB7 Ack\n", __FUNCTION__));
 #ifdef WBRC
 				if (dhdp->fw_mode_changed == FALSE) {
 					DHD_ERROR(("%s : Set do_chip_bighammer\n", __FUNCTION__));
@@ -4089,11 +4091,20 @@ dhdpcie_mem_dump(dhd_bus_t *bus)
 		case DUMP_TYPE_INBAND_DEVICE_WAKE_FAILURE:
 			/* intentional fall through */
 		case DUMP_TYPE_INVALID_SHINFO_NRFRAGS:
+			/* intentional fall through */
+		case DUMP_TYPE_P2P_DISC_BUSY:
 			if (dhdp->db7_trap.fw_db7w_trap) {
 				/* Set fw_db7w_trap_inprogress here and clear from DPC */
 				dhdp->db7_trap.fw_db7w_trap_inprogress = TRUE;
 				dhdpcie_fw_trap(dhdp->bus);
 				OSL_DELAY(100 * 1000); // wait 100 msec
+				/*
+				 * Since dpc may have triggered db7, it will not pre-empt itself
+				 * so if trap_data is 0, re-read trap_data before giving up
+				 */
+				if (dhdp->dongle_trap_data == 0) {
+					dhdp->dongle_trap_data = dhd_prot_process_trapbuf(dhdp);
+				}
 				if (dhdp->db7_trap.fw_db7w_trap_recieved) {
 					/* Collect SSSR dump for all non trap cases
 					 * only after DB7 ack
@@ -4109,7 +4120,7 @@ dhdpcie_mem_dump(dhd_bus_t *bus)
 					dhdp->collect_sdtc = TRUE;
 #endif /* DHD_SDTC_ETB_DUMP */
 				} else {
-					DHD_ERROR(("%s : Did not recieve DB7\n", __FUNCTION__));
+					DHD_ERROR(("%s : Did not recieve DB7 Ack\n", __FUNCTION__));
 #ifdef WBRC
 					DHD_ERROR(("%s : Set do_chip_bighammer\n", __FUNCTION__));
 					bus->dhd->do_chip_bighammer = TRUE;
@@ -14280,6 +14291,9 @@ dhd_pcie_intr_count_dump(dhd_pub_t *dhd)
 	DHD_ERROR(("oob_irq_enabled=%d oob_gpio_level=%d\n",
 		dhdpcie_get_oob_irq_status(bus),
 		dhdpcie_get_oob_irq_level()));
+#ifdef PRINT_WAKEUP_GPIO_STATUS
+	exynos_pin_dbg_show(dhdpcie_get_oob_gpio_number(), "gpa0");
+#endif /* PRINT_WAKEUP_GPIO_STATUS */
 #endif /* BCMPCIE_OOB_HOST_WAKE */
 	DHD_ERROR(("dpc_return_busdown_count=%lu non_ours_irq_count=%lu\n",
 		bus->dpc_return_busdown_count, bus->non_ours_irq_count));

@@ -140,7 +140,7 @@ void slsi_ts_get_custom_library(struct slsi_ts_data *ts)
 		return;
 	}
 
-	sec_input_set_fod_info(ts->client, data[0], data[1], data[2]);
+	sec_input_set_fod_info(&ts->client->dev, data[0], data[1], data[2]);
 }
 
 int slsi_ts_wait_for_ready(struct slsi_ts_data *ts, u8 reg, u8 *data, int len, int delay)
@@ -402,7 +402,7 @@ i2c_error:
 
 void slsi_ts_unlocked_release_all_finger(struct slsi_ts_data *ts)
 {
-	sec_input_release_all_finger(ts->client);
+	sec_input_release_all_finger(&ts->client->dev);
 }
 
 void slsi_ts_locked_release_all_finger(struct slsi_ts_data *ts)
@@ -518,12 +518,12 @@ void slsi_ts_print_info_work(struct work_struct *work)
 	if (!ts->client)
 		return;
 
-	sec_input_print_info(ts->client, ts->tdata);
+	sec_input_print_info(&ts->client->dev, ts->tdata);
 
 	if (ts->sec.cmd_is_running)
 		input_err(true, &ts->client->dev, "%s: skip set temperature, cmd running\n", __func__);
 	else
-		sec_input_set_temperature(ts->client, SEC_INPUT_SET_TEMPERATURE_NORMAL);
+		sec_input_set_temperature(&ts->client->dev, SEC_INPUT_SET_TEMPERATURE_NORMAL);
 
 	if (!ts->plat_data->shutdown_called)
 		schedule_delayed_work(&ts->work_print_info, msecs_to_jiffies(TOUCH_PRINT_INFO_DWORK_TIME));
@@ -584,7 +584,7 @@ int slsi_ts_set_cover_type(struct slsi_ts_data *ts, bool enable)
 	input_info(true, &ts->client->dev, "%s: %s, type:%d\n",
 			__func__, enable ? "close" : "open", ts->plat_data->cover_type);
 
-	cover_cmd = sec_input_check_cover_type(ts->client) & 0xFF;
+	cover_cmd = sec_input_check_cover_type(&ts->client->dev) & 0xFF;
 
 	if (enable)
 		ts->plat_data->touch_functions |= SLSI_TS_BIT_SETFUNC_COVER;
@@ -618,9 +618,8 @@ int slsi_ts_set_cover_type(struct slsi_ts_data *ts, bool enable)
 }
 EXPORT_SYMBOL(slsi_ts_set_cover_type);
 
-int slsi_ts_set_temperature(struct i2c_client *client, u8 temperature_data)
+int slsi_ts_set_temperature(struct device *dev, u8 temperature_data)
 {
-	struct device *dev = &client->dev;
 	struct slsi_ts_data *ts = dev_get_drvdata(dev);
 
 	return ts->slsi_ts_i2c_write(ts, SET_TS_CMD_SET_LOWTEMPERATURE_MODE, &temperature_data, 1);
@@ -745,9 +744,8 @@ int slsi_ts_set_charger_mode(struct slsi_ts_data *ts)
  *		landscape -> normal (etc) : 0xAC....  + 0xAD, 0
  */
 
-void set_grip_data_to_ic(struct i2c_client *client, u8 flag)
+void slsi_set_grip_data_to_ic(struct device *dev, u8 flag)
 {
-	struct device *dev = &client->dev;
 	struct slsi_ts_data *ts = dev_get_drvdata(dev);
 
 	u8 data[8] = { 0 };

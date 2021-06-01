@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Samsung Electronics Co., Ltd. All Rights Reserved
+ * Copyright (c) 2020-2021 Samsung Electronics Co., Ltd. All Rights Reserved
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2
@@ -10,16 +10,21 @@
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/kthread.h>
-#include <linux/mutex.h>
+#include <linux/semaphore.h>
 #include <linux/string.h>
+#include <linux/version.h>
+#include <net/genetlink.h>
 #include "dsms_kernel_api.h"
 #include "dsms_message_list.h"
 #include "dsms_netlink.h"
+#include "dsms_netlink_protocol.h"
+#include "dsms_test.h"
 
 static struct dsms_message *current_message;
-static struct task_struct *dsms_sender_thread;
+__visible_for_testing struct task_struct *dsms_sender_thread;
 
-static DEFINE_MUTEX(dsms_wait_daemon_mutex);
+static struct semaphore dsms_wait_daemon = __SEMAPHORE_INITIALIZER(dsms_wait_daemon, 0);
+static atomic_t halting_thread = ATOMIC_INIT(0);
 
 static int dsms_start_sender_thread(struct sk_buff *skb, struct genl_info *info);
 
@@ -71,22 +76,32 @@ static struct genl_family dsms_family = {
 	.n_ops = ARRAY_SIZE(dsms_kernel_ops),
 };
 
-int prepare_userspace_communication(void)
+int __kunit_init dsms_netlink_init(void)
 {
+	int ret;
+
 	current_message = NULL;
 	dsms_sender_thread = NULL;
-	return genl_register_family(&dsms_family);
+	ret = genl_register_family(&dsms_family);
+	if (ret != 0)
+		DSMS_LOG_ERROR("Failed to start userspace communication: %d.", ret);
+	return ret;
 }
 
-int remove_userspace_communication(void)
+void __kunit_exit dsms_netlink_exit(void)
 {
-	if (mutex_is_locked(&dsms_wait_daemon_mutex))
-		mutex_unlock(&dsms_wait_daemon_mutex);
+	int ret;
+
+	atomic_set(&halting_thread, 1);
+	/* unlocks thread waiting for daemon, if any */
+	up(&dsms_wait_daemon);
 	kthread_stop(dsms_sender_thread);
-	return genl_unregister_family(&dsms_family);
+	ret = genl_unregister_family(&dsms_family);
+	if (ret != 0)
+		DSMS_LOG_ERROR("Failed to stop userspace communication: %d.", ret);
 }
 
-noinline int dsms_send_netlink_message(struct dsms_message *message)
+__visible_for_testing noinline int dsms_send_netlink_message(struct dsms_message *message)
 {
 	struct sk_buff *skb;
 	void *msg_head;
@@ -141,33 +156,57 @@ static int dsms_send_messages_thread(void *unused)
 {
 	int ret;
 
-	msleep(2000);
 	while (1) {
-		if (!current_message && !kthread_should_stop())
-			current_message = get_dsms_message();
+		if (atomic_read(&halting_thread) == 0) {
+			if (down_interruptible(&dsms_wait_daemon) != 0)
+				goto exit_thread;
+		}
 
 		if (kthread_should_stop())
-			do_exit(0);
+			goto exit_thread;
 
-		if (!current_message) {
-			DSMS_LOG_DEBUG("There is no message in the list.");
-			continue;
+		/*
+		 * Wait timeout given to daemon to receive the message from the
+		 * thread.
+		 *
+		 * If the thread sends a message and the daemon did not
+		 * received the message yet. Then, sending another message will
+		 * result in loss of the first message and error on
+		 * dsms_send_netlink.
+		 */
+		msleep(2000);
+
+		while (atomic_read(&halting_thread) == 0) {
+			if (!current_message && !kthread_should_stop())
+				current_message = get_dsms_message();
+
+			if (atomic_read(&halting_thread) == 1)
+				break;
+
+			if (kthread_should_stop())
+				goto exit_thread;
+
+			if (!current_message) {
+				DSMS_LOG_DEBUG("There is no message in the list.");
+				goto exit_thread;
+			}
+
+			ret = dsms_send_netlink_message(current_message);
+			if (ret < 0) {
+				DSMS_LOG_ERROR("Error while send a message? %d.", ret);
+				break;
+			}
+
+			kfree(current_message->feature_code);
+			kfree(current_message->detail);
+			kfree(current_message);
+			current_message = NULL;
 		}
-
-		ret = dsms_send_netlink_message(current_message);
-		if (ret < 0) {
-			DSMS_LOG_ERROR("Error while send a message? %d.", ret);
-			mutex_lock(&dsms_wait_daemon_mutex);
-			msleep(2000);
-			continue;
-		}
-
-		kfree(current_message->feature_code);
-		kfree(current_message->detail);
-		kfree(current_message);
-		current_message = NULL;
 	}
-	return 0;
+exit_thread:
+	dsms_sender_thread = NULL;
+	DSMS_LOG_DEBUG("Sender thread exiting.");
+	do_exit(0);
 }
 
 static int dsms_start_sender_thread(struct sk_buff *skb, struct genl_info *info)
@@ -176,9 +215,7 @@ static int dsms_start_sender_thread(struct sk_buff *skb, struct genl_info *info)
 		dsms_sender_thread = kthread_run(dsms_send_messages_thread, NULL, "dsms_kthread");
 		if (!dsms_sender_thread)
 			DSMS_LOG_ERROR("It was not possible to create the dsms thread.");
-	} else {
-		if (mutex_is_locked(&dsms_wait_daemon_mutex))
-			mutex_unlock(&dsms_wait_daemon_mutex);
 	}
+	up(&dsms_wait_daemon);
 	return 0;
 }

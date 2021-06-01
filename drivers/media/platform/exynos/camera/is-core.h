@@ -290,7 +290,6 @@ struct is_core {
 
 	struct mutex				sensor_lock;
 	struct is_device_sensor		sensor[IS_SENSOR_COUNT];
-	struct is_device_csi_dma		csi_dma;
 	u32					chain_config;
 	struct is_device_ischain		ischain[IS_STREAM_COUNT];
 

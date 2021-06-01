@@ -17,6 +17,7 @@
 #define FINGERPRINT_H_
 
 #undef DEBUG /* If you need pr_debug logs, changes this difinition */
+#undef pr_fmt
 #define pr_fmt(fmt) "fps_%s: " fmt, __func__
 
 #include <linux/clk.h>

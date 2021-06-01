@@ -60,7 +60,7 @@ static ssize_t qbt2000_bfs_values_show(struct device *dev,
 	struct qbt2000_drvdata *drvdata = dev_get_drvdata(dev);
 
 	return snprintf(buf, PAGE_SIZE, "\"FP_SPICLK\":\"%d\"\n",
-			drvdata->spi_speed);
+			drvdata->clk_setting->spi_speed);
 }
 
 static ssize_t qbt2000_type_check_show(struct device *dev,
@@ -257,7 +257,7 @@ static int qbt2000_enable_spi_clock(struct qbt2000_drvdata *drvdata)
 {
 	int rc = 0;
 
-	rc = qbt2000_set_clk(drvdata, 1);
+	rc = spi_clk_enable(drvdata->clk_setting);
 	return rc;
 }
 
@@ -265,7 +265,7 @@ static int qbt2000_disable_spi_clock(struct qbt2000_drvdata *drvdata)
 {
 	int rc = 0;
 
-	rc = qbt2000_set_clk(drvdata, 0);
+	rc = spi_clk_disable(drvdata->clk_setting);
 	return rc;
 }
 
@@ -301,7 +301,7 @@ static int qbt2000_disable_ipc(struct qbt2000_drvdata *drvdata)
 			drvdata->enabled_ipc = false;
 		} else {
 			rc = -EINVAL;
-			pr_err("already disabled ipc\n");			
+			pr_err("already disabled ipc\n");
 		}
 	}
 	return rc;
@@ -507,7 +507,10 @@ static long qbt2000_ioctl(
 			rc = -EFAULT;
 			goto ioctl_failed;
 		}
-		rc = qbt2000_set_cpu_speedup(drvdata, data);
+		if (data)
+			rc = cpu_speedup_enable(drvdata->boosting);
+		else
+			rc = cpu_speedup_disable(drvdata->boosting);
 		break;
 	case QBT2000_SET_SENSOR_TYPE:
 		if (copy_from_user(&data, (void *)arg, sizeof(int)) != 0) {
@@ -515,19 +518,7 @@ static long qbt2000_ioctl(
 			rc = -EFAULT;
 			goto ioctl_failed;
 		}
-		if (data >= SENSOR_OOO && data < SENSOR_MAXIMUM) {
-			if (data == SENSOR_OOO && drvdata->sensortype == SENSOR_FAILED) {
-				pr_err("Maintain type check from out of oder :%s\n",
-						sensor_status[drvdata->sensortype + 2]);
-			} else {
-				drvdata->sensortype = data;
-				pr_info("SET_SENSOR_TYPE :%s\n",
-						sensor_status[drvdata->sensortype + 2]);
-			}
-		} else {
-			pr_err("SET_SENSOR_TYPE : invalid value %d\n", data);
-			drvdata->sensortype = SENSOR_UNKNOWN;
-		}
+		set_sensor_type(data, &drvdata->sensortype);
 		break;
 	case QBT2000_SET_LOCKSCREEN:
 		break;
@@ -994,7 +985,7 @@ static int qbt2000_read_device_tree(struct platform_device *pdev,
 	drvdata->ldogpio = of_get_named_gpio(pdev->dev.of_node, "qcom,ldo-gpio", 0);
 	if (drvdata->ldogpio < 0) {
 		pr_info("ldo gpio not found. %d\n", drvdata->ldogpio);
-	} else {			
+	} else {
 		rc = gpio_request(drvdata->ldogpio, "qbt_ldo_en");
 		gpio_direction_output(drvdata->ldogpio, 0);
 		drvdata->enabled_ldo = 0;
@@ -1019,8 +1010,8 @@ static int qbt2000_read_device_tree(struct platform_device *pdev,
 	}
 
 	if (of_property_read_u32(pdev->dev.of_node, "qcom,min_cpufreq_limit",
-				&drvdata->min_cpufreq_limit))
-		drvdata->min_cpufreq_limit = 0;
+				&drvdata->boosting->min_cpufreq_limit))
+		drvdata->boosting->min_cpufreq_limit = 0;
 
 	if (of_property_read_string_index(pdev->dev.of_node, "qcom,position", 0,
 			(const char **)&drvdata->sensor_position))
@@ -1120,6 +1111,16 @@ static int qbt2000_probe(struct platform_device *pdev)
 	if (!drvdata)
 		return -ENOMEM;
 
+	drvdata->clk_setting = devm_kzalloc(dev, sizeof(*drvdata->clk_setting),
+						GFP_KERNEL);
+	if (drvdata->clk_setting == NULL)
+		return -ENOMEM;
+
+	drvdata->boosting = devm_kzalloc(dev, sizeof(*drvdata->boosting),
+						GFP_KERNEL);
+	if (drvdata->boosting == NULL)
+		return -ENOMEM;
+
 	drvdata->dev = &pdev->dev;
 	platform_set_drvdata(pdev, drvdata);
 
@@ -1144,7 +1145,7 @@ static int qbt2000_probe(struct platform_device *pdev)
 	init_waitqueue_head(&drvdata->read_wait_queue_fd);
 	init_waitqueue_head(&drvdata->read_wait_queue_ipc);
 
-	drvdata->fp_spi_lock = wakeup_source_register(&pdev->dev, "qbt2000_spi_lock");
+	drvdata->clk_setting->spi_wake_lock = wakeup_source_register(&pdev->dev, "qbt2000_spi_lock");
 	drvdata->fp_signal_lock = wakeup_source_register(&pdev->dev, "qbt2000_signal_lock");
 
 	rc = qbt2000_pinctrl_register(drvdata);
@@ -1175,7 +1176,7 @@ static int qbt2000_probe(struct platform_device *pdev)
 	}
 
 	g_data = drvdata;
-	drvdata->spi_speed = SPI_CLOCK_MAX;
+	drvdata->clk_setting->spi_speed = SPI_CLOCK_MAX;
 	drvdata->sensortype = SENSOR_QBT2000;
 	drvdata->cbge_count = 0;
 	drvdata->wuhb_count = 0;
@@ -1183,10 +1184,10 @@ static int qbt2000_probe(struct platform_device *pdev)
 	drvdata->wuhb_test_flag = 0;
 	drvdata->wuhb_test_result = 0;
 #ifdef ENABLE_SENSORS_FPRINT_SECURE
-	drvdata->enabled_clk = false;
+	drvdata->clk_setting->enabled_clk = false;
 	drvdata->tz_mode = true;
 #else
-	drvdata->enabled_clk = true;
+	drvdata->clk_setting->enabled_clk = true;
 	drvdata->tz_mode = false;
 #endif
 
@@ -1208,7 +1209,7 @@ probe_failed_fd_gpio:
 		drvdata->p = NULL;
 	}
 probe_failed_pinctrl:
-	wakeup_source_unregister(drvdata->fp_spi_lock);
+	wakeup_source_unregister(drvdata->clk_setting->spi_wake_lock);
 	wakeup_source_unregister(drvdata->fp_signal_lock);
 	device_destroy(drvdata->qbt2000_class, drvdata->qbt2000_ipc_cdev.dev);
 	device_destroy(drvdata->qbt2000_class, drvdata->qbt2000_fd_cdev.dev);
@@ -1221,7 +1222,7 @@ probe_failed_dev_register:
 	if (drvdata->regulator_1p8)
 		regulator_put(drvdata->regulator_1p8);
 probe_failed_dt:
-	kfree(drvdata);
+	drvdata = NULL;
 	pr_err("failed: %d\n", rc);
 	return rc;
 }
@@ -1242,7 +1243,7 @@ static int qbt2000_remove(struct platform_device *pdev)
 	qbt2000_disable_debug_timer();
 	if (drvdata->regulator_1p8)
 		regulator_put(drvdata->regulator_1p8);
-	wakeup_source_unregister(drvdata->fp_spi_lock);
+	wakeup_source_unregister(drvdata->clk_setting->spi_wake_lock);
 	wakeup_source_unregister(drvdata->fp_signal_lock);
 	class_destroy(drvdata->qbt2000_class);
 	cdev_del(&drvdata->qbt2000_fd_cdev);
@@ -1257,7 +1258,7 @@ static int qbt2000_remove(struct platform_device *pdev)
 		pinctrl_put(drvdata->p);
 		drvdata->p = NULL;
 	}
-	kfree(drvdata);
+	drvdata = NULL;
 
 	return 0;
 }

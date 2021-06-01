@@ -854,6 +854,8 @@ static int mfc_enc_qbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
 			return -EINVAL;
 		}
 
+		mfc_idle_update_queued(dev, ctx);
+
 		for (i = 0; i < ctx->src_fmt->mem_planes; i++) {
 			if (!buf->m.planes[i].bytesused) {
 				mfc_debug(2, "[FRAME] enc src[%d] size zero, "
@@ -868,11 +870,11 @@ static int mfc_enc_qbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
 
 		ret = vb2_qbuf(&ctx->vq_src, NULL, buf);
 	} else {
+		mfc_idle_update_queued(dev, ctx);
+
 		mfc_debug(4, "enc dst buf[%d] Q\n", buf->index);
 		ret = vb2_qbuf(&ctx->vq_dst, NULL, buf);
 	}
-
-	atomic_inc(&dev->queued_cnt);
 
 	mfc_debug_leave();
 	return ret;

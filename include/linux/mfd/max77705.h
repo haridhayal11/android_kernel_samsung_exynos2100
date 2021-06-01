@@ -48,6 +48,12 @@ struct max77705_vibrator_pdata {
 	int overdrive_ratio;
 	int high_temp_ratio;
 	int high_temp_ref;
+#if defined(CONFIG_SEC_VIBRATOR)
+	bool calibration;
+	int steps;
+	int *intensities;
+	int *haptic_intensities;
+#endif
 };
 
 struct max77705_regulator_data {

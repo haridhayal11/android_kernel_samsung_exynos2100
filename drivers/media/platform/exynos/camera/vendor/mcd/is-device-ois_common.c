@@ -680,6 +680,32 @@ void is_ois_check_cross_talk(struct is_core *core, u16 *hall_data)
 	return;
 }
 
+void is_ois_check_hall_cal(struct is_core *core, u16 *hall_cal_data)
+{
+	struct is_device_ois *ois_device = NULL;
+	struct is_device_sensor *device = NULL;
+
+	ois_device = is_ois_get_device(core);
+	device = &core->sensor[0];
+
+	CALL_OISOPS(ois_device, ois_check_hall_cal, device->subdev_mcu, hall_cal_data);
+
+	return;
+}
+
+void is_ois_check_valid(struct is_core *core, u8 *value)
+{
+	struct is_device_ois *ois_device = NULL;
+	struct is_device_sensor *device = NULL;
+
+	ois_device = is_ois_get_device(core);
+	device = &core->sensor[0];
+
+	CALL_OISOPS(ois_device, ois_check_valid, device->subdev_mcu, value);
+
+	return;
+}
+
 int is_ois_read_ext_clock(struct is_core *core, u32 *clock)
 {
 	struct is_device_ois *ois_device = NULL;

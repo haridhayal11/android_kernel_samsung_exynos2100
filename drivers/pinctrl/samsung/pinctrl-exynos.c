@@ -407,8 +407,8 @@ static int exynos_wkup_irq_set_wake(struct irq_data *irqd, unsigned int on)
 			exynos_eint_wake_mask_array_ul,
 			96);
 
-	dev_info(d->dev, "wake %s for irq %d\n", on ? "enabled" : "disabled",
-		 irqd->irq);
+	dev_info(d->dev, "wake %s for irq %d, hwirq %d\n", on ? "enabled" : "disabled",
+		 irqd->irq, irqd->hwirq);
 	dev_info(d->dev, "(%s:0x%x) dirq = %d, eint_num = %u\n",
 		 bank->name, bank->eint_offset, d->irq, bank->eint_num);
 

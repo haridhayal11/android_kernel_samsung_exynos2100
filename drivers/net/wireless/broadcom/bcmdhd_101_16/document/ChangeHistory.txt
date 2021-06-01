@@ -1,4 +1,69 @@
-BCM4375 DHD 101.16.48.4 for Android R OS - Palette(O1,T2)/Canvas/Hubble/Davinci/Beyond Project
+BCM4361/BCM4375 DHD 101.16.64 for Android R OS - Palette(O1,T2)/Canvas/Hubble/Davinci/Beyond/R7 Project
+
+DHD 101.16.64 - 2021.03.05
+Others
+ - CS00011959879(By Kim Tae-Yong) Fixed usr_sync deadlock issue while p2p discovery during remain on channel
+
+
+DHD 101.16.63 - 2021.02.25
+Kernel Panic
+ - CS00011933130(By Kim Tae-Yong) Fixed kernel panic from NULL pointer de-reference
+
+Others
+ - CS00011517889(By Kim Tae-Yong) Added PKTID MAP logging dump
+
+
+DHD 101.16.61 - 2021.02.23
+Kernel Panic
+ - CS00011920482(By Choi Junsu) Fixed a kernel panic issue running monitor mode
+
+Others
+ - CS00011696062(By Min SungBin) Printed additional GPIO status to check GPIO mismatch case
+ - CS00011818292(By Kim Tae-Yong) Fixed watchdog bark if Tx scheduled in DHD suspended state
+ - CS00011833097(By Jang WonJun) Fixed to trigger hang for recovery in case of successive p2p disc error
+ - CS00011880875(By Choi Hyeonu) Support DHD_CLEANUP_KEEP_ALIVE feature
+ - CS00011881246(By Lee Sunghee) Fixed abnormal link status issue after roaming failure due to assoc IEs
+ - Added to print for current roaming mode in DHD
+
+
+DHD 101.16.58 - 2021.01.29
+Kernel Panic
+ - CS00011730022(By Kim Tae-Yong) Fixed kernel panic due to DHD holding rtnl_lock by doing memdump continuously
+ - CS00011743291(By LEE EONJI) Fixed kernel panic due to null pointer dereference during suspend
+
+Security Patch
+ - CS00011698137(By Choi Junsu) SI-17361: Fixed out of bound
+
+Others
+ - CS00011571258(By Kim Tae-Yong) Fixed to assign CPU core 0 for DHD scheduling(napi_cpu, tx_cpu) if assigned CPU core is unavailable
+ - CS00011581257(By Park Jun-young) Added a log to check whether dhdpcie_host_wake is due to event log
+ - CS00011688166(By LEE EONJI) Cleared PNO scan handler explicit during wlan0 interface off
+ - CS00011703376(By Park Jun-young) Added to set bcn_li_dtim at disable MAX_DTIM_IN_SUSPEND
+ - CS00011710100(By Kim Seong Hwan) Added missing feature for 4361B2 ROS
+ - CS00011711074(By Choi Hyeonu) Changed the log considered to be a failure even though it is normal
+ - CS00011731562(By LEE EONJI) Fixed to check intstatus and the range of valid index to avoid re-waiting for d3 ack
+
+
+DHD 101.16.56 - 2020.12.24
+Kernel Panic
+ - CS00011537417(By Kim Tae-Yong) Fixed Kernel panic by added code to avoid invalid address access during CTO recovery
+ - CS00011647166(By Kim Tae-Yong) Fixed Kernel panic issue for WIFI off after RTT starting
+
+Others
+ - CS00011481171(By Min SungBin) Fixed the clm memory allocation function failure by changed the memory allocation function from kmalloc to vmalloc
+ - CS00011511065(By Manh Nguyen) Support ANQP random mac feature on BCM4361B2
+   (This patch should be sync up with FW 13.50.33 or higher version)
+ - CS00011677831(By Park Jun-young) Added CUSTOM_SUSPEND_BCN_LI_DTIM=1 in Makefile
+ - Added CONFIG_SILENT_ROAM in Makefile for 4361 R-OS
+ - Fixed to support 32-bit Hal library
+ - Fixed UDP low TPUT issue on Exynos platform
+ - Merged code for Android Wear bring-up
+
+
+DHD 101.16.48.5 - 2020.12.24
+Others
+ - CS00011685845(By Tae-Yong Kim) Fixed not to wait scheduled scan work handler completed on connection
+
 
 DHD 101.16.48.4 - 2020.12.21
 Others

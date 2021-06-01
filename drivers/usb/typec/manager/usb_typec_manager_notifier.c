@@ -1167,14 +1167,11 @@ static void delayed_manger_notifier_init(struct work_struct *work)
 
 static void managet_dp_status_init(void)
 {
-	struct device_node *np = NULL;
-
 	typec_manager.dp.is_connect = 0;
 	typec_manager.dp.hs_connect = 0;
 	typec_manager.dp.check_done = 1;
 
-	np = of_find_node_by_name(NULL, "displayport");
-	if (!of_get_property(np, "dp,displayport_not_support", NULL)) {
+	if (IS_ENABLED(CONFIG_SEC_DISPLAYPORT)) {
 		pr_info("%s: usb_host: support DP\n", __func__);
 		typec_manager.dp.is_support = 1;
 	} else {

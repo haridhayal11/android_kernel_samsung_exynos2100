@@ -1569,6 +1569,12 @@ static void open_test_work(struct work_struct *work)
 		wacom_reset_hw(wac_i2c);
 	}
 
+	if (wac_i2c->is_tsp_block) {
+		wac_i2c->tsp_scan_mode = sec_input_notify(&wac_i2c->nb, NOTIFIER_TSP_BLOCKING_RELEASE, NULL);
+		wac_i2c->is_tsp_block = false;
+		input_err(true, &wac_i2c->client->dev, "%s : release tsp scan block\n", __func__);
+	}
+
 	input_info(true, &wac_i2c->client->dev, "%s : end!\n", __func__);
 #else
 	input_info(true, &wac_i2c->client->dev, "open test skiped!\n");

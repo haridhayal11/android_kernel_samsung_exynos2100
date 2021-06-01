@@ -76,6 +76,7 @@ static unsigned int sensor_hm3_config_index_pre_ln;
 
 int sensor_hm3_cis_set_global_setting(struct v4l2_subdev *subdev);
 int sensor_hm3_cis_wait_streamon(struct v4l2_subdev *subdev);
+int sensor_hm3_cis_set_cal(struct v4l2_subdev *subdev);
 
 static bool sensor_hm3_cis_is_wdr_mode_on(cis_shared_data *cis_data)
 {
@@ -492,6 +493,48 @@ int sensor_hm3_cis_log_status(struct v4l2_subdev *subdev)
 	ret = is_sensor_read16(client, 0x19C2, &data16);
 	if (unlikely(!ret)) pr_info("0x19C2(0x%x)\n", data16);
 	else goto i2c_err;
+	ret = is_sensor_read16(client, 0x034C, &data16);
+	if (unlikely(!ret)) pr_info("0x034C(0x%x)\n", data16);
+	else goto i2c_err;
+	ret = is_sensor_read16(client, 0x034E, &data16);
+	if (unlikely(!ret)) pr_info("0x034E(0x%x)\n", data16);
+	else goto i2c_err;
+	ret = is_sensor_write16(client, 0xFCFC, 0x2001);
+	if (unlikely(!ret)) pr_info("0x2001 page\n");
+	else goto i2c_err;
+	ret = is_sensor_read16(client, 0x96A0, &data16);
+	if (unlikely(!ret)) pr_info("0x96A0(0x%x)\n", data16);
+	else goto i2c_err;
+	ret = is_sensor_read16(client, 0x96A2, &data16);
+	if (unlikely(!ret)) pr_info("0x96A2(0x%x)\n", data16);
+	else goto i2c_err;
+	ret = is_sensor_read16(client, 0x96A4, &data16);
+	if (unlikely(!ret)) pr_info("0x96A4(0x%x)\n", data16);
+	else goto i2c_err;
+	ret = is_sensor_read16(client, 0x96A6, &data16);
+	if (unlikely(!ret)) pr_info("0x96A6(0x%x)\n", data16);
+	else goto i2c_err;
+	ret = is_sensor_read16(client, 0x96A8, &data16);
+	if (unlikely(!ret)) pr_info("0x96A8(0x%x)\n", data16);
+	else goto i2c_err;
+	ret = is_sensor_read16(client, 0x96AA, &data16);
+	if (unlikely(!ret)) pr_info("0x96AA(0x%x)\n", data16);
+	else goto i2c_err;
+	ret = is_sensor_read16(client, 0x96AC, &data16);
+	if (unlikely(!ret)) pr_info("0x96AC(0x%x)\n", data16);
+	else goto i2c_err;
+	ret = is_sensor_read16(client, 0x96AE, &data16);
+	if (unlikely(!ret)) pr_info("0x96AE(0x%x)\n", data16);
+	else goto i2c_err;
+	ret = is_sensor_read8(client, 0x846D, &data8);
+	if (unlikely(!ret)) pr_info("0x846D(0x%x)\n", data8);
+	else goto i2c_err;
+	ret = is_sensor_write16(client, 0xFCFC, 0x2000);
+	if (unlikely(!ret)) pr_info("0x2000 page\n");
+	else goto i2c_err;
+	ret = is_sensor_read16(client, 0x1668, &data16);
+	if (unlikely(!ret)) pr_info("0x1668(0x%x)\n", data16);
+	else goto i2c_err;
 	ret = is_sensor_write16(client, 0xFCFC, 0x4000);
 	if (unlikely(!ret)) pr_info("0x4000 page\n");
 	else goto i2c_err;
@@ -528,16 +571,17 @@ static int sensor_hm3_cis_group_param_hold_func(struct v4l2_subdev *subdev, unsi
 	}
 
 	if (hold == cis->cis_data->group_param_hold) {
-		pr_debug("already group_param_hold (%d)\n", cis->cis_data->group_param_hold);
+		dbg_sensor(1, "%s : already group_param_hold (%d)\n", __func__, cis->cis_data->group_param_hold);
 		goto p_err;
 	}
 
 	ret = is_sensor_write8(client, 0x0104, hold); /* api_rw_general_setup_grouped_parameter_hold */
+	dbg_sensor(1, "%s : hold = %d, ret = %d\n", __func__, hold, ret);
 	if (ret < 0)
 		goto p_err;
 
 	cis->cis_data->group_param_hold = hold;
-	ret = 1;
+	ret = hold;
 p_err:
 	return ret;
 }
@@ -580,11 +624,17 @@ int sensor_hm3_cis_set_global_setting_internal(struct v4l2_subdev *subdev)
 {
 	int ret = 0;
 	struct is_cis *cis = NULL;
+	struct is_module_enum *module;
+	struct is_device_sensor_peri *sensor_peri = NULL;
+	struct sensor_open_extended *ext_info;
 
 	WARN_ON(!subdev);
-
 	cis = (struct is_cis *)v4l2_get_subdevdata(subdev);
 	WARN_ON(!cis);
+	sensor_peri = container_of(cis, struct is_device_sensor_peri, cis);
+	module = sensor_peri->module;
+	ext_info = &module->ext;
+	WARN_ON(!ext_info);
 
 	I2C_MUTEX_LOCK(cis->i2c_lock);
 	info("[%s] global setting internal start\n", __func__);
@@ -597,13 +647,13 @@ int sensor_hm3_cis_set_global_setting_internal(struct v4l2_subdev *subdev)
 
 	info("[%s] global setting internal done\n", __func__);
 
-#ifndef USE_CAMERA_SENSOR_RETENTION
-	ret = sensor_hm3_cis_set_cal(subdev);
-	if (ret < 0) {
-		err("sensor_hm3_cis_set_cal fail!!");
-		goto p_err;
+	if (ext_info->use_retention_mode == SENSOR_RETENTION_UNSUPPORTED) {
+		ret = sensor_hm3_cis_set_cal(subdev);
+		if (ret < 0) {
+			err("sensor_hm3_cis_set_cal fail!!");
+			goto p_err;
+		}
 	}
-#endif
 
 p_err:
 	I2C_MUTEX_UNLOCK(cis->i2c_lock);
@@ -882,9 +932,13 @@ int sensor_hm3_cis_set_cal(struct v4l2_subdev *subdev)
 		if (cal_buf[start_addr + 2] == 0xFF && cal_buf[start_addr + 3] == 0xFF &&
 			cal_buf[start_addr + 4] == 0xFF && cal_buf[start_addr + 5] == 0xFF &&
 			cal_buf[start_addr + 6] == 0xFF && cal_buf[start_addr + 7] == 0xFF &&
-			cal_buf[start_addr + 8] == 0xFF && cal_buf[start_addr + 9] == 0xFF) {
+			cal_buf[start_addr + 8] == 0xFF && cal_buf[start_addr + 9] == 0xFF &&
+			cal_buf[start_addr + 10] == 0xFF && cal_buf[start_addr + 11] == 0xFF &&
+			cal_buf[start_addr + 12] == 0xFF && cal_buf[start_addr + 13] == 0xFF &&
+			cal_buf[start_addr + 14] == 0xFF && cal_buf[start_addr + 15] == 0xFF &&
+			cal_buf[start_addr + 16] == 0xFF && cal_buf[start_addr + 17] == 0xFF) {
 			info("empty Cal - cal offset[0x%04X] = val[0x%02X], cal offset[0x%04X] = val[0x%02X]",
-				start_addr + 2, cal_buf[start_addr + 2], start_addr + 9, cal_buf[start_addr + 9]);
+				start_addr + 2, cal_buf[start_addr + 2], start_addr + 17, cal_buf[start_addr + 17]);
 			info("[%s] empty Cal", __func__);
 			return 0;
 		}
@@ -892,13 +946,17 @@ int sensor_hm3_cis_set_cal(struct v4l2_subdev *subdev)
 		len = (finfo->rom_xtc_cal_data_addr_list_len / HM3_CAL_ROW_LEN) - 1;
 		if (len >= 0) {
 			end_addr = finfo->rom_xtc_cal_data_addr_list[len * HM3_CAL_ROW_LEN + HM3_CAL_END_ADDR];
-			if (end_addr >= 7) {
+			if (end_addr >= 15) {
 				if (cal_buf[end_addr	] == 0xFF && cal_buf[end_addr - 1] == 0xFF &&
 					cal_buf[end_addr - 2] == 0xFF && cal_buf[end_addr - 3] == 0xFF &&
 					cal_buf[end_addr - 4] == 0xFF && cal_buf[end_addr - 5] == 0xFF &&
-					cal_buf[end_addr - 6] == 0xFF && cal_buf[end_addr - 7] == 0xFF) {
+					cal_buf[end_addr - 6] == 0xFF && cal_buf[end_addr - 7] == 0xFF &&
+					cal_buf[end_addr - 8] == 0xFF && cal_buf[end_addr - 9] == 0xFF &&
+					cal_buf[end_addr - 10] == 0xFF && cal_buf[end_addr - 11] == 0xFF &&
+					cal_buf[end_addr - 12] == 0xFF && cal_buf[end_addr - 13] == 0xFF &&
+					cal_buf[end_addr - 14] == 0xFF && cal_buf[end_addr - 15] == 0xFF) {
 					info("empty Cal - cal offset[0x%04X] = val[0x%02X], cal offset[0x%04X] = val[0x%02X]",
-						end_addr, cal_buf[end_addr], end_addr - 7, cal_buf[end_addr - 7]);
+						end_addr, cal_buf[end_addr], end_addr - 15, cal_buf[end_addr - 15]);
 					info("[%s] empty Cal", __func__);
 					return 0;
 				}
@@ -1112,7 +1170,7 @@ int sensor_hm3_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 #ifdef USE_CAMERA_SENSOR_RETENTION
 	int load_sram_idx = -1;
 	int load_sram_idx_ln = -1;
-	u32 fast_change_idx = -1;
+	u16 fast_change_idx = 0x00FF;
 #endif
 
 	WARN_ON(!subdev);
@@ -1340,10 +1398,11 @@ int sensor_hm3_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 			info("[%s] not support retention sensor mode(%d)\n", __func__, mode);
 			load_sram_idx = -1;
 			load_sram_idx_ln = -1;
-			fast_change_idx = -1;
+			fast_change_idx = 0x00FF;
 
 			//Fast Change disable
-			ret = is_sensor_write16(cis->client, 0x0B30, 0x00FF);
+			ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
+			ret |= is_sensor_write16(cis->client, 0x0B30, 0x00FF);
 
 			ret |= sensor_cis_set_registers(subdev, sensor_hm3_setfiles[mode],
 								sensor_hm3_setfile_sizes[mode]);
@@ -1375,7 +1434,7 @@ int sensor_hm3_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 			}
 		}
 
-		if (fast_change_idx != -1) {
+		if (fast_change_idx != 0x00FF) {
 			ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
 			ret |= is_sensor_write16(cis->client, 0x0B30, fast_change_idx);
 			if (ret < 0) {
@@ -1386,7 +1445,11 @@ int sensor_hm3_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 	} else
 #endif
 	{
-		ret = sensor_cis_set_registers(subdev, sensor_hm3_setfiles[mode],
+		//Fast Change disable
+		ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
+		ret |= is_sensor_write16(cis->client, 0x0B30, 0x00FF);
+
+		ret |= sensor_cis_set_registers(subdev, sensor_hm3_setfiles[mode],
 								sensor_hm3_setfile_sizes[mode]);
 		if (ret < 0) {
 			err("sensor_hm3_set_registers fail!!");
@@ -1394,7 +1457,7 @@ int sensor_hm3_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 		}
 	}
 
-	info("[%s] sensor mode done(%d)\n", __func__, mode);
+	info("[%s] sensor mode done(%d), fast_change_idx(0x%x)\n", __func__, mode, fast_change_idx);
 
 	cis->cis_data->sens_config_index_pre = mode;
 
@@ -1418,6 +1481,10 @@ int sensor_hm3_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 		cis->cis_data->cur_12bit_mode = SENSOR_12BIT_STATE_OFF;
 	}
 
+	cis->cis_data->pre_lownoise_mode = IS_CIS_LNOFF;
+	cis->cis_data->cur_lownoise_mode = IS_CIS_LNOFF;
+	sensor_hm3_cis_set_lownoise_mode_change(subdev);
+
 p_err_i2c_unlock:
 	I2C_MUTEX_UNLOCK(cis->i2c_lock);
 
@@ -1433,7 +1500,7 @@ int sensor_hm3_cis_set_lownoise_mode_change(struct v4l2_subdev *subdev)
 	int ret = 0;
 	struct is_cis *cis = NULL;
 	unsigned int mode = 0;
-	u32 fast_change_idx = -1;
+	u16 fast_change_idx = 0x00FF;
 
 	WARN_ON(!subdev);
 
@@ -1489,7 +1556,7 @@ int sensor_hm3_cis_set_lownoise_mode_change(struct v4l2_subdev *subdev)
 			fast_change_idx = 0x0105;
 			break;
 		default:
-			err("not support mode(%d)\n", __func__, mode);
+			err("not support mode(%d)\n", mode);
 			break;
 		}
 		break;
@@ -1539,7 +1606,7 @@ int sensor_hm3_cis_set_lownoise_mode_change(struct v4l2_subdev *subdev)
 			fast_change_idx = 0x0103;
 			break;
 		default:
-			err("not support mode(%d)\n", __func__, mode);
+			err("not support mode(%d)\n", mode);
 			break;
 		}
 		break;
@@ -1547,7 +1614,7 @@ int sensor_hm3_cis_set_lownoise_mode_change(struct v4l2_subdev *subdev)
 		dbg_sensor(1, "[%s] not support lownoise mode(%d)\n", __func__, cis->cis_data->cur_lownoise_mode);
 	}
 
-	if (fast_change_idx != -1) {
+	if (fast_change_idx != 0x00FF) {
 		ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
 		ret |= is_sensor_write16(cis->client, 0x0B30, fast_change_idx);
 		if (ret < 0) {
@@ -1576,7 +1643,7 @@ int sensor_hm3_cis_set_iDCG_mode_change(struct v4l2_subdev *subdev)
 	int ret = 0;
 	struct is_cis *cis = NULL;
 	unsigned int mode = 0;
-	u32 fast_change_idx = -1;
+	u16 fast_change_idx = 0x00FF;
 
 	WARN_ON(!subdev);
 
@@ -1633,15 +1700,15 @@ int sensor_hm3_cis_set_iDCG_mode_change(struct v4l2_subdev *subdev)
 			fast_change_idx = 0x0102;
 			break;
 		default:
-			err("not support mode(%d)\n", __func__, mode);
+			err("not support mode(%d)\n", mode);
 			break;
 		}
 		break;
 	default:
-		err("not support 12bit mode(%d)\n", __func__, cis->cis_data->cur_12bit_mode);
+		err("not support 12bit mode(%d)\n", cis->cis_data->cur_12bit_mode);
 	}
 
-	if (fast_change_idx != -1) {
+	if (fast_change_idx != 0x00FF) {
 		ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
 		ret |= is_sensor_write16(cis->client, 0x0B30, fast_change_idx);
 		if (ret < 0) {
@@ -1655,9 +1722,9 @@ int sensor_hm3_cis_set_iDCG_mode_change(struct v4l2_subdev *subdev)
 	if (ret < 0)
 		err("group_param_hold_func failed");
 
-	info("[%s]pre mode(%d) -> cur mode(%d), 12bit mode(%d)\n", __func__,
+	info("[%s]pre mode(%d) -> cur mode(%d), 12bit mode(%d), fast_change_idx(0x%x)\n", __func__,
 		cis->cis_data->sens_config_index_pre, cis->cis_data->sens_config_index_cur,
-		cis->cis_data->cur_12bit_mode);
+		cis->cis_data->cur_12bit_mode, fast_change_idx);
 
 p_err:
 	cis->cis_data->pre_12bit_mode = cis->cis_data->cur_12bit_mode;
@@ -1702,6 +1769,7 @@ int sensor_hm3_cis_set_global_setting(struct v4l2_subdev *subdev)
 		} else if (ext_info->use_retention_mode == SENSOR_RETENTION_ACTIVATED) {
 			sensor_hm3_cis_retention_crc_check(subdev);
 		} else { /* SENSOR_RETENTION_UNSUPPORTED */
+			sensor_hm3_eeprom_cal_available = false;
 			sensor_hm3_cis_set_global_setting_internal(subdev);
 		}
 #else
@@ -2043,7 +2111,7 @@ int sensor_hm3_cis_wait_streamon(struct v4l2_subdev *subdev)
 		for (retry_count = 0; retry_count < max_retry_count; retry_count++) {
 			ret = sensor_cis_wait_streamon(subdev);
 			if (ret < 0) {
-				err("[%s] wait failed retry %d", __func__, retry_count);
+				err("wait failed retry %d", retry_count);
 			} else {
 				break;
 			}
@@ -2082,6 +2150,7 @@ int sensor_hm3_cis_stream_on(struct v4l2_subdev *subdev)
 	cis_shared_data *cis_data;
 	struct is_device_sensor_peri *sensor_peri = NULL;
 	struct is_device_sensor *device;
+	u16 fast_change_idx = 0x00FF;
 #ifdef DEBUG_SENSOR_TIME
 	struct timeval st, end;
 
@@ -2166,14 +2235,19 @@ int sensor_hm3_cis_stream_on(struct v4l2_subdev *subdev)
 	is_sensor_write16(client, 0xFCFC, 0x4000);
 	is_sensor_write16(client, 0x6000, 0x0085);
 
+#ifndef CONFIG_SEC_FACTORY
 	if (!sensor_hm3_eeprom_cal_available) {
 		is_sensor_write8(client, 0x0D0B, 0x00); //PDXTC
 		is_sensor_write8(client, 0x0D0A, 0x00); //GGC
 		is_sensor_write8(client, 0x0B00, 0x00); //NonaXTC
 	}
+#endif
+
+	is_sensor_read16(client, 0x0B30, &fast_change_idx);
 
 	/* Sensor stream on */
-	info("%s - set_cal_available(%d)\n", __func__, sensor_hm3_eeprom_cal_available);
+	info("%s - set_cal_available(%d), fast_change_idx(0x%x)\n",
+			__func__, sensor_hm3_eeprom_cal_available, fast_change_idx);
 	is_sensor_write16(client, 0x0100, 0x0100);
 
 	I2C_MUTEX_UNLOCK(cis->i2c_lock);
@@ -2197,6 +2271,7 @@ int sensor_hm3_cis_stream_off(struct v4l2_subdev *subdev)
 	struct i2c_client *client;
 	cis_shared_data *cis_data;
 	u8 cur_frame_count = 0;
+	u16 fast_change_idx = 0x00FF;
 #ifdef USE_CAMERA_SENSOR_RETENTION
 	struct is_module_enum *module;
 	struct is_device_sensor_peri *sensor_peri = NULL;
@@ -2240,7 +2315,8 @@ int sensor_hm3_cis_stream_off(struct v4l2_subdev *subdev)
 		err("group_param_hold_func failed at stream off");
 
 	is_sensor_read8(client, 0x0005, &cur_frame_count);
-	info("%s: frame_count(0x%x)\n", __func__, cur_frame_count);
+	is_sensor_read16(client, 0x0B30, &fast_change_idx);
+	info("%s: frame_count(0x%x), fast_change_idx(0x%x)\n", __func__, cur_frame_count, fast_change_idx);
 
 #ifdef USE_CAMERA_SENSOR_RETENTION
 	/* retention mode CRC check register enable */
@@ -2252,12 +2328,6 @@ int sensor_hm3_cis_stream_off(struct v4l2_subdev *subdev)
 
 	info("[MOD:D:%d] %s : retention enable CRC check\n", cis->id, __func__);
 #endif
-
-	/* if photo mode support ln_mode it should be fixed */
-	if (!sensor_hm3_cis_get_lownoise_supported(subdev)) {
-		//fast change disable for LTE
-		is_sensor_write16(cis->client, 0x0B30, 0x00FF);
-	}
 
 	is_sensor_write8(client, 0x0100, 0x00);
 
@@ -2319,8 +2389,7 @@ int sensor_hm3_cis_set_exposure_time(struct v4l2_subdev *subdev, struct ae_param
 	sensor_hm3_target_exp_backup.long_val = target_exposure->long_val;
 
 	if ((target_exposure->long_val <= 0) || (target_exposure->short_val <= 0)) {
-		err("[%s] invalid target exposure(%d, %d)\n", __func__,
-				target_exposure->long_val, target_exposure->short_val);
+		err("invalid target exposure(%d, %d)\n", target_exposure->long_val, target_exposure->short_val);
 		ret = -EINVAL;
 		goto p_err;
 	}
@@ -2588,6 +2657,16 @@ int sensor_hm3_cis_adjust_frame_duration(struct v4l2_subdev *subdev,
 
 	cis_data = cis->cis_data;
 
+	I2C_MUTEX_LOCK(cis->i2c_lock);
+
+	if (cis->cis_data->cur_lownoise_mode != cis->cis_data->pre_lownoise_mode)
+		ret |= sensor_hm3_cis_set_lownoise_mode_change(subdev);
+
+	if (cis->cis_data->cur_12bit_mode != cis->cis_data->pre_12bit_mode)
+		ret |= sensor_hm3_cis_set_iDCG_mode_change(subdev);
+
+	I2C_MUTEX_UNLOCK(cis->i2c_lock);
+
 	if (input_exposure_time == 0) {
 		input_exposure_time  = cis_data->min_frame_us_time;
 		info("[%s] Not proper exposure time(0), so apply min frame duration to exposure time forcely!!!(%d)\n",
@@ -2702,12 +2781,6 @@ int sensor_hm3_cis_set_frame_duration(struct v4l2_subdev *subdev, u32 frame_dura
 		goto p_err_i2c_unlock;
 	}
 
-	if (cis->cis_data->cur_lownoise_mode != cis->cis_data->pre_lownoise_mode)
-		ret |= sensor_hm3_cis_set_lownoise_mode_change(subdev);
-
-	if (cis->cis_data->cur_12bit_mode != cis->cis_data->pre_12bit_mode)
-		ret |= sensor_hm3_cis_set_iDCG_mode_change(subdev);
-
 	ret |= is_sensor_write16(client, 0x0340, frame_length_lines);
 
 	if (ret < 0)
@@ -2765,14 +2838,14 @@ int sensor_hm3_cis_set_frame_rate(struct v4l2_subdev *subdev, u32 min_fps)
 	cis_data = cis->cis_data;
 
 	if (min_fps > cis_data->max_fps) {
-		err("[MOD:D:%d] %s, request FPS is too high(%d), set to max(%d)\n",
-			cis->id, __func__, min_fps, cis_data->max_fps);
+		err("[MOD:D:%d] request FPS is too high(%d), set to max(%d)\n",
+			cis->id, min_fps, cis_data->max_fps);
 		min_fps = cis_data->max_fps;
 	}
 
 	if (min_fps == 0) {
-		err("[MOD:D:%d] %s, request FPS is 0, set to min FPS(1)\n",
-			cis->id, __func__);
+		err("[MOD:D:%d] request FPS is 0, set to min FPS(1)\n",
+			cis->id);
 		min_fps = 1;
 	}
 
@@ -2783,8 +2856,8 @@ int sensor_hm3_cis_set_frame_rate(struct v4l2_subdev *subdev, u32 min_fps)
 
 	ret = sensor_hm3_cis_set_frame_duration(subdev, frame_duration);
 	if (ret < 0) {
-		err("[MOD:D:%d] %s, set frame duration is fail(%d)\n",
-			cis->id, __func__, ret);
+		err("[MOD:D:%d] set frame duration is fail(%d)\n",
+			cis->id, ret);
 		goto p_err;
 	}
 
@@ -3452,7 +3525,7 @@ int sensor_hm3_cis_compensate_gain_for_extremely_br(struct v4l2_subdev *subdev, 
 	min_fine_int = cis_data->min_fine_integration_time;
 
 	if (line_length_pck <= 0) {
-		err("[%s] invalid line_length_pck(%d)\n", __func__, line_length_pck);
+		err("invalid line_length_pck(%d)\n", line_length_pck);
 		goto p_err;
 	}
 
@@ -3874,7 +3947,7 @@ static int cis_hm3_probe(struct i2c_client *client,
 		sensor_hm3_load_sram_size = sensor_hm3_setfile_A_sizes_load_sram;
 #endif
 	} else {
-		err("%s setfile index out of bound, take default (setfile_A)", __func__);
+		err("setfile index out of bound, take default (setfile_A)");
 		sensor_hm3_global = sensor_hm3_setfile_A_Global;
 		sensor_hm3_global_size = ARRAY_SIZE(sensor_hm3_setfile_A_Global);
 		sensor_hm3_setfiles = sensor_hm3_setfiles_A;

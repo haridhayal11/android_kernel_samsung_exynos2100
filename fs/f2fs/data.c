@@ -744,6 +744,7 @@ int f2fs_submit_page_bio(struct f2fs_io_info *fio)
 		wbc_account_cgroup_owner(fio->io_wbc, page, PAGE_SIZE);
 
 	__attach_io_flag(fio);
+	/* @fs.sec -- 0531f63f3688ffb680b8c83a53641dce37f186da -- */
 	if (fio->op_flags & F2FS_REQ_DEFKEY_BYPASS && is_read_io(fio->op)) {
 		f2fs_warn(fio->sbi, "Set bio bypass to get lower block");
 		bio_set_skip_dm_default_key(bio);

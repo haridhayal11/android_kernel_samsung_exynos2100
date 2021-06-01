@@ -101,8 +101,10 @@ noinline int dsms_send_message(const char *feature_code,
 		goto exit_send;
 
 	message = create_message(feature_code, detail, value);
-	if (message == NULL)
+	if (message == NULL) {
+		ret = -ENOMEM;
 		goto exit_send;
+	}
 
 	ret = process_dsms_message(message);
 

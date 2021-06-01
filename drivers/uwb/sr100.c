@@ -58,16 +58,16 @@ extern long p61_cold_reset(void);
 #endif
 static bool read_abort_requested = false;
 static bool is_fw_dwnld_enabled = false;
-#define SR100_TXBUF_SIZE 4096
-#define SR100_RXBUF_SIZE 4096
-#define SR100_MAX_TX_BUF_SIZE 2053
+#define SR100_TXBUF_SIZE 4200
+#define SR100_RXBUF_SIZE 4200
+#define SR100_MAX_TX_BUF_SIZE 4200
 #define MAX_READ_RETRY_COUNT 10
 /* Macro to define SPI clock frequency */
 #define SR100_SPI_CLOCK 16000000L;
 #define ENABLE_THROUGHPUT_MEASUREMENT 0
 
 /* Maximum UCI packet size supported from the driver */
-#define MAX_UCI_PKT_SIZE 2048
+#define MAX_UCI_PKT_SIZE 4200
 #define DEBUG_LOG
 /* Different driver debug lever */
 enum SR100_DEBUG_LEVEL { SR100_DEBUG_OFF, SR100_FULL_DEBUG };
@@ -427,6 +427,7 @@ static int sr100_dev_transceive(struct sr100_dev* sr100_dev, int op_mode, int co
         count -= NORMAL_MODE_HEADER_LEN;
       }
       if(count > 0) {
+        udelay(10);
         /* UCI Payload write */
         ret = spi_write(sr100_dev->spi, sr100_dev->tx_buffer + NORMAL_MODE_HEADER_LEN, count);
         if (ret < 0) {
@@ -495,7 +496,7 @@ static int sr100_dev_transceive(struct sr100_dev* sr100_dev, int op_mode, int co
       if(sr100_dev->IsExtndLenIndication){
         sr100_dev->totalBtyesToRead = ((sr100_dev->totalBtyesToRead << 8) | sr100_dev->rx_buffer[EXTENDED_LENGTH_OFFSET]);
       }
-      if(sr100_dev->totalBtyesToRead > MAX_UCI_PKT_SIZE) {
+      if(sr100_dev->totalBtyesToRead > (MAX_UCI_PKT_SIZE - NORMAL_MODE_HEADER_LEN)) {
         SR100_ERR_MSG("Length %d  exceeds the max limit %d....\n",(int)sr100_dev->totalBtyesToRead,(int)MAX_UCI_PKT_SIZE);
         ret = -1;
         goto transcive_end;
@@ -510,10 +511,10 @@ static int sr100_dev_transceive(struct sr100_dev* sr100_dev, int op_mode, int co
       sr100_dev->read_count = (unsigned int)(sr100_dev->totalBtyesToRead + NORMAL_MODE_HEADER_LEN);
       retry_count = 0;
       do{
-        usleep_range(5,10);
+        usleep_range(10,15);
         retry_count++;
-        if(retry_count == 200){
-          SR100_ERR_MSG("IC not released the IRQ even after 1ms\n");
+        if(retry_count >= 1000){
+          SR100_ERR_MSG("IC not released the IRQ even after 10ms\n");
           break;
         }
       }while(gpio_get_value(sr100_dev->irq_gpio));
@@ -763,13 +764,10 @@ read_end:
  * Description : Used to read data from SR100
  *
  * Parameters  : platform_data :  struct sr100_spi_platform_data *
- *               sr100_dev     :  struct sr100_dev *
- *               spi           :  struct spi_device *
  *
  * Returns     : retval 0 if ok else -1 on error
  ****************************************************************************/
-static int sr100_hw_setup(struct sr100_spi_platform_data* platform_data,
-                          struct sr100_dev* sr100_dev, struct spi_device* spi) {
+static int sr100_hw_setup(struct sr100_spi_platform_data* platform_data) {
   int ret = -1;
 
   SR100_DBG_MSG("Entry : %s\n", __FUNCTION__);
@@ -1130,7 +1128,7 @@ static int sr100_probe(struct spi_device* spi) {
     ret = -ENOMEM;
     goto err_exit;
   }
-  ret = sr100_hw_setup(platform_data, sr100_dev, spi);
+  ret = sr100_hw_setup(platform_data);
   if (ret < 0) {
     SR100_ERR_MSG("Failed to sr100_enable_SR100_IRQ_ENABLE\n");
     goto err_exit0;

@@ -85,6 +85,8 @@ struct is_vender_specific {
 #endif
 	int tilt_cal_tele_efs_size;
 	uint8_t	tilt_cal_tele_efs_data[IS_TILT_CAL_TELE_EFS_MAX_SIZE];
+	int tilt_cal_tele2_efs_size;
+	uint8_t	tilt_cal_tele2_efs_data[IS_TILT_CAL_TELE_EFS_MAX_SIZE];
 	int gyro_efs_size;
 	uint8_t 	gyro_efs_data[IS_GYRO_EFS_MAX_SIZE];
 };

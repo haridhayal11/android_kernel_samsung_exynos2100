@@ -33,6 +33,7 @@
 #include <linux/pm_wakeup.h> /* can be used kernel version 5.4 over */
 #include <linux/version.h>
 #include "../pinctrl/core.h"
+#include "fingerprint_common.h"
 
 #undef DISABLED_GPIO_PROTECTION
 
@@ -134,7 +135,6 @@ struct qbt2000_drvdata {
 	wait_queue_head_t read_wait_queue_ipc;
 
 	int ldogpio;
-	int spi_speed;
 	int sensortype;
 	int cbge_count;
 	int wuhb_count;
@@ -143,14 +143,11 @@ struct qbt2000_drvdata {
 	bool enabled_ipc;
 	bool enabled_wuhb;
 	bool enabled_ldo;
-	bool enabled_clk;
 	bool tz_mode;
 	bool wuhb_test_flag;
 	int wuhb_test_result;
 	const char *model_info;
 	const char *chipid;
-	struct clk *fp_spi_pclk;
-	struct clk *fp_spi_sclk;
 	struct pinctrl *p;
 	struct pinctrl_state *pins_poweron;
 	struct pinctrl_state *pins_poweroff;
@@ -160,14 +157,12 @@ struct qbt2000_drvdata {
 	struct work_struct work_debug;
 	struct workqueue_struct *wq_dbg;
 	struct timer_list dbg_timer;
-	struct wakeup_source *fp_spi_lock;
 	struct wakeup_source *fp_signal_lock;
-	struct pm_qos_request pm_qos; // only for QCOM AP
-	unsigned int min_cpufreq_limit;
+	struct spi_clk_setting *clk_setting;
+	struct boosting_config *boosting;
 };
 
 int qbt2000_set_clk(struct qbt2000_drvdata *drvdata, bool onoff);
-int qbt2000_set_cpu_speedup(struct qbt2000_drvdata *drvdata, int onoff);
 int qbt2000_register_platform_variable(struct qbt2000_drvdata *drvdata);
 int qbt2000_unregister_platform_variable(struct qbt2000_drvdata *drvdata);
 int qbt2000_pinctrl_register(struct qbt2000_drvdata *drvdata);

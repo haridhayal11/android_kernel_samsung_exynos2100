@@ -97,6 +97,7 @@ struct memlog_obj_prv {
 	struct work_struct file_work;
 	struct work_struct file_work_sync;
 	void *file_buffer;
+	size_t file_buffer_size;
 	size_t buffered_data_size;
 	memlog_data_to_string to_string;
 
@@ -351,23 +352,13 @@ static int memlog_file_pop_cmd(struct memlog_file_cmd *del_cmd)
 
 static void _memlog_file_work(struct memlog_obj_prv *prvobj, bool sync)
 {
-	size_t written_size;
-
 	if (!prvobj->is_full)
 		return;
 
-	written_size = _memlog_write_file(prvobj->file_obj,
-					prvobj->file_buffer,
-					prvobj->buffered_data_size,
-					sync);
-
-	if (written_size != prvobj->buffered_data_size)
-		dev_info(prvobj->file_obj->file->dev,
-			"%s: fail to write(%lu/%lu) lost %lu bytes\n",
-			__func__, (unsigned long)written_size,
-			(unsigned long)prvobj->buffered_data_size,
-			(unsigned long)prvobj->buffered_data_size -
-			(unsigned long)written_size);
+	_memlog_write_file(prvobj->file_obj,
+				prvobj->file_buffer,
+				prvobj->buffered_data_size,
+				sync);
 
 	prvobj->is_full = false;
 }
@@ -586,6 +577,11 @@ int memlog_write_array(struct memlog_obj *obj, int log_level, void *src)
 						obj->size -
 						(prvobj->array_unit_size *
 						prvobj->read_log_idx);
+
+					prvobj->buffered_data_size =
+						min(prvobj->buffered_data_size,
+						prvobj->file_buffer_size);
+
 					memcpy(prvobj->file_buffer,
 						obj->vaddr +
 						(prvobj->array_unit_size *
@@ -611,6 +607,11 @@ int memlog_write_array(struct memlog_obj *obj, int log_level, void *src)
 					(prvobj->log_idx -
 					prvobj->read_log_idx) *
 					prvobj->array_unit_size;
+
+				prvobj->buffered_data_size =
+						min(prvobj->buffered_data_size,
+						prvobj->file_buffer_size);
+
 				memcpy(prvobj->file_buffer,
 					obj->vaddr +
 					(prvobj->array_unit_size *
@@ -710,6 +711,11 @@ int memlog_write_vsprintf(struct memlog_obj *obj, int log_level,
 				prvobj->buffered_data_size =
 							(u64)prvobj->curr_ptr -
 							(u64)prvobj->read_ptr;
+
+				prvobj->buffered_data_size =
+						min(prvobj->buffered_data_size,
+						prvobj->file_buffer_size);
+
 				memcpy(prvobj->file_buffer, prvobj->read_ptr,
 					prvobj->buffered_data_size);
 				prvobj->is_full = true;
@@ -743,6 +749,11 @@ int memlog_write_vsprintf(struct memlog_obj *obj, int log_level,
 				prvobj->buffered_data_size =
 							(u64)prvobj->curr_ptr -
 							(u64)prvobj->read_ptr;
+
+				prvobj->buffered_data_size =
+						min(prvobj->buffered_data_size,
+						prvobj->file_buffer_size);
+
 				memcpy(prvobj->file_buffer, prvobj->read_ptr,
 					prvobj->buffered_data_size);
 				prvobj->is_full = true;
@@ -830,7 +841,7 @@ static size_t _memlog_write_file(struct memlog_obj *obj,
 	size_t copy_size = 0;
 	size_t tmp_size;
 
-	if (!obj->enabled || prvobj->is_dead)
+	if (!obj->enabled || prvobj->is_dead || !main_desc.mem_to_file_allow)
 		return 0;
 
 	mutex_lock(&prvobj->file_mutex);
@@ -1822,11 +1833,6 @@ static struct memlog_obj *_memlog_alloc(struct memlog *desc, size_t size,
 		goto out;
 	}
 
-	if (main_desc.mem_constraint &&
-		((type == MEMLOG_TYPE_ARRAY) ||
-		(type == MEMLOG_TYPE_STRING)))
-		size /= 2;
-
 	prvobj->property_flag = flag;
 	raw_spin_lock_init(&prvobj->log_lock);
 	prvobj->obj_name[0] = 0;
@@ -1846,16 +1852,19 @@ static struct memlog_obj *_memlog_alloc(struct memlog *desc, size_t size,
 	}
 
 	if (flag & MEMLOG_PROPERTY_SUPPORT_FILE) {
-		prvobj->support_file = true;
 		INIT_WORK(&prvobj->file_work, memlog_file_work);
 		INIT_WORK(&prvobj->file_work_sync, memlog_file_work_sync);
-		prvobj->file_buffer = vzalloc(size);
-		if (!prvobj->file_buffer) {
-			dev_err(main_desc.dev, "%s: fail to alloc file buf\n",
-								__func__);
-			memlog_obj_remove_sysfs(prvobj);
-			kfree(prvobj);
-			goto out;
+
+		if (main_desc.mem_to_file_allow) {
+			prvobj->support_file = true;
+			prvobj->file_buffer_size = size;
+			prvobj->file_buffer = vzalloc(prvobj->file_buffer_size);
+
+			if (!prvobj->file_buffer) {
+				memlog_obj_remove_sysfs(prvobj);
+				kfree(prvobj);
+				goto out;
+			}
 		}
 	}
 	if (flag & MEMLOG_PROPERTY_UTC)
@@ -1921,15 +1930,16 @@ static struct memlog_obj *_memlog_alloc(struct memlog *desc, size_t size,
 		break;
 	case MEMLOG_TYPE_FILE:
 		prvobj->obj.enabled = main_desc.file_default_status;
-		prvobj->obj.vaddr = vzalloc(size);
-		if (prvobj->obj.vaddr == NULL) {
-			dev_err(main_desc.dev, "%s: fail to alloc memory\n",
-								__func__);
-			if (prvobj->file_buffer)
+		if (main_desc.mem_to_file_allow) {
+			prvobj->obj.vaddr = vzalloc(size);
+			if (!prvobj->obj.vaddr) {
 				vfree(prvobj->file_buffer);
-			memlog_obj_remove_sysfs(prvobj);
-			kfree(prvobj);
-			goto out;
+				memlog_obj_remove_sysfs(prvobj);
+				kfree(prvobj);
+				goto out;
+			}
+		} else {
+			prvobj->obj.vaddr = NULL;
 		}
 
 		file->dev = device_create(main_desc.memlog_class,
@@ -1991,6 +2001,43 @@ static inline u32 memlog_convert_uflag(u32 uflag)
 	flag ^= (MEMLOG_PROPERTY_NONCACHABLE | MEMLOG_PROPERTY_TIMESTAMP);
 
 	return flag;
+}
+
+static void memlog_reset_file_obj_vmem(struct memlog_obj *obj, size_t size)
+{
+	void *vaddr;
+
+	if ((obj->log_type != MEMLOG_TYPE_FILE) ||
+		(obj->vaddr == NULL) || (obj->size == 0) || (size == 0)) {
+		dev_info(main_desc.dev, "%s: invalid data\n", __func__);
+
+		if (obj->log_type != MEMLOG_TYPE_FILE)
+			dev_info(main_desc.dev,
+				"invalid type (%s)\n",
+				memlog_get_typename(obj->log_type));
+		if (obj->vaddr == NULL)
+			dev_info(main_desc.dev, "obj->vaddr is NULL\n");
+		if (obj->size == 0)
+			dev_info(main_desc.dev, "obj->size is '0'\n");
+		if (size == 0)
+			dev_info(main_desc.dev, "size is '0'\n");
+
+		return;
+	}
+
+	vaddr = vzalloc(size);
+	if (vaddr) {
+		struct memlog_obj_prv *prvobj = obj_to_data(obj);
+
+		vfree(obj->vaddr);
+		obj->vaddr = vaddr;
+		obj->size = size;
+		prvobj->curr_ptr = vaddr;
+		prvobj->read_ptr = vaddr;
+	} else {
+		dev_err(main_desc.dev,
+			"%s: fail to reset(fail to vmalloc)\n", __func__);
+	}
 }
 
 struct memlog_obj *memlog_alloc(struct memlog *desc, size_t size,
@@ -2067,6 +2114,24 @@ struct memlog_obj *memlog_alloc_array(struct memlog *desc,
 	}
 	strncpy(_struct_name, struct_name, strlen(struct_name));
 
+	if (main_desc.mem_constraint) {
+		if (file_obj) {
+			size_t reset_size;
+
+			if (n >= 4) {
+				reset_size = (n / 4) * size;
+				n /= 2;
+			} else if (n >= 2) {
+				reset_size = (n / 2) * size;
+				n /= 2;
+			} else {
+				reset_size = n * size;
+			}
+
+			memlog_reset_file_obj_vmem(file_obj, reset_size);
+		}
+	}
+
 	obj = _memlog_alloc(desc, n * size, flag, 0, NULL, name);
 	if (obj) {
 		prvobj = obj_to_data(obj);
@@ -2079,7 +2144,21 @@ struct memlog_obj *memlog_alloc_array(struct memlog *desc,
 						obj_to_data(file_obj);
 
 			file_prvobj->source_obj = obj;
-			prvobj->read_log_idx =0;
+			prvobj->read_log_idx = 0;
+
+			if (main_desc.mem_constraint &&
+					!!prvobj->file_buffer) {
+				void *vaddr;
+				size_t reset_size;
+
+				reset_size = file_obj->size;
+				vaddr = vzalloc(reset_size);
+				if (vaddr) {
+					vfree(prvobj->file_buffer);
+					prvobj->file_buffer_size = reset_size;
+					prvobj->file_buffer = vaddr;
+				}
+			}
 		}
 	} else {
 		kfree(_struct_name);
@@ -2113,6 +2192,12 @@ struct memlog_obj *memlog_alloc_printf(struct memlog *desc,
 		flag |= MEMLOG_PROPERTY_SUPPORT_FILE;
 	}
 
+	if (main_desc.mem_constraint) {
+		if (file_obj)
+			memlog_reset_file_obj_vmem(file_obj, size / 4);
+		size /= 2;
+	}
+
 	obj = _memlog_alloc(desc, size, flag, 0, NULL, name);
 	if (obj) {
 		prvobj = obj_to_data(obj);
@@ -2124,6 +2209,20 @@ struct memlog_obj *memlog_alloc_printf(struct memlog *desc,
 
 			file_prvobj->source_obj = obj;
 			prvobj->read_ptr = prvobj->obj.vaddr;
+
+			if (main_desc.mem_constraint &&
+					!!prvobj->file_buffer) {
+				void *vaddr;
+				size_t reset_size;
+
+				reset_size = file_obj->size;
+				vaddr = vzalloc(reset_size);
+				if (vaddr) {
+					vfree(prvobj->file_buffer);
+					prvobj->file_buffer_size = reset_size;
+					prvobj->file_buffer = vaddr;
+				}
+			}
 		}
 	} else {
 		dev_err(main_desc.dev, "%s: alloc failed\n", __func__);

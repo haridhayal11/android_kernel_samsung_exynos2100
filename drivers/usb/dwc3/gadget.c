@@ -1576,12 +1576,14 @@ static int __dwc3_gadget_ep_queue(struct dwc3_ep *dep, struct dwc3_request *req)
 
 		if ((dep->flags & DWC3_EP_PENDING_REQUEST)) {
 			if (!(dep->flags & DWC3_EP_TRANSFER_STARTED)) {
-				return __dwc3_gadget_start_isoc(dep);
+				__dwc3_gadget_start_isoc(dep);
+				return 0;
 			}
 		}
 	}
 
-	return __dwc3_gadget_kick_transfer(dep);
+	__dwc3_gadget_kick_transfer(dep);
+	return 0;
 }
 
 static int dwc3_gadget_ep_queue(struct usb_ep *ep, struct usb_request *request,
@@ -2330,10 +2332,13 @@ static int dwc3_gadget_stop(struct usb_gadget *g)
 {
 	struct dwc3		*dwc = gadget_to_dwc(g);
 	unsigned long		flags;
+	struct dwc3_otg *dotg = dwc->dotg;
+	struct otg_fsm  *fsm = &dotg->fsm;
 
+	mutex_lock(&fsm->lock);
 	spin_lock_irqsave(&dwc->lock, flags);
 
-	if (pm_runtime_suspended(dwc->dev))
+	if (pm_runtime_suspended(dwc->dev) || (dwc->vbus_state == false))
 		goto out;
 
 	if (!dwc->vbus_session) {
@@ -2351,6 +2356,7 @@ out:
 	dwc->usb_function_info = 0;
 	dwc->acc_dev_status = false;
 	spin_unlock_irqrestore(&dwc->lock, flags);
+	mutex_unlock(&fsm->lock);
 
 	free_irq(dwc->irq_gadget, dwc->ev_buf);
 
@@ -3725,7 +3731,7 @@ static irqreturn_t dwc3_process_event_buf(struct dwc3_event_buffer *evt)
 	if (!(evt->flags & DWC3_EVENT_PENDING))
 		return IRQ_NONE;
 
-	if (pm_runtime_suspended(dwc->dev) || dwc->vbus_state == false) {
+	if (pm_runtime_suspended(dwc->dev) || (dwc->vbus_state == false)) {
 		evt->flags &= ~DWC3_EVENT_PENDING;
 		return IRQ_HANDLED;
 	}

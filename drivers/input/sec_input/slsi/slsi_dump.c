@@ -29,7 +29,7 @@ void slsi_ts_check_rawdata(struct work_struct *work)
 	slsi_ts_run_rawdata_all(ts, true);
 }
 
-void dump_tsp_log(struct device *dev)
+void slsi_ts_dump_tsp_log(struct device *dev)
 {
 	struct slsi_ts_data *ts = dev_get_drvdata(dev);
 

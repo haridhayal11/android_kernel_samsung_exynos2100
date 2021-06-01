@@ -1,7 +1,13 @@
 SHELL := /bin/bash
 
-# For kernel version 4.14 or lower
 ifeq ($(CONFIG_MACH_MT6853),y)
+    KERNEL := 4_14
+else ifeq ($(CONFIG_MACH_MT6768),y)
+    KERNEL := 4_14
+endif
+
+# For kernel version 4.14 or lower
+ifeq ($(KERNEL),4_14)
 $(obj)/proca_certificate-asn1.o: $(obj)/proca_certificate-asn1.c \
                                $(obj)/proca_certificate-asn1.h
 
@@ -29,7 +35,7 @@ ccflags-y += -I$(srctree)/security/samsung/five/
 # clean-files is given relative to the current directory,
 # so don't use (obj)/ prefix here.
 # Look at file ../../scripts/Makefile.clean for details.
-ifeq ($(CONFIG_MACH_MT6853),y)
+ifeq ($(KERNEL),4_14)
 clean-files += proca_certificate-asn1.c proca_certificate-asn1.h
 else
 clean-files += proca_certificate.asn1.c proca_certificate.asn1.h

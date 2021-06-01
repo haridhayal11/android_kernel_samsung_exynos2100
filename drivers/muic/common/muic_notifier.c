@@ -66,6 +66,7 @@ void muic_notifier_set_new_noti(bool flag)
 {
 	muic_uses_new_noti = flag ? 1 : 0;
 }
+EXPORT_SYMBOL(muic_notifier_set_new_noti);
 
 static void __set_noti_cxt(int attach, int type)
 {
@@ -260,6 +261,7 @@ int muic_pdic_notifier_register(struct notifier_block *nb, notifier_fn_t notifie
 
 	return ret;
 }
+EXPORT_SYMBOL(muic_pdic_notifier_register);
 
 int muic_pdic_notifier_unregister(struct notifier_block *nb)
 {
@@ -275,6 +277,7 @@ int muic_pdic_notifier_unregister(struct notifier_block *nb)
 
 	return ret;
 }
+EXPORT_SYMBOL(muic_pdic_notifier_unregister);
 
 static int muic_pdic_notifier_notify(void)
 {
@@ -342,6 +345,7 @@ void muic_pdic_notifier_attach_attached_dev(muic_attached_dev_t new_dev)
 	muic_notifier_notify();
 #endif
 }
+EXPORT_SYMBOL(muic_pdic_notifier_attach_attached_dev);
 
 void muic_pdic_notifier_detach_attached_dev(muic_attached_dev_t new_dev)
 {
@@ -358,6 +362,7 @@ void muic_pdic_notifier_detach_attached_dev(muic_attached_dev_t new_dev)
 	muic_notifier_notify();
 #endif
 }
+EXPORT_SYMBOL(muic_pdic_notifier_detach_attached_dev);
 
 void muic_notifier_detach_attached_dev(muic_attached_dev_t cur_dev)
 {
@@ -398,6 +403,7 @@ void muic_notifier_logically_attach_attached_dev(muic_attached_dev_t new_dev)
 	/* muic's attached_device attach broadcast */
 	muic_notifier_notify();
 }
+EXPORT_SYMBOL(muic_notifier_logically_attach_attached_dev);
 
 void muic_notifier_logically_detach_attached_dev(muic_attached_dev_t cur_dev)
 {
@@ -410,6 +416,7 @@ void muic_notifier_logically_detach_attached_dev(muic_attached_dev_t cur_dev)
 
 	__set_noti_cxt(0, ATTACHED_DEV_NONE_MUIC);
 }
+EXPORT_SYMBOL(muic_notifier_logically_detach_attached_dev);
 
 static int muic_notifier_init(void)
 {

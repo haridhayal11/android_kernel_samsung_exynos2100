@@ -41,6 +41,7 @@ extern void max77705_usbc_icurr(u8 curr);
 extern void max77705_set_fw_noautoibus(int enable);
 #if defined(CONFIG_SUPPORT_SHIP_MODE)
 extern void max77705_set_fw_ship_mode(int enable);
+extern int max77705_get_fw_ship_mode(void);
 #endif
 
 static enum power_supply_property max77705_charger_props[] = {
@@ -670,7 +671,7 @@ static void max77705_set_wireless_input_current(
 		__pm_stay_awake(charger->wc_current_ws);
 		value.intval = WIRELESS_VRECT_ADJ_ROOM_1;	/* 270mV */
 		psy_do_property(charger->pdata->wireless_charger_name, set,
-				POWER_SUPPLY_EXT_PROP_INPUT_VOLTAGE_REGULATION, value);
+				POWER_SUPPLY_EXT_PROP_WIRELESS_RX_CONTROL, value);
 		msleep(500); /* delay 0.5sec */
 		charger->wc_pre_current = max77705_get_input_current(charger);
 		charger->wc_current = input_current;
@@ -1379,6 +1380,15 @@ static int max77705_chg_get_property(struct power_supply *psy,
 		case POWER_SUPPLY_EXT_PROP_CHARGING_ENABLED:
 			val->intval = charger->charge_mode;
 			break;
+		case POWER_SUPPLY_EXT_PROP_SHIPMODE_TEST:
+#if defined(CONFIG_SUPPORT_SHIP_MODE)
+			val->intval = max77705_get_fw_ship_mode();
+			pr_info("%s: ship mode op is %d\n", __func__, val->intval);
+#else
+			val->intval = 0;
+			pr_info("%s: ship mode is not supported\n", __func__);
+#endif
+			break;
 		default:
 			return -EINVAL;
 		}
@@ -1681,6 +1691,9 @@ static int max77705_chg_set_property(struct power_supply *psy,
 			queue_delayed_work(charger->wqueue, &charger->aicl_work,
 					   msecs_to_jiffies(AICL_WORK_DELAY));
 		break;
+	case POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT:
+		max77705_set_topoff_current(charger, val->intval);
+		break;
 	case POWER_SUPPLY_EXT_PROP_MIN ... POWER_SUPPLY_EXT_PROP_MAX:
 		switch (ext_psp) {
 		case POWER_SUPPLY_EXT_PROP_SURGE:
@@ -1701,15 +1714,13 @@ static int max77705_chg_set_property(struct power_supply *psy,
 		case POWER_SUPPLY_EXT_PROP_SHIPMODE_TEST:
 #if defined(CONFIG_SUPPORT_SHIP_MODE)
 			if (val->intval == SHIP_MODE_EN) {
-				pr_info("%s: ship mode is enabled\n", __func__);
+				pr_info("%s: set ship mode enable\n", __func__);
 				max77705_set_ship_mode(charger, 1);
 			} else if (val->intval == SHIP_MODE_EN_OP) {
-				pr_info("%s: ship mode op enabled\n", __func__);
+				pr_info("%s: set ship mode op enable\n", __func__);
 				max77705_set_fw_ship_mode(1);
 			} else {
-				pr_info("%s: ship mode is disabled\n", __func__);
-				max77705_set_ship_mode(charger, 0);
-				max77705_set_fw_ship_mode(0);
+				pr_info("%s: ship mode disable is not supported\n", __func__);
 			}
 #else
 			pr_info("%s: ship mode(%d) is not supported\n", __func__, val->intval);
@@ -1751,9 +1762,6 @@ static int max77705_chg_set_property(struct power_supply *psy,
 			charger->charge_mode = val->intval;
 			charger->misalign_cnt = 0;
 			max77705_chg_set_mode_state(charger, charger->charge_mode);
-			break;
-		case POWER_SUPPLY_EXT_PROP_CURRENT_FULL:
-			max77705_set_topoff_current(charger, val->intval);
 			break;
 #if defined(CONFIG_AFC_CHARGER_MODE)
 		case POWER_SUPPLY_EXT_PROP_AFC_CHARGER_MODE:
@@ -2219,7 +2227,7 @@ static void max77705_wc_current_work(struct work_struct *work)
 		}
 
 		psy_do_property(charger->pdata->wireless_charger_name, set,
-				POWER_SUPPLY_EXT_PROP_INPUT_VOLTAGE_REGULATION, value);
+				POWER_SUPPLY_EXT_PROP_WIRELESS_RX_CONTROL, value);
 		__pm_relax(charger->wc_current_ws);
 	} else {
 		diff_current = charger->wc_pre_current - charger->wc_current;

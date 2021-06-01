@@ -32,13 +32,22 @@
 #if IS_ENABLED(CONFIG_SEC_FACTORY)
 #include <linux/delay.h>
 #endif
+#if IS_ENABLED(CONFIG_HALL_NOTIFIER)
+#include <linux/hall/hall_ic_notifier.h>
+#endif
 
 /*
  * Switch events
  */
-#define SW_FLIP                 0x15  /* set = flip cover open, close*/
-#define SW_CERTIFYHALL          0x1b  /* set = certify_hall attach/detach */
-#define SW_HALL_LOGICAL         0x1e  /* set = logical hall ic attach/detach */
+#define SW_FOLDER		0x00  /* set = folder open, close*/
+#define SW_FLIP			0x15  /* set = flip cover open, close*/
+#define SW_CERTIFYHALL		0x1b  /* set = certify_hall attach/detach */
+#define SW_WACOM_HALL			0x1e	/* set = tablet wacom hall attach/detach(set wacom cover mode) */
+
+#if IS_ENABLED(CONFIG_DRV_SAMSUNG)
+struct device *sec_hall_ic;
+EXPORT_SYMBOL(sec_hall_ic);
+#endif
 
 struct hall_ic_data {
 	struct delayed_work dwork;
@@ -78,33 +87,81 @@ static ssize_t hall_detect_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct hall_ic_data *hall;
+	int state;
 
 	list_for_each_entry(hall, &hall_ic_list, list) {
 		if (hall->event != SW_FLIP)
 			continue;
-		if (!!gpio_get_value_cansleep(hall->gpio))
-			sprintf(buf, "OPEN\n");
-		else
+		hall->state = !!gpio_get_value_cansleep(hall->gpio);
+		state = hall->state ^ hall->active_low;
+		if (state)
 			sprintf(buf, "CLOSE\n");
+		else
+			sprintf(buf, "OPEN\n");
 	}
 	return strlen(buf);
 }
+
 static ssize_t certify_hall_detect_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct hall_ic_data *hall;
+	int state;
 
 	list_for_each_entry(hall, &hall_ic_list, list) {
 		if (hall->event != SW_CERTIFYHALL)
 			continue;
-		if (!!gpio_get_value_cansleep(hall->gpio))
-			sprintf(buf, "OPEN\n");
-		else
+		hall->state = !!gpio_get_value_cansleep(hall->gpio);
+		state = hall->state ^ hall->active_low;
+		if (state)
 			sprintf(buf, "CLOSE\n");
+		else
+			sprintf(buf, "OPEN\n");
 	}
 
 	return strlen(buf);
 }
+
+static ssize_t hall_wacom_detect_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct hall_ic_data *hall;
+	int state;
+
+	list_for_each_entry(hall, &hall_ic_list, list) {
+		if (hall->event != SW_WACOM_HALL)
+			continue;
+		hall->state = !!gpio_get_value_cansleep(hall->gpio);
+		state = hall->state ^ hall->active_low;
+		if (state)
+			sprintf(buf, "CLOSE\n");
+		else
+			sprintf(buf, "OPEN\n");
+	}
+
+	return strlen(buf);
+}
+
+static ssize_t flip_status_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct hall_ic_data *hall;
+	int state;
+
+	list_for_each_entry(hall, &hall_ic_list, list) {
+		if (hall->event != SW_FOLDER)
+			continue;
+		hall->state = !!gpio_get_value_cansleep(hall->gpio);
+		state = hall->state ^ hall->active_low;
+		if (state)
+			snprintf(buf, 2, "0");	/* close */
+		else
+			snprintf(buf, 2, "1");	/* open */
+	}
+
+	return strlen(buf);
+}
+
 static ssize_t hall_number_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -116,11 +173,15 @@ static ssize_t hall_number_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(hall_detect);
 static DEVICE_ATTR_RO(certify_hall_detect);
+static DEVICE_ATTR_RO(hall_wacom_detect);
+static DEVICE_ATTR_RO(flip_status);
 static DEVICE_ATTR_RO(hall_number);
 
 static struct device_attribute *hall_ic_attrs[] = {
 	&dev_attr_hall_detect,
 	&dev_attr_certify_hall_detect,
+	&dev_attr_hall_wacom_detect,
+	&dev_attr_flip_status,
 	NULL,
 };
 #endif
@@ -142,7 +203,7 @@ static void hall_ic_work(struct work_struct *work)
 		hall->state = first;
 		state = first ^ hall->active_low;
 		pr_info("%s %s\n", hall->name,
-			hall->state ? "open" : "close");
+			state ? "close" : "open");
 
 		if (hall->input) {
 			input_report_switch(hall->input, hall->event, state);
@@ -151,8 +212,12 @@ static void hall_ic_work(struct work_struct *work)
 
 		/* send uevent for hall ic */
 		snprintf(hall_uevent, sizeof(hall_uevent), "%s=%s",
-			hall->name, hall->state ? "open" : "close");
+			hall->name, state ? "close" : "open");
 		kobject_uevent_env(&ddata->sec_dev->kobj, KOBJ_CHANGE, hall_status);
+
+#if IS_ENABLED(CONFIG_HALL_NOTIFIER)
+		hall_notifier_notify(hall->name, state);
+#endif
 	} else
 		pr_info("%s %d,%d\n", hall->name,
 			first, second);
@@ -167,12 +232,15 @@ static void hall_ic_work(struct work_struct *work)
 	hall->state = !!gpio_get_value_cansleep(hall->gpio);
 	state = hall->state ^ hall->active_low;
 	pr_info("%s %s %s(%d)\n", __func__, hall->name,
-		hall->state ? "open" : "close", hall->state);
+		state ? "close" : "open", hall->state);
 
 	if (hall->input) {
 		input_report_switch(hall->input, hall->event, state);
 		input_sync(hall->input);
 	}
+#if IS_ENABLED(CONFIG_HALL_NOTIFIER)
+	hall_notifier_notify(hall->name, state);
+#endif
 }
 #endif
 
@@ -252,6 +320,10 @@ static int hall_ic_setup_halls(struct hall_ic_drvdata *ddata)
 
 	gddata = ddata;
 	ddata->sec_dev = sec_device_create(ddata, "hall_ic");
+	if (IS_ERR(ddata->sec_dev))
+		pr_err("%s failed to create hall_ic\n", __func__);
+
+	sec_hall_ic = ddata->sec_dev;
 
 	ret = sysfs_create_file(&ddata->sec_dev->kobj,
 						&dev_attr_hall_number.attr);
@@ -333,10 +405,12 @@ static struct hall_ic_pdata *hall_ic_parsing_dt(struct device *dev)
 				return ERR_PTR(ret);
 			}
 		}
+
 		hall->active_low = flags & OF_GPIO_ACTIVE_LOW;
 		hall->irq = gpio_to_irq(hall->gpio);
 		hall->name = of_get_property(pp, "name", NULL);
 
+		pr_info("%s flags: %d\n", __func__, flags);
 		pr_info("%s %s\n", __func__, hall->name);
 
 		if (of_property_read_u32(pp, "event", &hall->event)) {

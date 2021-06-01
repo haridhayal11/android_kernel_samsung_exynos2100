@@ -334,6 +334,8 @@ static int adc_gain[16] = { 0, 1, 2, 3, 4, 5, 6, 7, -8, -7, -6, -5, -4, -3, -2, 
 
 /* Maximum TA voltage threshold */
 #define PCA9468_TA_MAX_VOL		9800000 // 9800000uV
+/* Minimum TA voltage threshold */
+#define PCA9468_TA_MIN_VOL		7000000	// 7000000uV
 /* Maximum TA current threshold */
 #define PCA9468_TA_MAX_CUR		2450000	// 2450000uA
 /* Mimimum TA current threshold */
@@ -375,6 +377,8 @@ static int adc_gain[16] = { 0, 1, 2, 3, 4, 5, 6, 7, -8, -7, -6, -5, -4, -3, -2, 
 #define PCA9468_TA_IIN_OFFSET		100000	// 100mA
 /* IIN_CC upper protection offset in Power Limit Mode TA */
 #define PCA9468_IIN_CC_UPPER_OFFSET	150000	// 150mA
+/* TA current low offset for reducing input current */
+#define PCA9468_TA_CUR_LOW_OFFSET	200000	// 200mA
 
 /* PD Message Voltage and Current Step */
 #define PD_MSG_TA_VOL_STEP			20000	// 20mV

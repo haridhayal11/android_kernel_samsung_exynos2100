@@ -449,6 +449,15 @@ static int pca9468_send_pd_message(struct pca9468_charger *pca9468, unsigned int
 	}
 #endif
 
+	/* Check whether requested TA voltage is in valid range or not */
+	if (pca9468->ta_vol < PCA9468_TA_MIN_VOL) {
+		/* request TA voltage is less than minimum threshold */
+		/* This is abnormal case, too low input voltage */
+		/* Normally VIN_UVLO already happened */
+		pr_err("%s: Abnormal low VIN, ta_vol=%d\n", __func__, pca9468->ta_vol);
+		goto out;
+	}
+
 	pr_info("%s: msg_type=%d, ta_cur=%d, ta_vol=%d, ta_objpos=%d\n",
 		__func__, msg_type, pca9468->ta_cur, pca9468->ta_vol, pca9468->ta_objpos);
 
@@ -1049,8 +1058,20 @@ static int pca9468_set_ta_current_comp(struct pca9468_charger *pca9468)
 	/* Compare IIN ADC with target input current */
 	if (iin > (pca9468->iin_cc + PCA9468_IIN_CC_COMP_OFFSET)) {
 		/* TA current is higher than the target input current */
-		/* Decrease TA current (50mA) */
-		pca9468->ta_cur = pca9468->ta_cur - PD_MSG_TA_CUR_STEP;
+		/* Check TA current and compare it with IIN_CC */
+		if (pca9468->ta_cur <= pca9468->iin_cc - PCA9468_TA_CUR_LOW_OFFSET) {
+			/* IIN_ADC is stiil in invalid range even though TA current is less than IIN_CC - 200mA */
+			/* TA has abnormal behavior */
+			/* Decrease TA voltage (20mV) */
+			pca9468->ta_vol = pca9468->ta_vol - PD_MSG_TA_VOL_STEP;
+			pr_info("%s: Comp. Cont4: ta_vol=%d\n", __func__, pca9468->ta_vol);
+		} else {
+			/* TA current is higher than IIN_CC - 200mA */
+			/* Decrease TA current first to reduce input current */
+			/* Decrease TA current (50mA) */
+			pca9468->ta_cur = pca9468->ta_cur - PD_MSG_TA_CUR_STEP;
+			pr_info("%s: Comp. Cont5: ta_cur=%d\n", __func__, pca9468->ta_cur);
+		}
 
 		/* Send PD Message */
 		mutex_lock(&pca9468->lock);
@@ -1166,8 +1187,20 @@ static int pca9468_set_ta_current_comp2(struct pca9468_charger *pca9468)
 	/* Compare IIN ADC with target input current */
 	if (iin > (pca9468->pdata->iin_cfg + PCA9468_IIN_CC_UPPER_OFFSET)) {
 		/* TA current is higher than the target input current */
-		/* Decrease TA current (50mA) */
-		pca9468->ta_cur = pca9468->ta_cur - PD_MSG_TA_CUR_STEP;
+		/* Check TA current and compare it with IIN_CC */
+		if (pca9468->ta_cur <= pca9468->iin_cc - PCA9468_TA_CUR_LOW_OFFSET) {
+			/* IIN_ADC is stiil in invalid range even though TA current is less than IIN_CC - 200mA */
+			/* TA has abnormal behavior */
+			/* Decrease TA voltage (20mV) */
+			pca9468->ta_vol = pca9468->ta_vol - PD_MSG_TA_VOL_STEP;
+			pr_info("%s: Comp. Cont4: ta_vol=%d\n", __func__, pca9468->ta_vol);
+		} else {
+			/* TA current is higher than IIN_CC - 200mA */
+			/* Decrease TA current first to reduce input current */
+			/* Decrease TA current (50mA) */
+			pca9468->ta_cur = pca9468->ta_cur - PD_MSG_TA_CUR_STEP;
+			pr_info("%s: Comp. Cont5: ta_cur=%d\n", __func__, pca9468->ta_cur);
+		}
 
 		/* Send PD Message */
 		mutex_lock(&pca9468->lock);
@@ -1269,8 +1302,20 @@ static int pca9468_set_ta_current_comp3(struct pca9468_charger *pca9468)
 	/* Compare IIN ADC with target input current */
 	if (iin > (pca9468->pdata->iin_cfg + PCA9468_IIN_CC_COMP3_UPPER_OFFSET)) {
 		/* TA current is higher than the target input current */
-		/* Decrease TA current (50mA) */
-		pca9468->ta_cur = pca9468->ta_cur - PD_MSG_TA_CUR_STEP;
+		/* Check TA current and compare it with IIN_CC */
+		if (pca9468->ta_cur <= pca9468->iin_cc - PCA9468_TA_CUR_LOW_OFFSET) {
+			/* IIN_ADC is stiil in invalid range even though TA current is less than IIN_CC - 200mA */
+			/* TA has abnormal behavior */
+			/* Decrease TA voltage (20mV) */
+			pca9468->ta_vol = pca9468->ta_vol - PD_MSG_TA_VOL_STEP;
+			pr_info("%s: Comp. Cont4: ta_vol=%d\n", __func__, pca9468->ta_vol);
+		} else {
+			/* TA current is higher than IIN_CC - 200mA */
+			/* Decrease TA current first to reduce input current */
+			/* Decrease TA current (50mA) */
+			pca9468->ta_cur = pca9468->ta_cur - PD_MSG_TA_CUR_STEP;
+			pr_info("%s: Comp. Cont5: ta_cur=%d\n", __func__, pca9468->ta_cur);
+		}
 
 		/* Send PD Message */
 		mutex_lock(&pca9468->lock);
@@ -2634,9 +2679,21 @@ static int pca9468_charge_ccmode(struct pca9468_charger *pca9468)
 				pca9468->ta_vol = pca9468->ta_vol - PD_MSG_TA_VOL_STEP;
 				pr_info("%s: CC LOOP:iin=%d, next_ta_vol=%d\n", __func__, iin, pca9468->ta_vol);
 			} else {
-				/* Decrease TA current (50mA) */
-				pca9468->ta_cur = pca9468->ta_cur - PD_MSG_TA_CUR_STEP;
-				pr_info("%s: CC LOOP:iin=%d, next_ta_cur=%d\n", __func__, iin, pca9468->ta_cur);
+				/* Check TA current and compare it with IIN_CC */
+				if (pca9468->ta_cur <= pca9468->iin_cc - PCA9468_TA_CUR_LOW_OFFSET) {
+					/* IIN_LOOP still happens even though TA current is less than IIN_CC - 200mA */
+					/* TA has abnormal behavior */
+					/* Decrease TA voltage (20mV) */
+					pca9468->ta_vol = pca9468->ta_vol - PD_MSG_TA_VOL_STEP;
+					pr_info("%s: CC LOOP:iin=%d, ta_cur=%d, next_ta_vol=%d\n",
+							__func__, iin, pca9468->ta_cur, pca9468->ta_vol);
+				} else {
+					/* TA current is higher than IIN_CC - 200mA */
+					/* Decrease TA current first to reduce input current */
+					/* Decrease TA current (50mA) */
+					pca9468->ta_cur = pca9468->ta_cur - PD_MSG_TA_CUR_STEP;
+					pr_info("%s: CC LOOP:iin=%d, next_ta_cur=%d\n", __func__, iin, pca9468->ta_cur);
+				}
 			}
 			/* Send PD Message */
 			mutex_lock(&pca9468->lock);
@@ -2847,9 +2904,21 @@ static int pca9468_charge_cvmode(struct pca9468_charger *pca9468)
 			/* Check TA current */
 			if (pca9468->ta_cur > PCA9468_TA_MIN_CUR) {
 				/* TA current is higher than (1.0A*TA_mode) */
-				/* Decrease TA current (50mA) */
-				pca9468->ta_cur = pca9468->ta_cur - PD_MSG_TA_CUR_STEP;
-				pr_info("%s: CV LOOP, Cont: ta_cur=%d\n", __func__, pca9468->ta_cur);
+
+				/* Check TA current and compare it with IIN_CC */
+				if (pca9468->ta_cur <= pca9468->iin_cc - PCA9468_TA_CUR_LOW_OFFSET) {
+					/* IIN_LOOP still happens even though TA current is less than IIN_CC - 200mA */
+					/* TA has abnormal behavior */
+					/* Decrease TA voltage (20mV) */
+					pca9468->ta_vol = pca9468->ta_vol - PD_MSG_TA_VOL_STEP;
+					pr_info("%s: CV LOOP, Cont1: ta_vol=%d\n", __func__, pca9468->ta_vol);
+				} else {
+					/* TA current is higher than IIN_CC - 200mA */
+					/* Decrease TA current first to reduce input current */
+					/* Decrease TA current (50mA) */
+					pca9468->ta_cur = pca9468->ta_cur - PD_MSG_TA_CUR_STEP;
+					pr_info("%s: CV LOOP, Cont2: ta_cur=%d\n", __func__, pca9468->ta_cur);
+				}
 			} else {
 				/* TA current is less than (1.0A*TA_mode) */
 				/* Decrease TA Voltage (20mV) */
@@ -5104,4 +5173,4 @@ module_i2c_driver(pca9468_charger_driver);
 MODULE_AUTHOR("Clark Kim <clark.kim@nxp.com>");
 MODULE_DESCRIPTION("PCA9468 charger driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("3.4.15S");
+MODULE_VERSION("3.4.16S");

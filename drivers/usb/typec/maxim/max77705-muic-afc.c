@@ -215,6 +215,7 @@ void max77705_muic_qc_hv_set(struct max77705_muic_data *muic_data, int voltage)
 	max77705_usbc_opcode_write(usbc_pdata, &write_data);
 }
 
+#if !defined(CONFIG_MUIC_QC_DISABLE)
 static void max77705_muic_handle_detect_dev_mpnack(struct max77705_muic_data *muic_data)
 {
 	struct max77705_usbc_platform_data *usbc_pdata = muic_data->usbc_pdata;
@@ -229,6 +230,7 @@ static void max77705_muic_handle_detect_dev_mpnack(struct max77705_muic_data *mu
 
 	max77705_usbc_opcode_write(usbc_pdata, &write_data);
 }
+#endif
 #if IS_ENABLED(CONFIG_MUIC_AFC_RETRY)
 static void max77705_muic_handle_afc_retry(struct max77705_muic_data *muic_data,
 			muic_attached_dev_t current_attached_dev)
@@ -386,10 +388,12 @@ void max77705_muic_handle_detect_dev_afc(struct max77705_muic_data *muic_data, u
 			pr_info("%s:%s skip checking QC TA by usb fail, just return!\n", MUIC_DEV_NAME, __func__);
 		}
 #endif
+#if !defined(CONFIG_MUIC_QC_DISABLE)
 		else {
 			pr_info("%s:%s checking QC TA!\n", MUIC_DEV_NAME, __func__);
 			max77705_muic_handle_detect_dev_mpnack(muic_data);
 		}
+#endif
 		break;
 	case 5:
 		pr_info("%s:%s Unsupported TX data\n", MUIC_DEV_NAME, __func__);

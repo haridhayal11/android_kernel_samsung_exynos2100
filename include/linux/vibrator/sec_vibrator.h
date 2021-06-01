@@ -74,6 +74,14 @@ struct sec_vibrator_ops {
 	int (*get_cp_trigger_queue)(struct device *dev, char *buf);
 	int (*set_force_touch_intensity)(struct device *dev, int intensity);
 	int (*set_tuning_with_temp)(struct device *dev, int temperature);
+	bool (*get_calibration)(struct device *dev);
+	int (*get_step_size)(struct device *dev, int *step_size);
+	int (*get_intensities)(struct device *dev, int *buf);
+	int (*set_intensities)(struct device *dev, int *buf);
+	int (*get_haptic_intensities)(struct device *dev, int *buf);
+	int (*set_haptic_intensities)(struct device *dev, int *buf);
+	int (*get_haptic_durations)(struct device *dev, int *buf);
+	int (*set_haptic_durations)(struct device *dev, int *buf);
 };
 
 struct sec_vibrator_drvdata {

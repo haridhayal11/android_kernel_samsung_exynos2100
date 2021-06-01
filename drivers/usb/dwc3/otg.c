@@ -76,6 +76,8 @@ struct intf_typec {
 
 int otg_connection;
 EXPORT_SYMBOL_GPL(otg_connection);
+int phy_status = 1;
+EXPORT_SYMBOL_GPL(phy_status);
 static int dwc3_otg_statemachine(struct otg_fsm *fsm)
 {
 	struct usb_otg *otg = fsm->otg;
@@ -406,6 +408,7 @@ int dwc3_otg_phy_enable(struct otg_fsm *fsm, int owner, bool on)
 	owner_bit = (1 << owner);
 
 	if (on) {
+		phy_status = 1;
 		if (dotg->combo_phy_control && dotg->usb2_phy_control) {
 			dotg->combo_phy_control |= owner_bit;
 			dotg->usb2_phy_control |= owner_bit;
@@ -446,6 +449,7 @@ int dwc3_otg_phy_enable(struct otg_fsm *fsm, int owner, bool on)
 		if (dotg->usb2_phy_control == 0
 				&& dotg->combo_phy_control == 0) {
 
+			phy_status = 0;
 			/*
 			 * Need to check why phy init_count has mismatch.
 			 * Phy_init is called from usb_phy_roothub_init() in
@@ -1296,7 +1300,6 @@ void dwc3_otg_exit(struct dwc3 *dwc)
 	wakeup_source_unregister(dotg->wakelock);
 	free_irq(dotg->irq, dotg);
 	dotg->otg.state = OTG_STATE_UNDEFINED;
-	kfree(dotg);
 	dwc->dotg = NULL;
 #ifdef CONFIG_USB_EXYNOS_TPMON
 	usb_tpmon_exit();

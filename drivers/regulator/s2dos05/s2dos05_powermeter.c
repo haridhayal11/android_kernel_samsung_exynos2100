@@ -29,7 +29,7 @@ struct adc_info {
 	struct i2c_client *i2c;
 	u8 adc_mode;
 	u8 adc_sync_mode;
-	u16 *adc_val;
+	unsigned long *adc_val;
 	u8 adc_ctrl1;
 #if IS_ENABLED(CONFIG_SEC_PM)
 	bool is_sm3080;
@@ -49,11 +49,11 @@ enum s2dos05_adc_ch {
 };
 
 #if IS_ENABLED(CONFIG_DRV_SAMSUNG_PMIC)
-static const unsigned int current_coeffs[S2DOS05_MAX_ADC_CHANNEL] =
+static const unsigned long current_coeffs[S2DOS05_MAX_ADC_CHANNEL] =
 	{CURRENT_ELVDD, CURRENT_ELVSS, CURRENT_AVDD,
 	 CURRENT_BUCK, CURRENT_L1, CURRENT_L2, CURRENT_L3, CURRENT_L4};
 
-static const unsigned int power_coeffs[S2DOS05_MAX_ADC_CHANNEL] =
+static const unsigned long power_coeffs[S2DOS05_MAX_ADC_CHANNEL] =
 	{POWER_ELVDD, POWER_ELVSS, POWER_AVDD,
 	 POWER_BUCK, POWER_L1, POWER_L2, POWER_L3, POWER_L4};
 
@@ -146,10 +146,10 @@ static void s2m_adc_read_data(struct device *dev, int channel)
 #endif /* CONFIG_SEC_PM */
 }
 
-static unsigned int get_coeff(struct device *dev, u8 adc_reg_num)
+static unsigned long get_coeff(struct device *dev, u8 adc_reg_num)
 {
 	struct adc_info *adc_meter = dev_get_drvdata(dev);
-	unsigned int coeff;
+	unsigned long coeff;
 
 	if (adc_meter->adc_mode == CURRENT_METER) {
 		if (adc_reg_num < S2DOS05_MAX_ADC_CHANNEL)
@@ -186,11 +186,11 @@ static ssize_t adc_val_all_show(struct device *dev,
 	for (i = 0; i < S2DOS05_MAX_ADC_CHANNEL; i++) {
 		chan = ADC_CH0 + i;
 		if (adc_meter->adc_mode == POWER_METER)
-			cnt += snprintf(buf + cnt, PAGE_SIZE, "CH%d:%6d uW (%4d)  ",
+			cnt += snprintf(buf + cnt, PAGE_SIZE, "CH%d:%7lu uW (%7lu)  ",
 					chan, (adc_meter->adc_val[chan] * get_coeff(dev, chan)) / MICRO,
 					adc_meter->adc_val[chan]);
 		else
-			cnt += snprintf(buf + cnt, PAGE_SIZE, "CH%d:%6d uA (%4d)  ",
+			cnt += snprintf(buf + cnt, PAGE_SIZE, "CH%d:%7lu uA (%7lu)  ",
 					chan, (adc_meter->adc_val[chan] * get_coeff(dev, chan)),
 					adc_meter->adc_val[chan]);
 		if (i == S2DOS05_MAX_ADC_CHANNEL / 2 - 1)
@@ -343,10 +343,10 @@ static int convert_adc_val(struct device *dev, char *buf, int channel)
 	s2m_adc_read_data(dev, channel);
 
 	if (adc_meter->adc_mode == POWER_METER)
-		return snprintf(buf, PAGE_SIZE, "%d uW\n",
+		return snprintf(buf, PAGE_SIZE, "%7lu uW\n",
 				(adc_meter->adc_val[channel] * get_coeff(dev, channel)) / MICRO);
 	else
-		return snprintf(buf, PAGE_SIZE, "%d uA\n",
+		return snprintf(buf, PAGE_SIZE, "%7lu uA\n",
 				adc_meter->adc_val[channel] * get_coeff(dev, channel));
 
 }
@@ -571,7 +571,7 @@ void s2dos05_powermeter_init(struct s2dos05_dev *s2dos05)
 	}
 
 	adc_meter->adc_val = devm_kzalloc(s2dos05->dev,
-					  sizeof(u16) * S2DOS05_MAX_ADC_CHANNEL,
+					  sizeof(unsigned long) * S2DOS05_MAX_ADC_CHANNEL,
 					  GFP_KERNEL);
 
 	pr_info("%s: s2dos05 power meter init start\n", __func__);

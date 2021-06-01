@@ -334,6 +334,7 @@ enum mfc_debug_cause {
 	MFC_CAUSE_FAIL_DPB_FLUSH		= 12,
 	MFC_CAUSE_FAIL_CACHE_FLUSH		= 13,
 	MFC_CAUSE_FAIL_MOVE_INST		= 14,
+	MFC_CAUSE_FAIL_DRC_WAIT			= 15,
 	/* last information */
 	MFC_LAST_INFO_BLACK_BAR                 = 26,
 	MFC_LAST_INFO_NAL_QUEUE                 = 27,
@@ -352,6 +353,11 @@ enum mfc_qos_control {
 	MFC_QOS_ON		= 0x1,
 	MFC_QOS_OFF		= 0x2,
 	MFC_QOS_TRIGGER		= 0x3,
+};
+
+enum mfc_ts_type {
+	MFC_TS_SRC		= 0x1,
+	MFC_TS_DST		= 0x2,
 };
 
 enum mfc_core_type {
@@ -750,6 +756,7 @@ struct mfc_qos_boost {
 struct mfc_qos_weight {
 	unsigned int weight_h264_hevc;
 	unsigned int weight_vp8_vp9;
+	unsigned int weight_av1;
 	unsigned int weight_other_codec;
 	unsigned int weight_3plane;
 	unsigned int weight_10bit;
@@ -787,6 +794,8 @@ struct mfc_platdata {
 	unsigned int max_hdr_win;
 	/* error type for sync_point display */
 	unsigned int display_err_type;
+	/* output buffer Q framerate */
+	unsigned int display_framerate;
 	/* NAL-Q size */
 	unsigned int nal_q_entry_size;
 	unsigned int nal_q_dump_size;
@@ -1172,7 +1181,8 @@ struct mfc_dev {
 	struct list_head ctx_list;
 	spinlock_t ctx_list_lock;
 
-	atomic_t queued_cnt;
+	atomic_t queued_bits;
+	spinlock_t idle_bits_lock;
 
 	/* Trace */
 	atomic_t trace_ref;
@@ -1333,7 +1343,7 @@ struct mfc_core {
 	struct work_struct meerkat_work;
 
 	/* QoS idle */
-	atomic_t hw_run_cnt;
+	atomic_t hw_run_bits;
 	struct mutex idle_qos_mutex;
 	enum mfc_idle_mode idle_mode;
 	struct timer_list mfc_idle_timer;
@@ -1909,6 +1919,16 @@ struct mfc_timestamp {
 	int interval;
 };
 
+struct mfc_ts_control {
+	struct mfc_timestamp ts_array[MAX_TIME_INDEX];
+	int ts_interval_array[MAX_TIME_INDEX];
+	struct list_head ts_list;
+	int ts_count;
+	int ts_is_full;
+	int ts_last_interval;
+	spinlock_t ts_lock;
+};
+
 struct mfc_bitrate {
 	struct list_head list;
 	int bytesused;
@@ -2158,16 +2178,13 @@ struct mfc_ctx {
 	unsigned long framerate;
 	unsigned long last_framerate;
 	unsigned long operating_framerate;
+	unsigned long disp_framerate;
 	unsigned int qos_ratio;
 	bool update_framerate;
 	bool update_bitrate;
 
-	struct mfc_timestamp ts_array[MAX_TIME_INDEX];
-	int ts_interval_array[MAX_TIME_INDEX];
-	struct list_head ts_list;
-	int ts_count;
-	int ts_is_full;
-	int ts_last_interval;
+	struct mfc_ts_control src_ts;
+	struct mfc_ts_control dst_ts;
 
 	/* bitrate control for QoS*/
 	struct mfc_bitrate bitrate_array[MAX_TIME_INDEX];
@@ -2180,6 +2197,9 @@ struct mfc_ctx {
 	unsigned long weighted_mb;
 	struct list_head list;
 
+	/* boosting timer */
+	u64 boosting_time;
+
 	int buf_process_type;
 
 	int frame_cnt;
@@ -2190,6 +2210,9 @@ struct mfc_ctx {
 	bool mem_type_10bit;
 
 	int gdc_votf;
+
+	/* QoS idle */
+	enum mfc_idle_mode idle_mode;
 
 	/* Lazy unmap disable */
 	int skip_lazy_unmap;
@@ -2252,6 +2275,8 @@ struct mfc_core_ctx {
 
 	/* wait queue */
 	wait_queue_head_t cmd_wq;
+	wait_queue_head_t drc_wq;
+
 	struct mfc_listable_wq hwlock_wq;
 };
 

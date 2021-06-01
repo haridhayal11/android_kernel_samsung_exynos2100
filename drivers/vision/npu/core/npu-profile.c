@@ -16,7 +16,6 @@
 #include <linux/delay.h>
 #include <linux/sysfs.h>
 #include <asm/cacheflush.h>
-#include "npu-device.h"
 #include "npu-common.h"
 #include "npu-memory.h"
 #include "npu-util-statekeeper.h"

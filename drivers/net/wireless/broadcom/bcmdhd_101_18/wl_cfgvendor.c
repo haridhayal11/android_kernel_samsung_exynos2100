@@ -8846,6 +8846,11 @@ static int wl_cfgvendor_start_mkeep_alive(struct wiphy *wiphy, struct wireless_d
 	if (ret < 0) {
 		WL_ERR(("start_mkeep_alive is failed ret: %d\n", ret));
 	}
+#ifdef DHD_CLEANUP_KEEP_ALIVE
+	else if (ret == BCME_OK) {
+		setbit(&cfg->mkeep_alive_avail, mkeep_alive_id);
+	}
+#endif /* DHD_CLEANUP_KEEP_ALIVE */
 
 exit:
 	if (ip_pkt) {
@@ -8880,6 +8885,11 @@ static int wl_cfgvendor_stop_mkeep_alive(struct wiphy *wiphy, struct wireless_de
 	if (ret < 0) {
 		WL_ERR(("stop_mkeep_alive is failed ret: %d\n", ret));
 	}
+#ifdef DHD_CLEANUP_KEEP_ALIVE
+	else if (ret == BCME_OK) {
+		clrbit(&cfg->mkeep_alive_avail, mkeep_alive_id);
+	}
+#endif /* DHD_CLEANUP_KEEP_ALIVE */
 
 	return ret;
 }

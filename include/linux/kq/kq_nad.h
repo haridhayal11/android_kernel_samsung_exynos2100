@@ -35,23 +35,29 @@
 
 #define KQ_NAD_BIT_PASS			0x00002000
 
-#define KQ_NAD_MAGIC_ERASE			0xA5000000
-#define KQ_NAD_MAGIC_ACAT			0x00A50000
+#define KQ_NAD_MAGIC_ERASE				0xA5000000
+#define KQ_NAD_MAGIC_ERASE_REWORK		0x3C000000
+#define KQ_NAD_MAGIC_ACAT				0x00A50000
 #define KQ_NAD_MAGIC_DRAM_TEST			0x0000A500
 #define KQ_NAD_MAGIC_ACAT_DRAM_TEST		0x00A5A500
 #define KQ_NAD_MAGIC_NADX_TEST			0x000000A5
 #define KQ_NAD_MAGIC_NADX_DONE			0x0000005A
-#define KQ_NAD_MAGIC_REBOOT			0x5A000000
+#define KQ_NAD_MAGIC_REBOOT				0x5A000000
 #define KQ_NAD_MAGIC_CONSTANT_XOR		0xABCDABCD
 
 #define KQ_NAD_CHECK_NAD_STATUS			(0x1)
-#define KQ_NAD_CHECK_NAD_SECOND_STATUS		(0x2)
+#define KQ_NAD_CHECK_NAD_SECOND_STATUS	(0x2)
 #define KQ_NAD_CHECK_ACAT_STATUS		(0x4)
-#define KQ_NAD_CHECK_ACAT_SECOND_STATUS		(0x8)
-#define KQ_NAD_CHECK_NADX_STATUS		(0x10)
-#define KQ_NAD_CHECK_NADX_SECOND_STATUS		(0x20)
+#define KQ_NAD_CHECK_ACAT_SECOND_STATUS	(0x8)
+#define KQ_NAD_CHECK_DRAM_STATUS		(0x10)
+#define KQ_NAD_CHECK_NADX_STATUS		(0x20)
+#define KQ_NAD_CHECK_NADX_SECOND_STATUS	(0x40)
 
 #define KQ_NAD_LOOP_COUNT_NADX		444
+
+#if IS_ENABLED(CONFIG_SEC_KQ_NAD_55)
+#define KQ_NAD_REWORK_CHECK_TN 50
+#endif
 
 #if IS_ENABLED(CONFIG_ARM_EXYNOS_ACME_DISABLE_BOOT_LOCK)
 /*
@@ -91,6 +97,24 @@ enum {
 };
 
 enum {
+	KQ_NAD_INFORM1_LEVEL = 0,
+	KQ_NAD_INFORM1_STATE = 5,
+	KQ_NAD_INFORM1_BLOCK = 8,
+	KQ_NAD_INFORM1_END,
+};
+
+enum {
+	KQ_NAD_CHECK_TEMPERATURE = 1,
+	KQ_NAD_STEP_WATCHDOG,
+	KQ_NAD_SET_PRECONDITION,
+	KQ_NAD_SET_VOLTAGE,
+	KQ_NAD_VECTOR_START,
+	KQ_NAD_RECOVER_VOLTAGE,
+	KQ_NAD_RTC_TIMEOUT,
+	KQ_NAD_STATE_END,
+};
+
+enum {
 	KQ_NAD_SYSFS_STAT = 0,
 	KQ_NAD_SYSFS_ERASE,
 	KQ_NAD_SYSFS_ACAT,
@@ -108,18 +132,6 @@ enum {
 	KQ_NAD_SYSFS_REBOOT,
 	KQ_NAD_SYSFS_END,
 };
-
-static ssize_t kq_nad_show_attrs(struct device *dev,
-	struct device_attribute *attr, char *buf);
-static ssize_t kq_nad_store_attrs(struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t count);
-
-#define KQ_NAD_ATTR(_name)	\
-{	\
-	.attr = { .name = #_name, .mode = 0664 },	\
-	.show = kq_nad_show_attrs,	\
-	.store = kq_nad_store_attrs,	\
-}
 
 struct kq_nad_fail {
 	unsigned int das;
@@ -153,12 +165,17 @@ struct kq_nad_mparam_correlation {
 struct kq_nad_env {
 	unsigned int status;
 	void __iomem *inform4;
+	void __iomem *inform5;
 	struct kq_nad_mparam_inform smd;
 	struct kq_nad_mparam_inform smd_second;
 	struct kq_nad_mparam_inform acat;
 	struct kq_nad_mparam_inform acat_second;
 	struct kq_nad_mparam_inform nadx;
 	struct kq_nad_mparam_inform nadx_second;
+
+#if IS_ENABLED(CONFIG_SEC_KQ_NAD_55)
+	unsigned int rework;
+#endif
 
 #if IS_ENABLED(CONFIG_SEC_KQ_NAD_VDD_CAL)
 	struct kq_nad_mparam_vddcal vddcal;

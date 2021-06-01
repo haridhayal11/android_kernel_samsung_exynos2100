@@ -757,7 +757,7 @@ int vl53l5_ioctl_init(struct vl53l5_k_module_t *p_module)
 
 	vl53l5_k_power_onoff(p_module, p_module->iovdd_vreg, p_module->iovdd_vreg_name, 0);
 	vl53l5_k_power_onoff(p_module, p_module->avdd_vreg, p_module->avdd_vreg_name, 0);
-	usleep_range(10000, 10100);
+	msleep(20);
 	vl53l5_k_power_onoff(p_module, p_module->avdd_vreg, p_module->avdd_vreg_name, 1);
 	usleep_range(1000, 1100);
 	vl53l5_k_power_onoff(p_module, p_module->iovdd_vreg, p_module->iovdd_vreg_name, 1);
@@ -832,7 +832,12 @@ int vl53l5_ioctl_init(struct vl53l5_k_module_t *p_module)
 	{
 		int p2p, cha;
 
-		vl53l5_ioctl_set_power_mode(p_module, NULL, VL53L5_POWER_STATE_HP_IDLE);
+		status = vl53l5_ioctl_set_power_mode(p_module, NULL, VL53L5_POWER_STATE_HP_IDLE);
+		if (status != STATUS_OK) {
+			vl53l5_k_log_error("set power mode fail %d", status);
+			goto out;
+		}
+
 		usleep_range(5000, 5100);
 		cha = vl53l5_ioctl_read_generic_shape(p_module);
 		usleep_range(1000, 1100);
@@ -849,9 +854,17 @@ int vl53l5_ioctl_init(struct vl53l5_k_module_t *p_module)
 		vl53l5_k_log_error("cha %d, p2p %d\n", cha, p2p);
 	}
 
-	vl53l5_ioctl_set_device_parameters(p_module, NULL, VL53L5_CFG__BACK_TO_BACK__8X8__15HZ);
+	status = vl53l5_ioctl_set_device_parameters(p_module, NULL, VL53L5_CFG__BACK_TO_BACK__8X8__15HZ);
+	if (status != STATUS_OK) {
+		vl53l5_k_log_error("set dev param fail %d", status);
+		goto out;
+	}
 	usleep_range(1000, 1100);
-	vl53l5_ioctl_set_device_parameters(p_module, NULL, VL53L5_CFG__STATIC__SS_4PC__VCSELCP_OFF);
+	status = vl53l5_ioctl_set_device_parameters(p_module, NULL, VL53L5_CFG__STATIC__SS_4PC__VCSELCP_OFF);
+	if (status != STATUS_OK) {
+		vl53l5_k_log_error("set dev param fail %d", status);
+		goto out;
+	}
 	usleep_range(1000, 1100);
 	p_module->stdev.last_dev_error = VL53L5_ERROR_NONE;
 	p_module->last_driver_error = STATUS_OK;
@@ -2266,8 +2279,8 @@ int vl53l5_ioctl_set_cal_data(struct vl53l5_k_module_t *p_module, void __user *p
 		status = copy_from_user(&p_module->cal_data, p, sizeof(struct vl53l5_cal_data_t));
 		vl53l5_k_log_info("set cal cmd %d, %d", p_module->cal_data.cmd, p_module->cal_data.size);
 
-		if (p_module->cal_data.size > 0) {
-			vl53l5_k_log_info("comms_buff_max_count %d", p_module->stdev.host_dev.comms_buff_max_count);
+		if ((p_module->cal_data.size > 0)
+			&& (p_module->cal_data.size <= p_module->stdev.host_dev.comms_buff_max_count)) {
 			memset(p_module->stdev.host_dev.p_comms_buff, 0, p_module->stdev.host_dev.comms_buff_max_count);
 			memcpy(p_module->stdev.host_dev.p_comms_buff, p_module->cal_data.pcal_data, p_module->cal_data.size);
 
@@ -2276,9 +2289,14 @@ int vl53l5_ioctl_set_cal_data(struct vl53l5_k_module_t *p_module, void __user *p
 				p_module->update_flag |= 1 << p_module->cal_data.cmd;
 			}
 			status = STATUS_OK;
+		} else {
+			vl53l5_k_log_error("Over Size %d", p_module->stdev.host_dev.comms_buff_max_count);
+#ifdef VL53L5_TEST_ENABLE
+			panic("Cal Data Size Error");
+#endif
 		}
 	} else {
-		vl53l5_k_log_info("vl5 get cal data is null");
+		vl53l5_k_log_info("get cal data is null");
 	}
 
 	return status;

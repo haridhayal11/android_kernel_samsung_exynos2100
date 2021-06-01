@@ -114,6 +114,17 @@ static int __dsp_elf32_check_magic(struct dsp_dl_lib_file *file)
 	return ck;
 }
 
+int dsp_elf32_check_range(struct dsp_elf32 *elf, size_t size)
+{
+	if (size > elf->size) {
+		DL_ERROR("invalid size range of elf(%zu/%zu)\n",
+				size, elf->size);
+		return -1;
+	}
+
+	return 0;
+}
+
 static void *__dsp_elf32_get_ptr(struct dsp_elf32 *elf, void *src, size_t size)
 {
 	if ((src < (void *)elf->data) ||

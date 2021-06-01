@@ -1034,6 +1034,9 @@ store_req_mode(struct kobject *k, struct kobj_attribute *attr,
 	else
 		__emstune_mode_change(mode);
 
+	pr_info("[EMSTUNE] change mode : %s (idx=%d)\n",
+			emstune_modes[mode].desc, mode);
+
 	return count;
 }
 
@@ -1595,7 +1598,7 @@ store_aio_tuner(struct kobject *k, struct kobj_attribute *attr,
 	int mode, level, field, cpu, group, type;
 	struct cpumask mask;
 
-	if (sscanf(buf, "%s %s", &arg0, &arg1) != 2)
+	if (sscanf(buf, "%99s %99s", &arg0, &arg1) != 2)
 		return -EINVAL;
 
 	/* fill keys with default value(-1) */

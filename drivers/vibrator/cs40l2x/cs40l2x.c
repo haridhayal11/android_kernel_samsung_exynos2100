@@ -146,6 +146,8 @@ struct cs40l2x_private {
 #else
 	struct led_classdev led_dev;
 #endif /* CONFIG_ANDROID_TIMED_OUTPUT */
+	int vibe_start_count;
+	int vibe_done_count;
 };
 
 static const char * const cs40l2x_supplies[] = {
@@ -4567,14 +4569,7 @@ static void cs40l2x_vibe_mode_worker(struct work_struct *work)
 	unsigned int val;
 	int ret;
 
-	if (cs40l2x->devid != CS40L2X_DEVID_L25A)
-		return;
-
 	mutex_lock(&cs40l2x->lock);
-
-	if (cs40l2x->vibe_mode == CS40L2X_VIBE_MODE_HAPTIC
-			&& cs40l2x->asp_enable == CS40L2X_ASP_DISABLED)
-		goto err_mutex;
 
 	ret = regmap_read(regmap, cs40l2x_dsp_reg(cs40l2x, "STATUS",
 			CS40L2X_XM_UNPACKED_TYPE, CS40L2X_ALGO_ID_VIBE), &val);
@@ -4642,27 +4637,36 @@ static void cs40l2x_vibe_mode_worker(struct work_struct *work)
 		}
 
 		cs40l2x->vibe_mode = CS40L2X_VIBE_MODE_HAPTIC;
-		if (cs40l2x->vibe_state != CS40L2X_VIBE_STATE_RUNNING)
-			cs40l2x_wl_relax(cs40l2x);
-	} else if (cs40l2x->vibe_mode == CS40L2X_VIBE_MODE_HAPTIC &&
-						cs40l2x->a2h_enable) {
 
-		ret = regmap_update_bits(regmap, CS40L2X_PWR_CTRL3,
-				CS40L2X_CLASSH_EN_MASK,
-				1 << CS40L2X_CLASSH_EN_SHIFT);
-		if (ret)
+		if (cs40l2x->pbq_state != CS40L2X_PBQ_STATE_IDLE)
 			goto err_mutex;
 
-		ret = regmap_write(regmap, CS40L2X_DSP_VIRT1_MBOX_5,
-					CS40L2X_A2H_I2S_START);
-		if (ret)
+		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
+		cs40l2x_wl_relax(cs40l2x);
+	} else {
+		/* haptic-mode teardown */
+		if (cs40l2x->vibe_state == CS40L2X_VIBE_STATE_STOPPED
+				|| cs40l2x->pbq_state != CS40L2X_PBQ_STATE_IDLE)
 			goto err_mutex;
+
+		if (cs40l2x->amp_gnd_stby) {
+			ret = regmap_write(regmap,
+					CS40L2X_SPK_FORCE_TST_1,
+					CS40L2X_FORCE_SPK_GND);
+			if (ret) {
+				dev_err(dev,
+					"Failed to ground amplifier outputs\n");
+				goto err_mutex;
+			}
+		}
+
+		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
+		cs40l2x_wl_relax(cs40l2x);
 	}
 
 	ret = cs40l2x_enable_classh(cs40l2x);
 	if (ret)
 		goto err_mutex;
-
 
 err_mutex:
 	mutex_unlock(&cs40l2x->lock);
@@ -4833,6 +4837,8 @@ static int cs40l2x_pbq_pair_launch(struct cs40l2x_private *cs40l2x)
 			if (ret)
 				return ret;
 
+			cs40l2x->vibe_start_count++;
+
 			cs40l2x->pbq_state = CS40L2X_PBQ_STATE_PLAYING;
 			cs40l2x->pbq_index++;
 
@@ -4862,36 +4868,6 @@ static void cs40l2x_vibe_pbq_worker(struct work_struct *work)
 
 	switch (cs40l2x->pbq_state) {
 	case CS40L2X_PBQ_STATE_IDLE:
-		if (cs40l2x->vibe_state == CS40L2X_VIBE_STATE_STOPPED)
-			goto err_mutex;
-
-		ret = regmap_read(regmap,
-				cs40l2x_dsp_reg(cs40l2x, "STATUS",
-						CS40L2X_XM_UNPACKED_TYPE,
-						CS40L2X_ALGO_ID_VIBE),
-				&val);
-		if (ret) {
-			dev_err(dev, "Failed to capture playback status\n");
-			goto err_mutex;
-		}
-
-		if (val != CS40L2X_STATUS_IDLE)
-			goto err_mutex;
-
-		if (cs40l2x->amp_gnd_stby) {
-			ret = regmap_write(regmap,
-					CS40L2X_SPK_FORCE_TST_1,
-					CS40L2X_FORCE_SPK_GND);
-			if (ret) {
-				dev_err(dev,
-					"Failed to ground amplifier outputs\n");
-				goto err_mutex;
-			}
-		}
-
-		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
-		if (cs40l2x->vibe_mode != CS40L2X_VIBE_MODE_AUDIO)
-			cs40l2x_wl_relax(cs40l2x);
 		goto err_mutex;
 
 	case CS40L2X_PBQ_STATE_PLAYING:
@@ -5461,6 +5437,8 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 		if (ret)
 			break;
 
+		cs40l2x->vibe_start_count++;
+
 		msleep(CS40L2X_PEAK_DELAY_MS);
 
 		ret = regmap_write(regmap,
@@ -5516,6 +5494,8 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 		ret = cs40l2x_ack_write(cs40l2x, CS40L2X_MBOX_TRIGGER_MS,
 				cs40l2x->cp_trailer_index & CS40L2X_INDEX_MASK,
 				CS40L2X_MBOX_TRIGGERRESET);
+
+		cs40l2x->vibe_start_count++;
 		break;
 
 	case CS40L2X_INDEX_CLICK_MIN ... CS40L2X_INDEX_CLICK_MAX:
@@ -5531,6 +5511,8 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 		ret = cs40l2x_ack_write(cs40l2x, CS40L2X_MBOX_TRIGGERINDEX,
 				cs40l2x->cp_trailer_index,
 				CS40L2X_MBOX_TRIGGERRESET);
+
+		cs40l2x->vibe_start_count++;
 		break;
 
 	case CS40L2X_INDEX_PBQ:
@@ -8382,6 +8364,89 @@ err_otp_unpack:
 	return ret;
 }
 
+#if defined(CONFIG_SEC_VIBRATOR)
+static int of_sec_vibrator_dt(struct cs40l2x_platform_data *pdata, struct device_node *np)
+{
+	int ret = 0;
+	int i;
+	unsigned int val = 0;
+	int *intensities = NULL;
+
+	pr_info("%s\n", __func__);
+	pdata->calibration = false;
+
+	/* number of steps */
+	ret = of_property_read_u32(np, "samsung,steps", &val);
+	if (ret) {
+		pr_err("%s out of range(%d)\n", __func__, val);
+		return -EINVAL;
+	}
+	pdata->steps = (int)val;
+
+	/* allocate memory for intensities */
+	pdata->intensities = kmalloc_array(pdata->steps, sizeof(int), GFP_KERNEL);
+	if (!pdata->intensities)
+		return -ENOMEM;
+	intensities = pdata->intensities;
+
+	/* intensities */
+	ret = of_property_read_u32_array(np, "samsung,intensities", intensities, pdata->steps);
+	if (ret) {
+		pr_err("intensities are not specified\n");
+		ret = -EINVAL;
+		goto err_getting_int;
+	}
+
+	for (i = 0; i < pdata->steps; i++) {
+		if ((intensities[i] < 0) || (intensities[i] > MAX_INTENSITY)) {
+			pr_err("%s out of range(%d)\n", __func__, intensities[i]);
+			ret = -EINVAL;
+			goto err_getting_int;
+		}
+	}
+	intensities = NULL;
+
+	/* allocate memory for haptic_intensities */
+	pdata->haptic_intensities = kmalloc_array(pdata->steps, sizeof(int), GFP_KERNEL);
+	if (!pdata->haptic_intensities) {
+		ret = -ENOMEM;
+		goto err_alloc_haptic;
+	}
+	intensities = pdata->haptic_intensities;
+
+	/* haptic intensities */
+	ret = of_property_read_u32_array(np, "samsung,haptic_intensities", intensities, pdata->steps);
+	if (ret) {
+		pr_err("haptic_intensities are not specified\n");
+		ret = -EINVAL;
+		goto err_haptic;
+	}
+	for (i = 0; i < pdata->steps; i++) {
+		if ((intensities[i] < 0) || (intensities[i] > MAX_INTENSITY)) {
+			pr_err("%s out of range(%d)\n", __func__, intensities[i]);
+			ret = -EINVAL;
+			goto err_haptic;
+		}
+	}
+
+	/* update calibration statue */
+	pdata->calibration = true;
+
+	return ret;
+
+err_haptic:
+	kfree(pdata->haptic_intensities);
+err_alloc_haptic:
+	pdata->haptic_intensities = NULL;
+err_getting_int:
+	kfree(pdata->intensities);
+	pdata->intensities = NULL;
+	pdata->steps = 0;
+
+	return ret;
+}
+#endif /* if defined(CONFIG_SEC_VIBRATOR) */
+
 static int cs40l2x_handle_of_data(struct i2c_client *i2c_client,
 		struct cs40l2x_platform_data *pdata)
 {
@@ -8682,6 +8747,12 @@ static int cs40l2x_handle_of_data(struct i2c_client *i2c_client,
 
 		pr_info("%s: dig scale default:%d\n", __func__, pdata->dig_scale_default);
 	}
+#endif
+
+#if defined(CONFIG_SEC_VIBRATOR)
+	ret = of_sec_vibrator_dt(pdata, np);
+	if (ret < 0)
+		pr_err("sec_vibrator dt read fail\n");
 #endif
 	return 0;
 }
@@ -9043,6 +9114,9 @@ static irqreturn_t cs40l2x_irq(int irq, void *data)
 #endif
 			/* intentionally fall through */
 		case CS40L2X_EVENT_CTRL_GPIO_STOP:
+			cs40l2x->vibe_done_count++;
+			dev_err(cs40l2x->dev, "Vibration Done: %d, %d\n",
+				cs40l2x->vibe_start_count, cs40l2x->vibe_done_count);
 			if (asp_timeout > 0)
 				hrtimer_start(&cs40l2x->asp_timer,
 						ktime_set(asp_timeout / 1000,
@@ -9100,6 +9174,96 @@ err_mutex:
 	return ret_irq;
 }
 
+#if defined(CONFIG_SEC_VIBRATOR)
+static bool cs40l2x_get_calibration(struct device *dev)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	struct cs40l2x_platform_data *pdata = &cs40l2x->pdata;
+
+	return pdata->calibration;
+}
+
+static int cs40l2x_get_step_size(struct device *dev, int *step_size)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	struct cs40l2x_platform_data *pdata = &cs40l2x->pdata;
+
+	pr_info("%s step_size=%d\n", __func__, pdata->steps);
+
+	if (pdata->steps == 0)
+		return -ENODATA;
+
+	mutex_lock(&cs40l2x->lock);
+	*step_size = pdata->steps;
+	mutex_unlock(&cs40l2x->lock);
+
+	return 0;
+}
+
+
+static int cs40l2x_get_intensities(struct device *dev, int *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	struct cs40l2x_platform_data *pdata = &cs40l2x->pdata;
+	int i;
+
+	if (pdata->intensities[1] == 0)
+		return -ENODATA;
+
+	mutex_lock(&cs40l2x->lock);
+	for (i = 0; i < pdata->steps; i++)
+		buf[i] = pdata->intensities[i];
+	mutex_unlock(&cs40l2x->lock);
+
+	return 0;
+}
+
+static int cs40l2x_set_intensities(struct device *dev, int *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	struct cs40l2x_platform_data *pdata = &cs40l2x->pdata;
+	int i;
+
+	mutex_lock(&cs40l2x->lock);
+	for (i = 0; i < pdata->steps; i++)
+		pdata->intensities[i] = buf[i];
+	mutex_unlock(&cs40l2x->lock);
+
+	return 0;
+}
+
+static int cs40l2x_get_haptic_intensities(struct device *dev, int *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	struct cs40l2x_platform_data *pdata = &cs40l2x->pdata;
+	int i;
+
+	if (pdata->haptic_intensities[1] == 0)
+		return -ENODATA;
+
+	mutex_lock(&cs40l2x->lock);
+	for (i = 0; i < pdata->steps; i++)
+		buf[i] = pdata->haptic_intensities[i];
+	mutex_unlock(&cs40l2x->lock);
+
+	return 0;
+}
+
+static int cs40l2x_set_haptic_intensities(struct device *dev, int *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	struct cs40l2x_platform_data *pdata = &cs40l2x->pdata;
+	int i;
+
+	mutex_lock(&cs40l2x->lock);
+	for (i = 0; i < pdata->steps; i++)
+		pdata->haptic_intensities[i] = buf[i];
+	mutex_unlock(&cs40l2x->lock);
+
+	return 0;
+}
+#endif /* if defined(CONFIG_SEC_VIBRATOR) */
+
 static const struct sec_vibrator_ops cs40l2x_vib_ops = {
 	.enable = cs40l2x_vibe_enable,
 	.set_intensity = cs40l2x_vib_set_intensity,
@@ -9110,6 +9274,14 @@ static const struct sec_vibrator_ops cs40l2x_vib_ops = {
 	.set_cp_trigger_queue = cs40l2x_set_cp_trigger_queue,
 	.get_cp_trigger_queue = cs40l2x_get_cp_trigger_queue,
 	.set_tuning_with_temp = cs40l2x_vib_set_current_temp,
+#if defined(CONFIG_SEC_VIBRATOR)
+	.get_calibration = cs40l2x_get_calibration,
+	.get_step_size = cs40l2x_get_step_size,
+	.get_intensities = cs40l2x_get_intensities,
+	.set_intensities = cs40l2x_set_intensities,
+	.get_haptic_intensities = cs40l2x_get_haptic_intensities,
+	.set_haptic_intensities = cs40l2x_set_haptic_intensities,
+#endif
 };
 
 static int cs40l2x_i2c_probe(struct i2c_client *i2c_client,

@@ -921,11 +921,6 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 
 	case IPI_CPU_STOP:
 		trace_android_vh_ipi_stop_rcuidle(regs);
-		if (IS_ENABLED(CONFIG_SEC_DEBUG)) {
-			if (system_state == SYSTEM_BOOTING ||
-			    system_state == SYSTEM_RUNNING)
-				dump_stack();
-		}
 		irq_enter();
 		local_cpu_stop();
 		irq_exit();

@@ -486,12 +486,14 @@ static int srpmb_suspend_notifier(struct notifier_block *nb, unsigned long event
 	case PM_SUSPEND_PREPARE:
 	case PM_RESTORE_PREPARE:
 		flush_workqueue(rpmb_ctx->srpmb_queue);
-		update_rpmb_status_flag(rpmb_ctx, req, RPMB_FAIL_SUSPEND_STATUS);
+		if (req->status_flag != RPMB_PASSED)
+			update_rpmb_status_flag(rpmb_ctx, req, RPMB_FAIL_SUSPEND_STATUS);
 		break;
 	case PM_POST_SUSPEND:
 	case PM_POST_HIBERNATION:
 	case PM_POST_RESTORE:
-		update_rpmb_status_flag(rpmb_ctx, req, 0);
+		if (req->status_flag != RPMB_PASSED)
+			update_rpmb_status_flag(rpmb_ctx, req, 0);
 		break;
 	default:
 		break;

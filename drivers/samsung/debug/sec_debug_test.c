@@ -377,7 +377,7 @@ static void simulate_PANIC(char **argv, int argc)
 	if (argv[0] == NULL)
 		panic("simulate_panic");
 	else
-		panic(argv[0]);
+		panic("%s", argv[0]);
 }
 
 static void simulate_BUG(char **argv, int argc)
@@ -812,7 +812,7 @@ static void simulate_UNALIGNED(char **argv, int argc)
 	u32 written;
 
 	p = (u32 *)(data + 1);
-	pr_info("%s: p->0x%08px\n", __func__, p);
+	pr_info("%s: p->0x%px\n", __func__, p);
 
 	if (*p == 0)
 		val = 0x87654321;

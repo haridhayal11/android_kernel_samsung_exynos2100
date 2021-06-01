@@ -236,6 +236,27 @@ static irqreturn_t pn547_wake_irq_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+void pn547_print_status(void)
+{
+	struct pn547_dev *pn547_dev = get_nfcc_dev_data();
+	int en, firm, irq, pvdd;
+	int clk_req_irq = -1;
+
+	if (pn547_dev == NULL)
+		return;
+
+	en = gpio_get_value(pn547_dev->ven_gpio);
+	firm = gpio_get_value(pn547_dev->firm_gpio);
+	irq = gpio_get_value(pn547_dev->irq_gpio);
+	pvdd = regulator_is_enabled(pn547_dev->nfc_pvdd);
+
+	if (gpio_is_valid(pn547_dev->clk_req_gpio))
+		clk_req_irq = gpio_get_value(pn547_dev->clk_req_gpio);
+
+	NFC_LOG_INFO("en: %d, firm: %d, pvdd: %d, irq: %d, clk_req: %d, state_flags: 0x%x\n",
+		en, firm, pvdd, irq, clk_req_irq, pn547_dev->state_flags);
+}
+
 ssize_t pn547_dev_read(struct file *filp, char __user *buf,
 		size_t count, loff_t *offset)
 {
@@ -495,6 +516,7 @@ static int pn547_dev_release(struct inode *inode, struct file *filp)
 #ifdef FEATURE_SN100X
 	pn547_dev->state_flags &= ~(PN547_STATE_NFC_VEN_RESET | PN547_STATE_NFC_ON | PN547_STATE_FW_DNLD);
 #endif
+	pn547_print_status();
 	atomic_inc(&s_Device_opened);
 
 	return 0;
@@ -1905,6 +1927,8 @@ static int pn547_probe(struct i2c_client *client, const struct i2c_device_id *id
 		goto err_w_buf_alloc_failed;
 	}
 
+	nfc_logger_register_nfc_stauts_func(pn547_print_status);
+
 	return 0;
 
 err_w_buf_alloc_failed:
@@ -1991,6 +2015,17 @@ static void pn547_shutdown(struct i2c_client *client)
 		}
 
 		if (pn547_dev->ap_vendor != AP_VENDOR_SLSI) {
+			if (pn547_dev->ap_vendor == AP_VENDOR_MTK) {
+				/*use internal pull-up case*/
+				struct pinctrl *pinctrl = NULL;
+
+				pinctrl = devm_pinctrl_get_select(&client->dev, "i2c_off");
+				if (IS_ERR_OR_NULL(pinctrl))
+					NFC_LOG_ERR("Failed to pinctrl i2c_off\n");
+				else
+					devm_pinctrl_put(pinctrl);
+				NFC_LOG_ERR("i2c off pinctrl called\n");
+			};
 			/* VEN low -> VDDIO low : spec - within 3ms */
 			gpio_direction_output(pn547_dev->ven_gpio, 0);
 			ret = pn547_regulator_onoff(&client->dev, pn547_dev, NFC_I2C_LDO_OFF);

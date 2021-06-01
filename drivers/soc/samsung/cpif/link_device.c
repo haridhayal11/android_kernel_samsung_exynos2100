@@ -655,7 +655,7 @@ static void cmd_init_start_handler(struct mem_link_device *mld)
 
 #if IS_ENABLED(CONFIG_EXYNOS_DIT)
 	err = dit_init(ld, false);
-	if (err < 0) {
+	if ((err < 0) && (err != -EPERM)) {
 		mif_err("dit_init() error %d\n", err);
 		return;
 	}
@@ -1162,18 +1162,19 @@ static inline void start_tx_timer(struct mem_link_device *mld,
 	unsigned long flags;
 
 	spin_lock_irqsave(&mc->lock, flags);
+	if (unlikely(cp_offline(mc))) {
+		spin_unlock_irqrestore(&mc->lock, flags);
+		return;
+	}
+	spin_unlock_irqrestore(&mc->lock, flags);
 
-	if (unlikely(cp_offline(mc)))
-		goto exit;
-
+	spin_lock_irqsave(&mc->tx_timer_lock, flags);
 	if (!hrtimer_is_queued(timer)) {
 		ktime_t ktime = ktime_set(0, mld->tx_period_ms * NSEC_PER_MSEC);
 
 		hrtimer_start(timer, ktime, HRTIMER_MODE_REL);
 	}
-
-exit:
-	spin_unlock_irqrestore(&mc->lock, flags);
+	spin_unlock_irqrestore(&mc->tx_timer_lock, flags);
 }
 
 static inline void shmem_start_timers(struct mem_link_device *mld)
@@ -1192,12 +1193,10 @@ static inline void cancel_tx_timer(struct mem_link_device *mld,
 	struct modem_ctl *mc = ld->mc;
 	unsigned long flags;
 
-	spin_lock_irqsave(&mc->lock, flags);
-
+	spin_lock_irqsave(&mc->tx_timer_lock, flags);
 	if (hrtimer_active(timer))
 		hrtimer_cancel(timer);
-
-	spin_unlock_irqrestore(&mc->lock, flags);
+	spin_unlock_irqrestore(&mc->tx_timer_lock, flags);
 }
 
 static inline void shmem_stop_timers(struct mem_link_device *mld)
@@ -1522,13 +1521,11 @@ static enum hrtimer_restart pktproc_tx_timer_func(struct hrtimer *timer)
 	else if (need_irq)
 		send_ipc_irq(mld, mask2int(MASK_SEND_DATA));
 
-	spin_lock_irqsave(&mc->lock, flags);
 	if (need_schedule) {
 		ktime_t ktime = ktime_set(0, mld->tx_period_ms * NSEC_PER_MSEC);
 
 		hrtimer_start(timer, ktime, HRTIMER_MODE_REL);
 	}
-	spin_unlock_irqrestore(&mc->lock, flags);
 
 	return HRTIMER_NORESTART;
 }
@@ -2381,28 +2378,30 @@ static int link_load_cp_image(struct link_device *ld, struct io_device *iod,
 #endif
 	void __iomem *dst;
 	void __user *src;
-	int err;
 	struct cp_image img;
 	void __iomem *v_base;
 	size_t valid_space;
+	int ret = 0;
 
 	/**
 	 * Get the information about the boot image
 	 */
 	memset(&img, 0, sizeof(struct cp_image));
 
-	err = copy_from_user(&img, (const void __user *)arg, sizeof(img));
-	if (err) {
+	ret = copy_from_user(&img, (const void __user *)arg, sizeof(img));
+	if (ret) {
 		mif_err("%s: ERR! INFO copy_from_user fail\n", ld->name);
 		return -EFAULT;
 	}
 
+	mutex_lock(&mld->vmap_lock);
 	if (mld->boot_base == NULL) {
 		mld->boot_base = cp_shmem_get_nc_region(cp_shmem_get_base(ld->mdm_data->cp_num,
 					SHMEM_CP), mld->boot_size);
 		if (!mld->boot_base) {
 			mif_err("Failed to vmap boot_region\n");
-			return -EINVAL;		/* TODO : need better return */
+			ret = -EINVAL;
+			goto out;
 		}
 	}
 
@@ -2419,7 +2418,8 @@ static int link_load_cp_image(struct link_device *ld, struct io_device *iod,
 			|| img.m_offset > valid_space - img.len) {
 		mif_err("%s: ERR! Invalid args: size %x, offset %x, len %x\n",
 			ld->name, img.size, img.m_offset, img.len);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto out;
 	}
 
 	dst = (void __iomem *)(v_base + img.m_offset);
@@ -2430,13 +2430,16 @@ static int link_load_cp_image(struct link_device *ld, struct io_device *iod,
 		mld->cp_binary_size = img.size;
 #endif
 
-	err = copy_from_user(dst, src, img.len);
-	if (err) {
+	ret = copy_from_user(dst, src, img.len);
+	if (ret) {
 		mif_err("%s: ERR! BOOT copy_from_user fail\n", ld->name);
-		return err;
+		goto out;
 	}
 
-	return 0;
+out:
+	mutex_unlock(&mld->vmap_lock);
+
+	return ret;
 }
 
 #if !IS_ENABLED(CONFIG_CP_SECURE_BOOT)
@@ -2456,7 +2459,7 @@ unsigned long shmem_calculate_CRC32(const unsigned char *buf, unsigned long len)
 	return ul_crc;
 }
 
-void shmem_check_modem_binary_crc(struct link_device *ld)
+static void shmem_check_modem_binary_crc(struct link_device *ld)
 {
 	struct mem_link_device *mld = to_mem_link_device(ld);
 	struct resource *cpmem_info = mld->syscp_info;
@@ -2580,20 +2583,19 @@ static int shmem_security_request(struct link_device *ld, struct io_device *iod,
 	}
 #endif
 
+	mutex_lock(&mld->vmap_lock);
+	if (mld->boot_base != NULL) {
 #if !IS_ENABLED(CONFIG_CP_SECURE_BOOT)
-	if (mode == CP_BOOT_MODE_NORMAL)
-		shmem_check_modem_binary_crc(ld);
-	/* boot_base should be unmapped after its usage on crc check */
-	if (mld->boot_base != NULL) {
+		if (mode == CP_BOOT_MODE_NORMAL)
+			shmem_check_modem_binary_crc(ld);
+#endif
+		/* boot_base is in no use at this point */
 		vunmap(mld->boot_base);
 		mld->boot_base = NULL;
 	}
-#else
-	/* boot_base is in no use at this point */
-	if (mld->boot_base != NULL) {
-		vunmap(mld->boot_base);
-		mld->boot_base = NULL;
-	}
+	mutex_unlock(&mld->vmap_lock);
+
+#if IS_ENABLED(CONFIG_CP_SECURE_BOOT)
 	exynos_smc(SMC_ID_CLK, SSS_CLK_ENABLE, 0, 0);
 	if ((mode == CP_BOOT_MODE_NORMAL) && cp_shmem_get_mem_map_on_cp_flag(cp_num))
 		mode |= cp_shmem_get_base(cp_num, SHMEM_CP);
@@ -4244,6 +4246,8 @@ struct link_device *create_link_device(struct platform_device *pdev, u32 link_ty
 #endif
 
 	spin_lock_init(&mld->state_lock);
+	mutex_init(&mld->vmap_lock);
+
 	mld->state = LINK_STATE_OFFLINE;
 
 	/*

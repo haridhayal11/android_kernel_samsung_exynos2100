@@ -62,6 +62,13 @@
 /* Interrupt timeout count*/
 #define MFC_INT_TIMEOUT_CNT	2
 
+/* The MAX I frame interval for boosting is 2sec */
+#define MFC_BOOST_TIME			(2)
+/* The boost mode is not applied during first 60frames */
+#define MFC_BOOST_SKIP_FRAME		(60)
+/* The boost mode is maintained at least 20msec */
+#define MFC_BOOST_OFF_TIME		((MFC_BOOST_TIME * NSEC_PER_SEC) - (20000 * NSEC_PER_USEC))
+
 /*
  * This value guarantees 299.4msec ~ 2.25sec according to MFC clock (668MHz ~ 89MHz)
  * releated with MFC_REG_TIMEOUT_VALUE
@@ -220,7 +227,11 @@
 
 /* FHD resolution */
 #define MFC_FHD_RES		(1920 * 1088)
+#define MFC_FHD_RES_MB		(((1920 + 15) / 16) * ((1088 + 15) / 16))
 #define UNDER_FHD_RES(ctx)	(((ctx)->crop_width * (ctx)->crop_height) <= MFC_FHD_RES)
+
+/* HD resolution */
+#define MFC_HD_RES_MB		(((1280 + 15) / 16) * ((720 + 15) / 16))
 
 #define IS_BLACKBAR_OFF(ctx)	((ctx)->crop_height > 2160)
 #define IS_SUPER64_BFRAME(ctx, size, type)	((ctx->is_10bit) && (size >= 2) && (type == 3))

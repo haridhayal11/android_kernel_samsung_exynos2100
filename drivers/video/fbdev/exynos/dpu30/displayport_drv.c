@@ -1670,8 +1670,12 @@ void displayport_hpd_changed(int state)
 		cancel_delayed_work_sync(&displayport->hdcp22_work);
 		cancel_delayed_work_sync(&displayport->hdcp13_integrity_check_work);
 
-		for (i = SST1; i < MAX_SST_CNT; i++)
-			displayport_off_by_hpd_low(i, displayport);
+		if (displayport->mst_cap == 0) {
+			displayport_off_by_hpd_low(sst_id, displayport);
+		} else {
+			for (i = SST1; i < MAX_SST_CNT; i++)
+				displayport_off_by_hpd_low(i, displayport);
+		}
 
 		displayport_reg_deinit();
 		displayport_reg_phy_disable();
@@ -2446,6 +2450,11 @@ int displayport_audio_config(u32 sst_id, struct displayport_audio_config_data *a
 	struct displayport_device *displayport = get_displayport_drvdata();
 	int ret = 0;
 
+	if (displayport->sst[sst_id]->state == DISPLAYPORT_STATE_OFF || !phy_status) {
+		displayport_warn("power status is off timing\n");
+		return -EINVAL;
+	}
+
 	displayport_info("SST%d audio config(%d ==> %d)\n",
 			sst_id + 1, displayport->sst[sst_id]->audio_state, audio_config_data->audio_enable);
 
@@ -2883,7 +2892,7 @@ static int displayport_s_dv_timings(struct v4l2_subdev *sd,
 	int ret = 0;
 	char timingstr[32] = {0x0, };
 
-	if (displayport->sst[sst_id]->state == DISPLAYPORT_STATE_OFF) {
+	if (displayport->sst[sst_id]->state == DISPLAYPORT_STATE_OFF || !phy_status) {
 		displayport_warn("power status is off timing\n");
 		return 0;
 	}
@@ -2948,7 +2957,7 @@ static int displayport_enum_dv_timings(struct v4l2_subdev *sd,
 	struct displayport_device *displayport = container_of(sd, struct displayport_device, sd);
 	u32 sst_id = displayport->cur_sst_id;
 
-	if (displayport->sst[sst_id]->state == DISPLAYPORT_STATE_OFF) {
+	if (displayport->sst[sst_id]->state == DISPLAYPORT_STATE_OFF || !phy_status) {
 		displayport_warn("power status is off timing id(%d)\n", timings->index);
 		if (timings->index == 0) {
 			timings->timings = supported_videos[timings->index].dv_timings;

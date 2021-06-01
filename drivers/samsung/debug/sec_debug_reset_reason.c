@@ -455,7 +455,7 @@ static int __init secdbg_reset_reason_init(void)
 	struct proc_dir_entry *entry;
 
 	pr_info("%s: from cmdline: reset_reason: %d\n", __func__, reset_reason);
-	pr_info("%s: from cmdline: pwrsrc_rs: %llx\n", __func__, pwrsrc_rs);
+	pr_info("%s: from cmdline: pwrsrc_rs: %lx\n", __func__, pwrsrc_rs);
 
 	entry = proc_create("reset_reason", 0400, NULL, &secdbg_reset_reason_proc_fops);
 	if (!entry)

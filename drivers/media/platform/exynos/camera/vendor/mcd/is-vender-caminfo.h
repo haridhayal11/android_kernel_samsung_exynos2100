@@ -61,8 +61,10 @@ typedef struct
 typedef struct
 {
 	int tilt_cal_tele_efs_size;
+	int tilt_cal_tele2_efs_size;
 	int gyro_efs_size;
 	uint8_t *tilt_cal_tele_efs_buf;
+	uint8_t *tilt_cal_tele2_efs_buf;
 	uint8_t *gyro_efs_buf;
 } caminfo_efs_data;
 

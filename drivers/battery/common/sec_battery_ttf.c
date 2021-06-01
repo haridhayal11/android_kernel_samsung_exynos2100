@@ -79,7 +79,7 @@ void sec_bat_calc_time_to_full(struct sec_battery_info * battery)
 
 		if (is_hv_wire_12v_type(battery->cable_type)) {
 			charge = battery->ttf_d->ttf_hv_12v_charge_current;
-#if IS_ENABLED(CONFIG_WIRELESS_CHARGER_MFC)
+#if IS_ENABLED(CONFIG_WIRELESS_CHARGING)
 		} else if (is_hv_wireless_type(battery->cable_type) ||
 			battery->cable_type == SEC_BATTERY_CABLE_PREPARE_WIRELESS_HV ||
 			battery->cable_type == SEC_BATTERY_CABLE_PREPARE_WIRELESS_20) {
@@ -121,7 +121,7 @@ void sec_bat_calc_time_to_full(struct sec_battery_info * battery)
 	}
 }
 
-#if IS_ENABLED(CONFIG_WIRELESS_CHARGER_MFC)
+#if IS_ENABLED(CONFIG_WIRELESS_CHARGING)
 void sec_bat_predict_wireless20_time_to_full_current(struct sec_battery_info *battery, int rx_power)
 {
 	if (rx_power < 0)

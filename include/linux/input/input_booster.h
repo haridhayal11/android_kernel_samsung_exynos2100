@@ -81,14 +81,17 @@
 		ssize_t return_value = 0; \
 		struct t_ib_device_tree *ib_dt = dev_get_drvdata(dev); \
 		if (ib_dt == NULL) { \
-			return  ret; \
+			return return_value; \
 		} \
 		ret = sprintf(buf, "%d", ib_dt->_ATTR_##_time); \
 		return_value += ret; \
 		buf = buf + ret; \
-		for (i = 0; i < max_resource_count; ++i) { \
+		if (allowed_resources == NULL) { \
+			return return_value; \
+		} \
+		for (i = 0; i < allowed_res_count; ++i) { \
 			pr_booster("[Input Booster8] show  i : %d, %s\n", i, #_ATTR_); \
-			ret = sprintf(buf, " %d", ib_dt->res[i]._ATTR_##_value); \
+			ret = sprintf(buf, " %d", ib_dt->res[allowed_resources[i]]._ATTR_##_value); \
 			buf = buf + ret; \
 			return_value += ret; \
 		} \
@@ -113,8 +116,11 @@
 			return count; \
 		} \
 		buf += offset; \
-		for (i = 0; i < max_resource_count; ++i) { \
-			if (!sscanf(buf, "%d%n", &values[i], &offset)) { \
+		if (allowed_resources == NULL) { \
+			return count; \
+		} \
+		for (i = 0; i < allowed_res_count; ++i) { \
+			if (!sscanf(buf, "%d%n", &values[allowed_resources[i]], &offset)) { \
 				pr_booster("### Keep this format : [time cpu_freq hmp_boost ddr_freq lpm_bias] (Ex: 200 1171200 2 1017 5###\n"); \
 				return count; \
 			} \
@@ -126,8 +132,8 @@
 			return count; \
 		} \
 		ib_dt->_ATTR_##_time = time; \
-		for (i = 0; i < MAX_RES_COUNT; ++i) { \
-			ib_dt->res[i]._ATTR_##_value = values[i]; \
+		for (i = 0; i < allowed_res_count; ++i) { \
+			ib_dt->res[allowed_resources[i]]._ATTR_##_value = values[allowed_resources[i]]; \
 		} \
 		return count; \
 	} \
@@ -310,6 +316,7 @@ enum booster_res_type {
 enum booster_res_type {
 	CPUFREQ = 0,
 	DDRFREQ,
+	SCHEDBOOST,
 	MAX_RES_COUNT
 };
 #endif

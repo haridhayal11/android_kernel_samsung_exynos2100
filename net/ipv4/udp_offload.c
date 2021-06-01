@@ -463,7 +463,7 @@ struct sk_buff *udp_gro_receive(struct list_head *head, struct sk_buff *skb,
 		else
 			sk2 = udp4_lib_lookup_skb(skb, uh->source, uh->dest);
 	}
- 
+
 	NAPI_GRO_CB(skb)->is_flist = 0;
 	if ((sk || sk2) && (skb->dev->features & NETIF_F_GRO_FRAGLIST))
 		NAPI_GRO_CB(skb)->is_flist = sk ? !udp_sk(sk)->gro_enabled: 1;

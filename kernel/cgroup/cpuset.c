@@ -162,8 +162,9 @@ struct cpuset {
 	int child_ecpus_count;
 };
 
-#define CGROUP_COUNT	15
-static struct cpuset requested_cs[CGROUP_COUNT];
+#define CS_CGROUP_COUNT	20
+static struct cpuset requested_cs[CS_CGROUP_COUNT];
+static int cs_count;
 
 #define req_cs(cs)	(requested_cs[cs->css.id - 1])
 
@@ -2695,6 +2696,11 @@ cpuset_css_alloc(struct cgroup_subsys_state *parent_css)
 {
 	struct cpuset *cs;
 
+	if (++cs_count > CS_CGROUP_COUNT) {
+		pr_err("%s: too many cpuset groups(%d)\n", __func__, cs_count);
+		return ERR_PTR(-ENOMEM);
+	}
+
 	if (!parent_css)
 		return &top_cpuset.css;
 
@@ -2889,7 +2895,7 @@ int __init cpuset_init(void)
 {
 	int i;
 
-	for (i = 0; i < CGROUP_COUNT; i++) {
+	for (i = 0; i < CS_CGROUP_COUNT; i++) {
 		BUG_ON(!alloc_cpumask_var(&requested_cs[i].cpus_allowed, GFP_KERNEL));
 		cpumask_setall(requested_cs[i].cpus_allowed);
 	}

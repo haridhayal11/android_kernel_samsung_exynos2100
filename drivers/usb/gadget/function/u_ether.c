@@ -256,9 +256,11 @@ enomem:
 		DBG(dev, "rx submit --> %d\n", retval);
 		if (skb)
 			dev_kfree_skb_any(skb);
+#ifndef CONFIG_USB_RNDIS_MULTIPACKET
 		spin_lock_irqsave(&dev->req_lock, flags);
 		list_add(&req->list, &dev->rx_reqs);
 		spin_unlock_irqrestore(&dev->req_lock, flags);
+#endif
 	}
 	return retval;
 }

@@ -75,6 +75,12 @@ struct cs40l2x_platform_data {
 	int low_temp;
 	int lower_temp;
 #endif
+#if defined(CONFIG_SEC_VIBRATOR)
+	bool calibration;
+	int steps;
+	int *intensities;
+	int *haptic_intensities;
+#endif
 };
 
 #endif /* __CS40L2X_H */

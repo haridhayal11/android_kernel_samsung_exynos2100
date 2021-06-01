@@ -766,7 +766,7 @@ void get_sensors_name(struct ssp_data *data, char *pchRcvDataFrame, int *index) 
 	memcpy(&length, pchRcvDataFrame + *index, sizeof(length));
 	*index += sizeof(length);
 
-	if(length <= sizeof(data->sensor_name[type])) {
+	if(type < SENSOR_MAX && length <= sizeof(data->sensor_name[type])) {
 		memcpy(&(data->sensor_name[type]), pchRcvDataFrame + *index, length);
 		*index += length;
 		pr_info("[SSP] sensor(%d) : %s", type, data->sensor_name[type]);

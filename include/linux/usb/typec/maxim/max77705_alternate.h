@@ -15,8 +15,7 @@
 
 #ifndef __LINUX_MAXIM_CCIC_ALTERNATE_MODE_H__
 #define __LINUX_MAXIM_CCIC_ALTERNATE_MODE_H__
-/* for test */
-#define CONFIG_MAXIM_CCIC_ALTERNATE_MODE
+
 #if defined(CONFIG_MAXIM_CCIC_ALTERNATE_MODE)
 typedef union { /* new defined union for MD05 Op Code Command Data */
 	uint8_t        DATA;

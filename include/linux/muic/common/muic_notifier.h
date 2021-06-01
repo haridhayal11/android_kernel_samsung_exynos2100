@@ -74,13 +74,14 @@ struct muic_notifier_struct {
  * this function is for JUST MUIC device driver.
  * DON'T use function anywhrer else!!
  */
+extern struct device *switch_device;
+
 extern void muic_notifier_attach_attached_dev(muic_attached_dev_t new_dev);
 extern void muic_notifier_detach_attached_dev(muic_attached_dev_t cur_dev);
 extern void muic_pdic_notifier_attach_attached_dev(muic_attached_dev_t new_dev);
 extern void muic_pdic_notifier_detach_attached_dev(muic_attached_dev_t new_dev);
 extern void muic_notifier_logically_attach_attached_dev(muic_attached_dev_t new_dev);
 extern void muic_notifier_logically_detach_attached_dev(muic_attached_dev_t cur_dev);
-extern void muic_notifier_chg_off(muic_attached_dev_t new_dev);
 
 #ifdef CONFIG_PDIC_SLSI_NON_MCU
 extern int muic_pdic_notifier_register(struct notifier_block *nb,

@@ -490,7 +490,7 @@ static irqreturn_t is_isr_pdp_int1(int irq, void *data)
 		is_hardware_sfr_dump(hw_ip->hardware, hw_ip->id, false);
 
 		if (pdp_hw_is_occurred(state, PE_PAF_OVERFLOW)) {
-#if IS_ENABLED(CONFIG_EXYNOS_SCI_DBG)
+#if IS_ENABLED(CONFIG_EXYNOS_SCI_DBG_AUTO)
 			smc_ppc_enable(0);
 #endif
 			print_all_hw_frame_count(hw_ip->hardware);
@@ -559,7 +559,7 @@ static irqreturn_t is_isr_pdp_int2(int irq, void *data)
 		is_hardware_sfr_dump(hw_ip->hardware, hw_ip->id, false);
 
 		if (pdp_hw_is_occurred(state, PE_PAF_OVERFLOW)) {
-#if IS_ENABLED(CONFIG_EXYNOS_SCI_DBG)
+#if IS_ENABLED(CONFIG_EXYNOS_SCI_DBG_AUTO)
 			smc_ppc_enable(0);
 #endif
 			print_all_hw_frame_count(hw_ip->hardware);
@@ -1372,6 +1372,15 @@ static int is_hw_pdp_init(struct is_hw_ip *hw_ip, u32 instance,
 				return ret;
 			}
 		}
+
+		subdev = &device->pdaf;
+		if (!test_bit(IS_SUBDEV_OPEN, &subdev->state)) {
+			ret = is_subdev_internal_open(device, IS_DEVICE_ISCHAIN, subdev);
+			if (ret) {
+				merr("is_subdev_internal_open is fail(%d)", device, ret);
+				return ret;
+			}
+		}
 	}
 
 	set_bit(HW_INIT, &hw_ip->state);
@@ -1415,6 +1424,13 @@ static int is_hw_pdp_deinit(struct is_hw_ip *hw_ip, u32 instance)
 			if (ret)
 				merr("subdev internal stop is fail(%d)", device, ret);
 
+			ret = is_subdev_internal_close(device, IS_DEVICE_ISCHAIN, subdev);
+			if (ret)
+				merr("is_subdev_internal_close is fail(%d)", device, ret);
+		}
+
+		subdev = &device->pdaf;
+		if (test_bit(IS_SUBDEV_INTERNAL_USE, &subdev->state)) {
 			ret = is_subdev_internal_close(device, IS_DEVICE_ISCHAIN, subdev);
 			if (ret)
 				merr("is_subdev_internal_close is fail(%d)", device, ret);

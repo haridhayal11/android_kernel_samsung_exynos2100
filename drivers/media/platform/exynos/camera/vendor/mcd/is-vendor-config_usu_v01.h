@@ -103,6 +103,7 @@
 
 #define USE_CAMERA_IOVM_BEST_FIT
 
+#define CAMERA_CSI_A_PHY_CFG (0x8021) /* Front */
 #define CAMERA_CSI_B_PHY_CFG (0x8024) /* U Wide */
 #define CAMERA_CSI_C_PHY_CFG (0x8022) /* Wide */
 

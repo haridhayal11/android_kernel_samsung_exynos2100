@@ -103,7 +103,10 @@ struct sec_debug_kcnst {
 
 	uint64_t pa_text;
 	uint64_t pa_start_rodata;
-	uint64_t reserved[4];
+
+	uint64_t target_dprm_mask;
+
+	uint64_t reserved[3];
 };
 
 struct member_type {
@@ -376,6 +379,7 @@ extern unsigned long secdbg_base_get_buf_base(int type);
 extern unsigned long secdbg_base_get_buf_size(int type);
 extern void *secdbg_base_get_ncva(unsigned long pa);
 extern unsigned long secdbg_base_get_end_addr(void);
+extern void *secdbg_base_get_kcnst_base(void);
 
 /* SEC DEBUG EXTAR INFO */
 #define MAX_ITEM_KEY_LEN		(16)

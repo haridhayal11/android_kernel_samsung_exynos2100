@@ -2300,8 +2300,11 @@ static void max77705_irq_execute(struct max77705_usbc_platform_data *usbc_data,
 		break;
 #if defined(CONFIG_SUPPORT_SHIP_MODE)
 	case OPCODE_SAMSUNG_SHIPMODE_EN:
-		pr_info("%s: Response SHIPMODE_EN, [0x%x], [0x%x]\n",
-			__func__, data[1], data[2]);
+		if (data[2] == 0x01)
+			usbc_data->ship_mode_en = 1;
+		pr_info("%s: Response SHIPMODE_EN, [0x%x], [0x%x:%s], ship_mode_en(%d)\n",
+			__func__, data[1], data[2], (data[2] == 0x01) ? "Enable" : "Fail",
+			usbc_data->ship_mode_en);
 		break;
 #endif
 	default:
@@ -3401,10 +3404,9 @@ static int pdic_handle_usb_external_notifier_notification(struct notifier_block 
 		}
 		break;
 	case EXTERNAL_NOTIFY_MDMBLOCK_PRE:
-		if (enable) {
+		if (enable && usbpd_data->dp_is_connect) {
 			usbpd_data->mdm_block = 1;
-			if (usbpd_data->dp_is_connect)
-				max77705_dp_detach(usbpd_data);
+			max77705_dp_detach(usbpd_data);
 		}
 		break;
 	default:
@@ -3671,6 +3673,9 @@ static int max77705_usbc_probe(struct platform_device *pdev)
 	usbc_data->need_recover = false;
 	usbc_data->op_ctrl1_w = (BIT_CCSrcSnk | BIT_CCSnkSrc | BIT_CCDetEn);
 	usbc_data->srcccap_request_retry = false;
+#if defined(CONFIG_SUPPORT_SHIP_MODE)
+	usbc_data->ship_mode_en = 0;
+#endif
 
 	send_otg_notify(o_notify, NOTIFY_EVENT_POWER_SOURCE, 0);
 #endif

@@ -15,13 +15,17 @@
 
 struct class *tsp_sec_class;
 
-#ifdef USE_SEC_CMD_QUEUE
-static void sec_cmd_store_function(struct sec_cmd_data *data);
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_DUAL_FOLDABLE)
+static struct sec_cmd_data *main_sec;
+static struct sec_cmd_data *sub_sec;
 #endif
 
-void sec_cmd_execution(struct sec_cmd_data *data)
+#ifdef USE_SEC_CMD_QUEUE
+static void sec_cmd_store_function(struct sec_cmd_data *data);
+void sec_cmd_execution(struct sec_cmd_data *data, bool lock)
 {
-	mutex_lock(&data->fs_lock);
+	if (lock)
+		mutex_lock(&data->fs_lock);
 
 	/* check lock	*/
 	mutex_lock(&data->cmd_lock);
@@ -31,8 +35,10 @@ void sec_cmd_execution(struct sec_cmd_data *data)
 	data->cmd_state = SEC_CMD_STATUS_RUNNING;
 	sec_cmd_store_function(data);
 
-	mutex_unlock(&data->fs_lock);
+	if (lock)
+		mutex_unlock(&data->fs_lock);
 }
+#endif
 
 void sec_cmd_set_cmd_exit(struct sec_cmd_data *data)
 {
@@ -44,7 +50,7 @@ void sec_cmd_set_cmd_exit(struct sec_cmd_data *data)
 		mutex_unlock(&data->fifo_lock);
 
 #if IS_ENABLED(CONFIG_TOUCHSCREEN_DUAL_FOLDABLE)
-		sec_cmd_execution(data);
+		sec_cmd_execution(data, false);
 #else
 		schedule_work(&data->cmd_work.work);
 #endif
@@ -55,6 +61,12 @@ void sec_cmd_set_cmd_exit(struct sec_cmd_data *data)
 		data->cmd_is_running = false;
 		mutex_unlock(&data->cmd_lock);
 	}
+	if (data->wait_cmd_result_done)
+		complete_all(&data->cmd_result_done);
+#else
+	mutex_lock(&data->cmd_lock);
+	data->cmd_is_running = false;
+	mutex_unlock(&data->cmd_lock);
 #endif
 }
 EXPORT_SYMBOL(sec_cmd_set_cmd_exit);
@@ -64,7 +76,7 @@ static void cmd_exit_work(struct work_struct *work)
 {
 	struct sec_cmd_data *data = container_of(work, struct sec_cmd_data, cmd_work.work);
 
-	sec_cmd_execution(data);
+	sec_cmd_execution(data, true);
 }
 #endif
 
@@ -383,6 +395,20 @@ static ssize_t sec_cmd_store(struct device *dev, struct device_attribute *devatt
 
 	strncpy(cmd.cmd, buf, count);
 
+	if (data->wait_cmd_result_done) {
+		int ret;
+
+		mutex_lock(&data->wait_lock);
+		if (!data->cmd_result_done.done)
+			pr_info("%s: %s %s: %s - waiting prev cmd...\n", dev_name(data->fac_dev), SECLOG, __func__, cmd.cmd);
+		ret = wait_for_completion_interruptible_timeout(&data->cmd_result_done, msecs_to_jiffies(2000));
+		if (ret <= 0)
+			pr_err("%s: %s %s: completion %d\n", dev_name(data->fac_dev), SECLOG, __func__, ret);
+
+		reinit_completion(&data->cmd_result_done);
+		mutex_unlock(&data->wait_lock);
+	}
+
 	list_for_each_entry(sec_cmd_ptr, &data->cmd_list_head, list) {
 		if (!strncmp(cmd.cmd, sec_cmd_ptr->cmd_name, strlen(sec_cmd_ptr->cmd_name))) {
 			if (sec_cmd_ptr->cmd_log) {
@@ -426,6 +452,9 @@ static ssize_t sec_cmd_store(struct device *dev, struct device_attribute *devatt
 		data->cmd_is_running = false;
 		mutex_unlock(&data->cmd_lock);
 
+		if (data->wait_cmd_result_done)
+			complete_all(&data->cmd_result_done);
+
 		return -ENOSPC;
 	}
 
@@ -437,7 +466,7 @@ static ssize_t sec_cmd_store(struct device *dev, struct device_attribute *devatt
 	}
 	mutex_unlock(&data->fifo_lock);
 
-	sec_cmd_execution(data);
+	sec_cmd_execution(data, true);
 	return count;
 }
 #endif
@@ -644,6 +673,9 @@ int sec_cmd_init(struct sec_cmd_data *data, struct sec_cmd *cmds,
 		goto err_alloc_queue;
 	}
 	mutex_init(&data->fifo_lock);
+	mutex_init(&data->wait_lock);
+	init_completion(&data->cmd_result_done);
+	complete_all(&data->cmd_result_done);
 
 	INIT_DELAYED_WORK(&data->cmd_work, cmd_exit_work);
 #endif
@@ -702,7 +734,7 @@ int sec_cmd_init(struct sec_cmd_data *data, struct sec_cmd *cmds,
 	switch (devt) {
 	case SEC_CLASS_DEVT_TSP1:
 	case SEC_CLASS_DEVT_TSP2:
-		sec_virtual_tsp_register(data);
+		sec_cmd_virtual_tsp_register(data);
 		break;
 	};
 #endif
@@ -722,6 +754,7 @@ err_get_dev_name:
 #ifdef USE_SEC_CMD_QUEUE
 	mutex_destroy(&data->fifo_lock);
 	kfifo_free(&data->cmd_queue);
+	mutex_destroy(&data->wait_lock);
 err_alloc_queue:
 #endif
 	kfree(data->cmd_result);
@@ -759,6 +792,7 @@ void sec_cmd_exit(struct sec_cmd_data *data, int devt)
 	mutex_unlock(&data->fifo_lock);
 	mutex_destroy(&data->fifo_lock);
 	kfifo_free(&data->cmd_queue);
+	mutex_destroy(&data->wait_lock);
 
 	cancel_delayed_work_sync(&data->cmd_work);
 	flush_delayed_work(&data->cmd_work);
@@ -817,6 +851,213 @@ void sec_cmd_send_event_to_user(struct sec_cmd_data *data, char *test, char *res
 	kobject_uevent_env(&data->fac_dev->kobj, KOBJ_CHANGE, event);
 }
 EXPORT_SYMBOL(sec_cmd_send_event_to_user);
+
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_DUAL_FOLDABLE)
+void sec_cmd_virtual_tsp_register(struct sec_cmd_data *sec)
+{
+	if (strcmp(dev_name(sec->fac_dev), SEC_CLASS_DEV_NAME_TSP1) == 0) {
+		main_sec = sec;
+		input_info(true, sec->fac_dev, "%s: main\n", __func__);
+	} else if (strcmp(dev_name(sec->fac_dev), SEC_CLASS_DEV_NAME_TSP2) == 0) {
+		sub_sec = sec;
+		input_info(true, sec->fac_dev, "%s: sub\n", __func__);
+	}
+}
+
+int sec_cmd_virtual_tsp_read_sysfs(struct sec_cmd_data *sec, const char *path, char *buf, int len)
+{
+	int ret = 0;
+	mm_segment_t old_fs;
+	struct file *sysfs;
+
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+	sysfs = filp_open(path, O_RDONLY, 0444);
+	if (IS_ERR(sysfs)) {
+		ret = PTR_ERR(sysfs);
+		input_err(true, sec->fac_dev, "%s: %s open fail, %d\n", __func__, path, ret);
+		set_fs(old_fs);
+		return ret;
+	}
+
+	ret = sysfs->f_op->read(sysfs, buf, len, &sysfs->f_pos);
+	if (ret < 0) {
+		input_err(true, sec->fac_dev, "%s: failed to read, len:%d, ret:%d\n", __func__, len, ret);
+		ret = -EIO;
+	}
+
+	filp_close(sysfs, current->files);
+	set_fs(old_fs);
+
+	return ret;
+}
+EXPORT_SYMBOL(sec_cmd_virtual_tsp_read_sysfs);
+
+int sec_cmd_virtual_tsp_write_sysfs(struct sec_cmd_data *sec, const char *path, const char *cmd)
+{
+	int ret = 0;
+	mm_segment_t old_fs;
+	struct file *sysfs;
+	int len;
+
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+	sysfs = filp_open(path, O_WRONLY, 0220);
+	if (IS_ERR(sysfs)) {
+		ret = PTR_ERR(sysfs);
+		input_err(true, sec->fac_dev, "%s: %s open fail, %d\n", __func__, path, ret);
+		set_fs(old_fs);
+		return ret;
+	}
+
+	len = strlen(cmd);
+	ret = sysfs->f_op->write(sysfs, cmd, len, &sysfs->f_pos);
+	if (ret != len) {
+		input_err(true, sec->fac_dev, "%s: failed to write, len:%d, ret:%d\n", __func__, len, ret);
+		ret = -EIO;
+	}
+
+	filp_close(sysfs, current->files);
+	set_fs(old_fs);
+
+	return ret;
+}
+EXPORT_SYMBOL(sec_cmd_virtual_tsp_write_sysfs);
+
+static int sec_cmd_virtual_tsp_get_cmd_status(struct sec_cmd_data *sec, char *path)
+{
+	u8 buff[16];
+	int ret;
+
+	memset(buff, 0x00, sizeof(buff));
+
+	ret = sec_cmd_virtual_tsp_read_sysfs(sec, path, buff, 16);
+	if (ret < 0)
+		return SEC_CMD_STATUS_FAIL;
+
+	if (strncmp(buff, "WAITING", 7) == 0)
+		return SEC_CMD_STATUS_WAITING;
+	else if (strncmp(buff, "OK", 2) == 0)
+		return SEC_CMD_STATUS_OK;
+	else if (strncmp(buff, "FAIL", 4) == 0)
+		return SEC_CMD_STATUS_FAIL;
+	else if (strncmp(buff, "RUNNING", 7) == 0)
+		return SEC_CMD_STATUS_RUNNING;
+	else if (strncmp(buff, "EXPAND", 6) == 0)
+		return SEC_CMD_STATUS_EXPAND;
+	else
+		return SEC_CMD_STATUS_NOT_APPLICABLE;
+}
+
+int sec_cmd_virtual_tsp_write_cmd(struct sec_cmd_data *sec, bool main, bool sub)
+{
+	u8 buff[16];
+	int ret_sub = 0;
+	int ret_main = 0;
+	bool exit = false;
+
+	sec_cmd_set_default_result(sec);
+
+	if (!main && !sub) {
+		snprintf(buff, sizeof(buff), "%s", "NA");
+		sec->cmd_state = SEC_CMD_STATUS_NOT_APPLICABLE;
+		goto err;
+	}
+
+	if (sub && sub_sec) {
+		input_dbg(true, sec->fac_dev, "%s: send to sub\n", sec->cmd);
+		ret_sub = sec_cmd_virtual_tsp_write_sysfs(sec, PATH_SUB_SEC_CMD, sec->cmd);
+		if (ret_sub < 0) {
+			snprintf(buff, sizeof(buff), "%s", "NG");
+			sec->cmd_state = SEC_CMD_STATUS_FAIL;
+			goto main;
+		}
+		sec->cmd_state = sec_cmd_virtual_tsp_get_cmd_status(sec, PATH_SUB_SEC_CMD_STATUS);
+		input_dbg(true, sec->fac_dev, "%s: sub_sec OK\n", sec->cmd);
+		if (!sub_sec->cmd_is_running)
+			exit = true;
+		sec_cmd_virtual_tsp_read_sysfs(sec, PATH_SUB_SEC_CMD_RESULT, sec->cmd_result, SEC_CMD_RESULT_STR_LEN);
+		memset(sec->cmd_result, 0x00, SEC_CMD_RESULT_STR_LEN_EXPAND);
+		sec_cmd_set_cmd_result(sec, sub_sec->cmd_result, strlen(sub_sec->cmd_result));
+	}
+main:
+	if (main && main_sec) {
+		input_dbg(true, sec->fac_dev, "%s: send to main\n", sec->cmd);
+		ret_main = sec_cmd_virtual_tsp_write_sysfs(sec, PATH_MAIN_SEC_CMD, sec->cmd);
+		if (ret_main < 0) {
+			snprintf(buff, sizeof(buff), "%s", "NG");
+			sec->cmd_state = SEC_CMD_STATUS_FAIL;
+			goto err;
+		}
+		sec->cmd_state = sec_cmd_virtual_tsp_get_cmd_status(sec, PATH_MAIN_SEC_CMD_STATUS);
+		input_dbg(true, sec->fac_dev, "%s: main_sec OK\n", sec->cmd);
+		if (!main_sec->cmd_is_running)
+			exit = true;
+		sec_cmd_virtual_tsp_read_sysfs(sec, PATH_MAIN_SEC_CMD_RESULT, sec->cmd_result, SEC_CMD_RESULT_STR_LEN);
+		memset(sec->cmd_result, 0x00, SEC_CMD_RESULT_STR_LEN_EXPAND);
+		sec_cmd_set_cmd_result(sec, main_sec->cmd_result, strlen(main_sec->cmd_result));
+	}
+	if (exit) {
+		input_dbg(true, sec->fac_dev, "%s: set_cmd_exit\n", sec->cmd);
+		sec_cmd_set_cmd_exit(sec);
+	}
+
+	return (ret_sub < 0 || ret_main < 0) ? -1 : 0;
+
+err:
+	sec_cmd_set_cmd_result(sec, buff, SEC_CMD_RESULT_STR_LEN);
+	sec_cmd_set_cmd_exit(sec);
+
+	return -1;
+}
+EXPORT_SYMBOL(sec_cmd_virtual_tsp_write_cmd);
+
+void sec_cmd_virtual_tsp_write_cmd_factory_all(struct sec_cmd_data *sec, bool main, bool sub)
+{
+	u8 buff[16];
+	int ret = 0;
+
+	sec_cmd_set_default_result(sec);
+
+	if (!main && !sub) {
+		snprintf(buff, sizeof(buff), "%s", "NA");
+		sec->cmd_state = SEC_CMD_STATUS_NOT_APPLICABLE;
+		goto err;
+	}
+
+	if (sub && sub_sec) {
+		input_dbg(true, sec->fac_dev, "%s: sub\n", sec->cmd);
+		ret = sec_cmd_virtual_tsp_write_sysfs(sec, PATH_SUB_SEC_CMD, sec->cmd);
+		if (ret < 0) {
+			snprintf(buff, sizeof(buff), "%s", "NG");
+			sec->cmd_all_factory_state = SEC_CMD_STATUS_FAIL;
+			goto main;
+		}
+		sec->cmd_all_factory_state = sec_cmd_virtual_tsp_get_cmd_status(sec, PATH_SUB_SEC_CMD_STATUS_ALL);
+		sec_cmd_virtual_tsp_read_sysfs(sec, PATH_SUB_SEC_CMD_RESULT_ALL, sec->cmd_result_all, SEC_CMD_RESULT_STR_LEN);
+	}
+main:
+	if (main && main_sec) {
+		input_dbg(true, sec->fac_dev, "%s: main\n", sec->cmd);
+		ret = sec_cmd_virtual_tsp_write_sysfs(sec, PATH_MAIN_SEC_CMD, sec->cmd);
+		if (ret < 0) {
+			snprintf(buff, sizeof(buff), "%s", "NG");
+			sec->cmd_all_factory_state = SEC_CMD_STATUS_FAIL;
+			goto err;
+		}
+		sec->cmd_all_factory_state = sec_cmd_virtual_tsp_get_cmd_status(sec, PATH_MAIN_SEC_CMD_STATUS_ALL);
+		sec_cmd_virtual_tsp_read_sysfs(sec, PATH_MAIN_SEC_CMD_RESULT_ALL, sec->cmd_result_all, SEC_CMD_RESULT_STR_LEN);
+	}
+
+	return;
+
+err:
+	sec_cmd_set_cmd_result_all(sec, buff, SEC_CMD_RESULT_STR_LEN, "NONE");
+}
+EXPORT_SYMBOL(sec_cmd_virtual_tsp_write_cmd_factory_all);
+#endif
 
 MODULE_DESCRIPTION("Samsung input command");
 MODULE_LICENSE("GPL");

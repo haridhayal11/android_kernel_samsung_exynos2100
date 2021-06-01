@@ -1,4 +1,56 @@
-BCM4389 DHD 101.18.27.1 for Android R OS - Palette(P3) Project
+BCM4389 DHD 101.18.39 for Android R OS - Palette(P3) Project
+
+
+DHD 101.18.39 - 2021.04.02
+Kernel Panic
+ - CS00012054523(By Jeong Min Cheol) Fixed kernel panic from incorrect ring index
+
+Others
+ - CS00011882187(By Choi Hyeonu) Changed TWT return code
+ - CS00012012838(By Kim MoonSoo) Added more tx status
+ - CS00012038967(By Lee Sunghee) Fixed for Full EAP exchange at roaming with OKC AP after Wi-Fi off/on
+ - CS00012072862(By Kim Seong Hwan) Added condition to check early suspend mode at BEACON_RECV start
+ - CS00012073142(By Park Jun-young) Added dump PM duration to debug power consumption issue
+ - Fixed the scanning 80Mhz + 80MHz AP
+
+
+DHD 101.18.36 - 2021.03.05
+Others
+ - CS00011959879(By Kim Tae-Yong) Fixed usr_sync deadlock issue while p2p discovery during remain on channel
+
+
+DHD 101.18.35 - 2021.02.19
+Kernel Panic
+ - CS00011933130(By Kim Tae-Yong) Fixed kernel panic from NULL pointer de-reference
+
+Others
+ - CS00011788095(By Choi Hyeonu) Sending TWT INFO with TWT suspend during suspend
+
+
+DHD 101.18.33 - 2021.02.17
+Kernel Panic
+ - CS00011920482(By Choi Junsu) Fixed a kernel panic issue running monitor mode
+
+Others
+ - CS00011483554(By Hyeonu Choi) Fixed Hang recovery from TWT commands EBUSY return
+ - CS00011696062(By Min SungBin) Printed additional GPIO status to check GPIO mismatch case
+ - CS00011788095(By Choi Hyeonu) TWT event control during suspend
+ - CS00011833097(By Jang WonJun) Fixed to trigger hang for recovery in case of successive p2p disc error
+ - CS00011880875(By Choi Hyeonu) Support DHD_CLEANUP_KEEP_ALIVE feature
+ - CS00011881246(By Lee Sunghee) Fixed abnormal link status issue after roaming failure due to assoc IEs
+
+
+DHD 101.18.30 - 2021.02.05
+Kernel Panic
+ - CS00011842554(By LEE EONJI) Fixed NOC kernel panic by disabling FIS dump
+
+Others
+ - CS00011789256(By LEE EONJI) Fixed big hammer flag getting set after pktid audit failure
+ - CS00011818292(By Kim Tae-Yong) Fixed watchdog bark if Tx scheduled in DHD suspended state
+ - Added to print for current roaming mode in DHD
+ - Fixed the disconnection issue while running the long UDP RX TPUT aging test
+ - Supported dynamic pm2_sleep_ret for power saving at idle state
+   (This patch should be sync up with DHD 101.18.30/FW 20.80.42 or higher version)
 
 
 DHD 101.18.27.1 - 2021.01.22

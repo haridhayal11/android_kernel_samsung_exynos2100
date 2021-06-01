@@ -1564,10 +1564,39 @@ int  s2mps23_power_off_seq_wa(void)
 {
 	struct s2mps23_info *s2mps23 = s2mps23_static_info;
 	int ret;
+	uint8_t val;
 
 	if (!s2mps23->iodev->pmic_rev) {
 		pr_info("%s : pmic_rev not EVT1\n",__func__);
 		return 0;
+	}
+
+	/* PMIC stuck bug fix */
+
+	ret = s2mps23_read_reg(s2mps23->i2c, S2MPS23_PMIC_REG_CTRL3, &val);
+	if (ret) {
+		pr_err("%s: s2mps23_read_reg fail\n", __func__);
+		return -1;
+	}
+
+	if ((val & 0x10) == 0x00) {
+		ret = s2mps23_update_reg(s2mps23->i2c, S2MPS23_PMIC_REG_CTRL1, 0x10, 0x1F);
+		if (ret) {
+			pr_err("%s: s2mps23_update_reg fail\n", __func__);
+			return -1;
+		}
+
+		ret = s2mps23_update_reg(s2mps23->i2c, S2MPS23_PMIC_REG_CTRL3, 0x20, 0x20);
+		if (ret) {
+			pr_err("%s: s2mps23_update_reg fail\n", __func__);
+			return -1;
+		}
+
+		ret = s2mps23_update_reg(s2mps23->i2c, S2MPS23_PMIC_REG_CFG_PM3, 0x04, 0x04);
+		if (ret) {
+			pr_err("%s: s2mps23_update_reg fail\n", __func__);
+			return -1;
+		}
 	}
 
 	ret = s2mps23_write_reg(s2mps23->i2c, S2MPS23_PMIC_REG_OFF_CTRL1, 0x81);
@@ -1593,6 +1622,8 @@ int  s2mps23_power_off_seq_wa(void)
 		pr_err("%s: fail to write register\n", __func__);
 		return -1;
 	}
+
+	mdelay(50);
 
 	return 0;
 }

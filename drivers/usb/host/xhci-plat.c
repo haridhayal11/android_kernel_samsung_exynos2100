@@ -658,6 +658,9 @@ static int xhci_plat_remove(struct platform_device *dev)
 	}
 
 remove_hcd:
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+	dev_info(&dev->dev, "remove hcd (shared)\n");
+#endif
 	usb_remove_hcd(shared_hcd);
 	xhci->shared_hcd = NULL;
 	usb_phy_shutdown(hcd->usb_phy);
@@ -673,7 +676,9 @@ remove_hcd:
 
 	if (parent && xhci->phy_usb3)
 		xhci->phy_usb3 = NULL;
-
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+	dev_info(&dev->dev, "remove hcd (main)\n");
+#endif
 	usb_remove_hcd(hcd);
 	devm_iounmap(&dev->dev, hcd->regs);
 	usb_put_hcd(shared_hcd);

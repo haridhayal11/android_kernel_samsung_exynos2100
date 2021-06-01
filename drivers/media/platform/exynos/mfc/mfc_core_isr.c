@@ -969,24 +969,17 @@ static void __mfc_handle_frame(struct mfc_core *core, struct mfc_ctx *ctx,
 	/* All frames remaining in the buffer have been extracted  */
 	if (dst_frame_status == MFC_REG_DEC_STATUS_DECODING_EMPTY) {
 		if (core_ctx->state == MFCINST_RES_CHANGE_FLUSH) {
-			struct mfc_timestamp *temp_ts = NULL;
-
 			mfc_debug(2, "[DRC] Last frame received after resolution change\n");
 			__mfc_handle_frame_all_extracted(core, ctx);
 			mfc_change_state(core_ctx, MFCINST_RES_CHANGE_END);
+			mfc_wake_up_drc_ctx(core_ctx);
 
 			if (IS_MULTI_CORE_DEVICE(dev))
 				mfc_rm_load_balancing(ctx, MFC_RM_LOAD_DELETE);
 
-			/* empty the timestamp queue */
-			while (!list_empty(&ctx->ts_list)) {
-				temp_ts = list_entry((&ctx->ts_list)->next,
-						struct mfc_timestamp, list);
-				list_del(&temp_ts->list);
-			}
-			ctx->ts_count = 0;
-			ctx->ts_is_full = 0;
+			mfc_qos_reset_ts_list(&ctx->src_ts);
 			mfc_qos_reset_last_framerate(ctx);
+			mfc_qos_reset_disp_framerate(ctx);
 			mfc_qos_set_framerate(ctx, DEC_DEFAULT_FPS);
 
 			goto leave_handle_frame;
@@ -1251,7 +1244,8 @@ static void __mfc_handle_stream_output(struct mfc_core *core,
 		mfc_debug(2, "bpg total stream size: %d\n", strm_size);
 	}
 	vb2_set_plane_payload(&dst_mb->vb.vb2_buf, 0, strm_size);
-	mfc_qos_update_framerate(ctx, strm_size);
+	mfc_qos_update_bitrate(ctx, strm_size);
+	mfc_qos_update_framerate(ctx);
 
 	index = dst_mb->vb.vb2_buf.index;
 	if (call_cop(ctx, core_get_buf_ctrls_val, core, ctx,
@@ -1387,8 +1381,10 @@ static inline int __mfc_handle_done_frame(struct mfc_core *core,
 			enc->buf_full = 0;
 			enc->in_slice = 1;
 		} else if (reason == MFC_REG_R2H_CMD_ENC_BUFFER_FULL_RET) {
-			mfc_err("stream buffer size(%d) isn't enough\n",
-					mfc_core_get_enc_strm_size());
+			mfc_err("stream buffer size(%d) isn't enough, (Bitrate: %d)\n",
+				mfc_core_get_enc_strm_size(),
+				MFC_CORE_RAW_READL(MFC_REG_E_RC_BIT_RATE));
+
 			core->preempt_core_ctx = ctx->num;
 			enc->buf_full = 1;
 			enc->in_slice = 0;

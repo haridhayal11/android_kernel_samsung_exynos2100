@@ -319,3 +319,12 @@ config SEC_DEBUG_LOGBUF_IF
 	default m
 	help
 	  This option will add procfs for sec debug log buffers.
+
+config SEC_DEBUG_HANDLE_BAD_STACK
+	bool "Support handle bad stack debugging"
+	depends on SEC_DEBUG
+	default y
+	help
+	  This option enables to stop cpu when the cpu enter
+	  handle_bad_stack again.
+

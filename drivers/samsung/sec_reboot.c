@@ -104,6 +104,7 @@ enum sec_reset_reason {
 	SEC_RESET_REASON_BOOTLOADER   = (SEC_RESET_REASON_PREFIX | 0xd), /* go to download mode */
 	SEC_RESET_REASON_EMERGENCY = 0x0,
 
+	SEC_RESET_SET_DPRM         = (SEC_RESET_SET_PREFIX | 0x20000),
 	SEC_RESET_SET_FORCE_UPLOAD = (SEC_RESET_SET_PREFIX | 0x40000),
 	SEC_RESET_SET_DEBUG        = (SEC_RESET_SET_PREFIX | 0xd0000),
 	SEC_RESET_SET_SWSEL        = (SEC_RESET_SET_PREFIX | 0xe0000),
@@ -252,11 +253,6 @@ static void sec_power_off(void)
 		if (exynos_reboot_ops.pmic_off_main_wa() < 0)
 			pr_err("pmic_off_main_wa error\n");
 	}
-	/* PMIC EVT1: Fix off-sequence */
-	if (exynos_reboot_ops.pmic_off_seq_wa) {
-		if (exynos_reboot_ops.pmic_off_seq_wa() < 0)
-			pr_err("pmic_off_seq_wa error\n");
-	}
 
 	sec_set_reboot_magic(SEC_REBOOT_LPM, SEC_REBOOT_END_OFFSET, 0xFF);
 	psy_do_property("ac", get, POWER_SUPPLY_PROP_ONLINE, ac_val);
@@ -297,6 +293,12 @@ static void sec_power_off(void)
 		if (exynos_reboot_pwrkey_status()) 
 			pr_info("PWR Key is not released (%d)(poweroff_try:%d)\n", exynos_reboot_pwrkey_status(), poweroff_try);
 		else {
+			/* PMIC EVT1: Fix off-sequence */
+			if (exynos_reboot_ops.pmic_off_seq_wa) {
+				if (exynos_reboot_ops.pmic_off_seq_wa() < 0)
+					pr_err("pmic_off_seq_wa error\n");
+			}
+
 			if (exynos_reboot_ops.acpm_reboot)
 				exynos_reboot_ops.acpm_reboot();
 			else
@@ -355,7 +357,7 @@ static int sec_reboot(struct notifier_block *this,
 
 	if (cmd) {
 		unsigned long value;
-		if (!strcmp(cmd, "fota"))
+		if (!strcmp(cmd, "recovery-update"))
 			regmap_write(pmureg, panic_inform, SEC_RESET_REASON_FOTA);
 		else if (!strcmp(cmd, "fota_bl"))
 			regmap_write(pmureg, panic_inform, SEC_RESET_REASON_FOTA_BL);
@@ -385,6 +387,8 @@ static int sec_reboot(struct notifier_block *this,
 			regmap_write(pmureg, panic_inform, SEC_RESET_SET_DUMPSINK | (SEC_DUMPSINK_MASK & value));
 		else if (!strncmp(cmd, "forceupload", 11) && !kstrtoul(cmd + 11, 0, &value))
 			regmap_write(pmureg, panic_inform, SEC_RESET_SET_FORCE_UPLOAD | value);
+		else if (!strncmp(cmd, "dprm", 4))
+			regmap_write(pmureg, panic_inform, SEC_RESET_SET_DPRM);
 		else if (!strncmp(cmd, "swsel", 5) && !kstrtoul(cmd + 5, 0, &value))
 			regmap_write(pmureg, panic_inform, SEC_RESET_SET_SWSEL | value);
 		else if (!strncmp(cmd, "sud", 3) && !kstrtoul(cmd + 3, 0, &value))

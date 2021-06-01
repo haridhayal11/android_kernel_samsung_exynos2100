@@ -97,12 +97,25 @@ static ssize_t audio_amp_##id##_excursion_overcount_show(struct device *dev, \
 } \
 static DEVICE_ATTR(excursion_overcount_##id, 0664, \
 			audio_amp_##id##_excursion_overcount_show, NULL); \
+static ssize_t audio_amp_##id##_curr_temperature_show(struct device *dev, \
+	struct device_attribute *attr, char *buf) \
+{ \
+	int report = 0; \
+	if (audio_data->get_amp_curr_temperature) \
+		report = audio_data->get_amp_curr_temperature((id)); \
+	else \
+		dev_info(dev, "%s: No callback registered\n", __func__); \
+	return snprintf(buf, PAGE_SIZE, "%d\n", report); \
+} \
+static DEVICE_ATTR(curr_temperature_##id, 0664, \
+			audio_amp_##id##_curr_temperature_show, NULL); \
 static struct attribute *audio_amp_##id##_attr[] = { \
 	&dev_attr_temperature_max_##id.attr, \
 	&dev_attr_temperature_keep_max_##id.attr, \
 	&dev_attr_temperature_overcount_##id.attr, \
 	&dev_attr_excursion_max_##id.attr, \
 	&dev_attr_excursion_overcount_##id.attr, \
+	&dev_attr_curr_temperature_##id.attr, \
 	NULL, \
 }
 
@@ -422,6 +435,20 @@ int audio_register_excursion_overcount_cb(int (*excursion_overcount) (enum amp_i
 	return 0;
 }
 EXPORT_SYMBOL_GPL(audio_register_excursion_overcount_cb);
+
+int audio_register_curr_temperature_cb(int (*curr_temperature) (enum amp_id))
+{
+	if (audio_data->get_amp_curr_temperature) {
+		dev_err(audio_data->amp_dev,
+				"%s: Already registered\n", __func__);
+		return -EEXIST;
+	}
+
+	audio_data->get_amp_curr_temperature = curr_temperature;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(audio_register_curr_temperature_cb);
 
 DECLARE_AMP_BIGDATA_SYSFS(0);
 DECLARE_AMP_BIGDATA_SYSFS(1);

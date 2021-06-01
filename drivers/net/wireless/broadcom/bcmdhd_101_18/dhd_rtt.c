@@ -4947,13 +4947,13 @@ dhd_rtt_deinit(dhd_pub_t *dhd)
 	DHD_RTT_MEM(("dhd_rtt_deinit: ENTER\n"));
 
 #ifdef WL_NAN
-		cancel_delayed_work_sync(&rtt_status->rtt_retry_timer);
+	cancel_delayed_work_sync(&rtt_status->rtt_retry_timer);
 #endif /* WL_NAN */
 
-		cancel_work_sync(&rtt_status->work);
-		rtt_status->rtt_sched = FALSE;
+	cancel_work_sync(&rtt_status->work);
+	rtt_status->rtt_sched = FALSE;
 
-		cancel_delayed_work_sync(&rtt_status->proxd_timeout);
+	cancel_delayed_work_sync(&rtt_status->proxd_timeout);
 
 	/*
 	 * Cleanup attempt is required,

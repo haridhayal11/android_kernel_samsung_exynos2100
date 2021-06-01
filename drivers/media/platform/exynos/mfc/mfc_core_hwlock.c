@@ -746,7 +746,7 @@ int mfc_core_just_run(struct mfc_core *core, int new_ctx_index)
 	int drm_switch = 0;
 	int next_ctx_index;
 
-	atomic_inc(&core->hw_run_cnt);
+	mfc_core_idle_update_hw_run(core, ctx);
 
 	if (core_ctx->state == MFCINST_RUNNING)
 		mfc_clean_core_ctx_int_flags(core_ctx);

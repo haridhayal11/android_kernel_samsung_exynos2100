@@ -34,7 +34,7 @@ u32 decon_win_shadow_sfr[MAX_DECON_WIN][DECON_WIN_SHADOW_SFR_COUNT];
 #endif
 
 /******************* DECON CAL functions *************************/
-static int decon_reg_reset(u32 id)
+int decon_reg_reset(u32 id)
 {
 
 	struct decon_device *decon = get_decon_drvdata(id);

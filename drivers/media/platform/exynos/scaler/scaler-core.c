@@ -1711,33 +1711,54 @@ static int sc_set_votf_data(struct sc_ctx *ctx, struct vb2_sc_buffer *sc_buf,
 	return 0;
 }
 
-static int sc_v4l2_qbuf(struct file *file, void *fh,
-			 struct v4l2_buffer *buf)
+static struct vb2_sc_buffer *sc_get_sc_buf_from_v4l2_buf(struct sc_ctx *ctx, struct v4l2_buffer *buf)
 {
-	struct sc_ctx *ctx = fh_to_sc_ctx(fh);
 	struct vb2_queue *vq;
 	struct vb2_buffer *vb;
-	struct vb2_sc_buffer *sc_buf;
-	int out_fence_fd = -1;
-	int ret;
 
 	vq = v4l2_m2m_get_vq(ctx->m2m_ctx, buf->type);
 	if (!vq)
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
 	if (buf->index >= vq->num_buffers) {
 		dev_err(ctx->sc_dev->dev,
 			"%s: buf->index(%d) >= vq->num_buffers(%d)\n",
 			__func__, buf->index, vq->num_buffers);
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 	}
 
 	vb = vq->bufs[buf->index];
 	if (vb == NULL) {
 		dev_err(ctx->sc_dev->dev, "vb2_buffer is NULL\n");
-		return -EFAULT;
+		return ERR_PTR(-EFAULT);
 	}
-	sc_buf = sc_from_vb2_to_sc_buf(vb);
+
+	if (buf->m.planes == NULL) {
+		dev_err(ctx->sc_dev->dev, "the array of planes is invalid\n");
+		return ERR_PTR(-EFAULT);
+	}
+
+	if (buf->length < vb->num_planes || buf->length > VB2_MAX_PLANES) {
+		dev_err(ctx->sc_dev->dev,
+			"%s: buf->length is expected %d, but got %d.\n",
+			__func__, buf->length, vb->num_planes);
+		return ERR_PTR(-EINVAL);
+	}
+
+	return sc_from_vb2_to_sc_buf(vb);
+}
+
+static int sc_v4l2_qbuf(struct file *file, void *fh,
+			 struct v4l2_buffer *buf)
+{
+	struct sc_ctx *ctx = fh_to_sc_ctx(fh);
+	struct vb2_sc_buffer *sc_buf;
+	int out_fence_fd = -1;
+	int ret;
+
+	sc_buf = sc_get_sc_buf_from_v4l2_buf(ctx, buf);
+	if (IS_ERR(sc_buf))
+		return PTR_ERR(sc_buf);
 
 	if (buf->flags & SC_V4L2_BUF_FLAG_IN_FENCE) {
 		sc_buf->in_fence = sync_file_get_fence(buf->reserved);
@@ -1926,10 +1947,12 @@ static int sc_v4l2_s_selection(struct file *file, void *fh,
 			w_align, &rect.height, limit->min_h,
 			limit->max_h, h_align, 0);
 
-	/* Bound an image to have crop position in limit */
-	v4l_bound_align_image(&rect.left, 0, frame->width - rect.width,
-			w_align, &rect.top, 0, frame->height - rect.height,
-			h_align, 0);
+	/* The crop position should be aligned in case of DST or YUYV format */
+	if (!V4L2_TYPE_IS_OUTPUT(s->type) || (frame->sc_fmt->pixelformat == V4L2_PIX_FMT_YUYV)) {
+		/* Bound an image to have crop position in limit */
+		v4l_bound_align_image(&rect.left, 0, frame->width - rect.width, w_align,
+				      &rect.top, 0, frame->height - rect.height, h_align, 0);
+	}
 
 	if (!V4L2_TYPE_IS_OUTPUT(s->type) &&
 			sc_fmt_is_s10bit_yuv(frame->sc_fmt->pixelformat))
@@ -2210,7 +2233,7 @@ static bool initialize_initermediate_frame(struct sc_ctx *ctx)
 	if (ctx->i_frame->dma_buf[0])
 		return true;
 
-	if(test_bit(CTX_INT_FRAME_CP, &sc->state)) {
+	if (test_bit(CTX_INT_FRAME_CP, &ctx->flags)) {
 		char *heapname = "vscaler_heap";
 
 		heapmask = sc_ion_get_heapmask_by_name(heapname);
@@ -2350,12 +2373,12 @@ static int sc_prepare_2nd_scaling(struct sc_ctx *ctx,
 		crop.width = ALIGN(crop.width, 4);
 
 	if ((ctx->i_frame->frame.sc_fmt != ctx->d_frame.sc_fmt) ||
-		memcmp(&crop, &ctx->i_frame->frame.crop, sizeof(crop)) ||
-		(ctx->cp_enabled != test_bit(CTX_INT_FRAME_CP, &sc->state))) {
-		if(ctx->cp_enabled)
-			set_bit(CTX_INT_FRAME_CP, &sc->state);
+	    memcmp(&crop, &ctx->i_frame->frame.crop, sizeof(crop)) ||
+	    (ctx->cp_enabled != test_bit(CTX_INT_FRAME_CP, &ctx->flags))) {
+		if (ctx->cp_enabled)
+			set_bit(CTX_INT_FRAME_CP, &ctx->flags);
 		else
-			clear_bit(CTX_INT_FRAME_CP, &sc->state);
+			clear_bit(CTX_INT_FRAME_CP, &ctx->flags);
 
 		memcpy(&ctx->i_frame->frame, &ctx->d_frame,
 				sizeof(ctx->d_frame));

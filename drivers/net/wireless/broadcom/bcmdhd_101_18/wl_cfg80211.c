@@ -531,6 +531,11 @@ static int wl_cfg80211_set_pmk(struct wiphy *wiphy, struct net_device *dev,
 static int wl_cfg80211_del_pmk(struct wiphy *wiphy, struct net_device *dev,
         const u8 *aa);
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 13, 0) */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0))
+static void
+wl_cfg80211_set_okc_pmkinfo(struct bcm_cfg80211 *cfg, struct net_device *dev,
+	struct cfg80211_pmksa *pmksa);
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)) */
 
 /*
  * event & event Q handlers for cfg80211 interfaces
@@ -776,6 +781,11 @@ bool static wl_cfg80211_is_oce_ap(struct wiphy *wiphy, const u8 *bssid_hint);
 static s32 wl_bcnrecv_aborted_event_handler(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 		const wl_event_msg_t *e, void *data);
 #endif /* WL_BCNRECV */
+
+#if defined(KEEP_ALIVE) && defined(DHD_CLEANUP_KEEP_ALIVE)
+#define KEEP_ALIVE_ID_MAX	8
+void wl_cleanup_keep_alive(struct bcm_cfg80211 *cfg);
+#endif /* defined(KEEP_ALIVE) && defined(DHD_CLEANUP_KEEP_ALIVE) */
 
 #ifdef WL_CAC_TS
 static s32 wl_cfg80211_cac_event_handler(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
@@ -8040,6 +8050,29 @@ wl_update_pmklist(struct net_device *dev, struct wl_pmk_list *pmk_list,
 	}
 	return err;
 }
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0))
+static void
+wl_cfg80211_set_okc_pmkinfo(struct bcm_cfg80211 *cfg, struct net_device *dev,
+	struct cfg80211_pmksa *pmksa)
+{
+	uint8 iov_buf[WLC_IOCTL_SMLEN] = {0};
+	s32 err = 0;
+
+	err = wldev_iovar_setbuf(dev, "okc_info_pmk", pmksa->pmk, pmksa->pmk_len, iov_buf,
+		WLC_IOCTL_SMLEN, NULL);
+	if (err) {
+		/* could fail in case that 'okc' is not supported */
+		if (err == BCME_UNSUPPORTED) {
+			WL_DBG_MEM(("okc_info_pmk not supported. Ignore.\n"));
+		} else {
+			WL_INFORM_MEM(("okc_info_pmk failed (%d). Ignore.\n", err));
+		}
+	} else {
+		WL_DBG_MEM(("set okc_info_pmk complete.\n"));
+	}
+	return;
+}
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)) */
 
 /* TODO: remove temporal cfg->pmk_list list, and call wl_cfg80211_update_pmksa for single
  * entry operation.
@@ -8198,6 +8231,7 @@ static s32 wl_cfg80211_update_pmksa(struct wiphy *wiphy, struct net_device *dev,
 				goto exit;
 			}
 			pmk_list->pmkid->pmk_len = pmksa->pmk_len;
+			wl_cfg80211_set_okc_pmkinfo(cfg, dev, pmksa);
 		}
 		if (pmksa->ssid) {
 			err = memcpy_s(&pmk_list->pmkid->ssid, sizeof(pmk_list->pmkid->ssid),
@@ -11683,6 +11717,12 @@ wl_post_linkdown_ops(struct bcm_cfg80211 *cfg,
 	}
 #endif /* WL_NAN */
 
+#if defined(KEEP_ALIVE) && defined(DHD_CLEANUP_KEEP_ALIVE)
+	if (ndev == bcmcfg_to_prmry_ndev(cfg) && cfg->mkeep_alive_avail) {
+		wl_cleanup_keep_alive(cfg);
+	}
+#endif /* defined(KEEP_ALIVE) && defined(DHD_CLEANUP_KEEP_ALIVE) */
+
 	return ret;
 }
 
@@ -12614,7 +12654,12 @@ wl_notify_roam_prep_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 	BCM_REFERENCE(sec);
 
 	if (status == WLC_E_STATUS_SUCCESS && reason != WLC_E_REASON_INITIAL_ASSOC) {
+#ifndef WES_SUPPORT
 		WL_ERR(("Attempting roam with reason code : %d\n", reason));
+#else
+		WL_ERR(("Attempting roam with reason code : %d, Current %s mode\n",
+			reason, (cfg->ncho_mode ? "NCHO" : "Legacy Roam")));
+#endif /* WES_SUPPORT */
 	}
 
 #ifdef CONFIG_SILENT_ROAM
@@ -12946,6 +12991,7 @@ wl_bss_roaming_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 #endif /* LINUX_VERSION > 2.6.39 || WL_COMPAT_WIRELESS */
 #endif /* BCM4359 CHIP */
 
+	wl_update_prof(cfg, ndev, NULL, (const void *)(e->addr.octet), WL_PROF_BSSID);
 	if ((err = wl_get_assoc_ies(cfg, ndev)) != BCME_OK) {
 		DHD_STATLOG_CTRL(dhdp, ST(DISASSOC_INT_START),
 			dhd_net2idx(dhdp->info, ndev), WLAN_REASON_DEAUTH_LEAVING);
@@ -12965,7 +13011,6 @@ wl_bss_roaming_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 		goto fail;
 	}
 
-	wl_update_prof(cfg, ndev, NULL, (const void *)(e->addr.octet), WL_PROF_BSSID);
 	curbssid = wl_read_prof(cfg, ndev, WL_PROF_BSSID);
 	if ((err = wl_update_bss_info(cfg, ndev, true)) != BCME_OK) {
 		WL_ERR(("failed to update bss info, err=%d\n", err));
@@ -22194,3 +22239,25 @@ wl_android_roamoff_dbg_dump(struct bcm_cfg80211 *cfg)
 	return;
 }
 #endif /* DEBUG_SETROAMMODE */
+
+#if defined(KEEP_ALIVE) && defined(DHD_CLEANUP_KEEP_ALIVE)
+void
+wl_cleanup_keep_alive(struct bcm_cfg80211 *cfg)
+{
+	int mkeep_alive_id;
+
+	for (mkeep_alive_id = 1; mkeep_alive_id < KEEP_ALIVE_ID_MAX; mkeep_alive_id++) {
+		if (isset(&cfg->mkeep_alive_avail, mkeep_alive_id)) {
+			if (wl_cfg80211_stop_mkeep_alive(cfg, mkeep_alive_id) == BCME_OK) {
+				clrbit(&cfg->mkeep_alive_avail, mkeep_alive_id);
+			}
+		}
+		if (!cfg->mkeep_alive_avail) {
+			WL_INFORM(("Stopped for all keep alive id.\n"));
+			break;
+		}
+	}
+
+	return;
+}
+#endif /* defined(KEEP_ALIVE) && defined(DHD_CLEANUP_KEEP_ALIVE) */

@@ -20,6 +20,6 @@ void nfc_logger_set_max_count(int count);
 void nfc_logger_print(const char *fmt, ...);
 void nfc_print_hex_dump(void *buf, void *pref, size_t len);
 int nfc_logger_init(void);
-
+void nfc_logger_register_nfc_stauts_func(void (*nfc_status_func)(void));
 #endif
 #endif

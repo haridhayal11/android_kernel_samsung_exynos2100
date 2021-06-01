@@ -362,6 +362,17 @@ void *secdbg_base_get_debug_base(int type)
 }
 EXPORT_SYMBOL(secdbg_base_get_debug_base);
 
+void *secdbg_base_get_kcnst_base(void)
+{
+	if (secdbg_sdn_va)
+		return &(secdbg_sdn_va->kcnst);
+
+	pr_crit("%s: return NULL\n", __func__);
+
+	return NULL;
+}
+EXPORT_SYMBOL(secdbg_base_get_kcnst_base);
+
 unsigned long secdbg_base_get_buf_base(int type)
 {
 	if (secdbg_sdn_va) {
@@ -493,7 +504,7 @@ static int secdbg_base_reserved_memory_setup(struct device *dev)
 	for (j = 0 ; j < mem_count ; j++) {
 		rmem_np = of_parse_phandle(dev->of_node, "memory-region", j);
 		if (!rmem_np) {
-			pr_crit("%s: no such memory-region(%d)\n", __func__, j);
+			pr_crit("%s: no such memory-region(%lu)\n", __func__, j);
 
 			return 0;
 		}
@@ -505,7 +516,7 @@ static int secdbg_base_reserved_memory_setup(struct device *dev)
 
 			return 0;
 		} else if (!rmem->base || !rmem->size) {
-			pr_crit("%s: wrong base(0x%x) or size(0x%x)\n",
+			pr_crit("%s: wrong base(0x%llx) or size(0x%llx)\n",
 					__func__, rmem->base, rmem->size);
 
 			return 0;
@@ -523,8 +534,8 @@ static int secdbg_base_reserved_memory_setup(struct device *dev)
 		vaddr = vmap(pages, page_size, flags, prot);
 		kfree(pages);
 		if (!vaddr) {
-			pr_crit("%s: %s: paddr:%x page_size:%x failed to mapping between virt and phys\n",
-					__func__, rmem->base, rmem->size);
+			pr_crit("%s: %s: paddr:%llx page_size:%llx failed to mapping between virt and phys\n",
+					__func__, rmem->name, rmem->base, rmem->size);
 
 			return 0;
 		}
@@ -543,7 +554,7 @@ static int secdbg_base_reserved_memory_setup(struct device *dev)
 
 			secdbg_base_set_sdn_ready();
 
-			pr_info("%s: set private: %llx, offset from va: %llx\n", __func__,
+			pr_info("%s: set private: %llx, offset from va: %lx\n", __func__,
 				(uint64_t)vaddr, sdn_ncva_to_pa_offset);
 		}
 	}

@@ -595,19 +595,6 @@ static void skb_free_head(struct sk_buff *skb)
 		kfree(head);
 }
 
-static void kfree_skb_list_from_head(struct sk_buff *segs)
-{
-	if (!skb_unref(segs))
-		return;
-
-	while (segs) {
-		struct sk_buff *next = segs->next;
-
-		__kfree_skb(segs);
-		segs = next;
-	}
-}
-
 static void skb_release_data(struct sk_buff *skb)
 {
 	struct skb_shared_info *shinfo = skb_shinfo(skb);
@@ -621,12 +608,8 @@ static void skb_release_data(struct sk_buff *skb)
 	for (i = 0; i < shinfo->nr_frags; i++)
 		__skb_frag_unref(&shinfo->frags[i]);
 
-	if (shinfo->frag_list) {
-		if (shinfo->gso_type & (SKB_GSO_FRAGLIST | SKB_GSO_UDP_L4))
-			kfree_skb_list_from_head(shinfo->frag_list);
-		else
-			kfree_skb_list(shinfo->frag_list);
-	}
+	if (shinfo->frag_list)
+		kfree_skb_list(shinfo->frag_list);
 
 	skb_zcopy_clear(skb, true);
 	skb_free_head(skb);
@@ -3669,7 +3652,8 @@ struct sk_buff *skb_segment_list(struct sk_buff *skb,
 	unsigned int delta_truesize = 0;
 	unsigned int delta_len = 0;
 	struct sk_buff *tail = NULL;
-	struct sk_buff *nskb;
+	struct sk_buff *nskb, *tmp;
+	int err;
 
 	skb_push(skb, -skb_network_offset(skb) + offset);
 
@@ -3679,10 +3663,27 @@ struct sk_buff *skb_segment_list(struct sk_buff *skb,
 		nskb = list_skb;
 		list_skb = list_skb->next;
 
+		err = 0;
+		if (skb_shared(nskb)) {
+			tmp = skb_clone(nskb, GFP_ATOMIC);
+			if (tmp) {
+				consume_skb(nskb);
+				nskb = tmp;
+				err = skb_unclone(nskb, GFP_ATOMIC);
+			} else {
+				err = -ENOMEM;
+			}
+		}
+
 		if (!tail)
 			skb->next = nskb;
 		else
 			tail->next = nskb;
+
+		if (unlikely(err)) {
+			nskb->next = list_skb;
+			goto err_linearize;
+		}
 
 		tail = nskb;
 

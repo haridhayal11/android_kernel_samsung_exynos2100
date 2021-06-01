@@ -15,7 +15,7 @@
 #include "is-cis.h"
 #include "is-cis-2ld.h"
 
-/* S5K2LD_EVT0_Ver6.1 */
+/* S5K2LD_EVT0_Ver6.3 */
 
 /* Global A2*/
 const u32 sensor_2ld_setfile_A_Global_A2[] = {

@@ -182,7 +182,10 @@ enum sec_wireless_vout_control_mode {
 	WIRELESS_VOUT_5_5V_STEP, /* 13 */
 	WIRELESS_VOUT_9V_STEP, /* 14 */
 	WIRELESS_VOUT_10V_STEP, /* 15 */
-	WIRELESS_PAD_FAN_OFF,
+};
+
+enum sec_wireless_rx_control_mode {
+	WIRELESS_PAD_FAN_OFF = 0,
 	WIRELESS_PAD_FAN_ON,
 	WIRELESS_PAD_LED_OFF,
 	WIRELESS_PAD_LED_ON,
@@ -211,25 +214,6 @@ enum sec_wireless_tx_vout {
 	WC_TX_VOUT_8_5V,
 	WC_TX_VOUT_9_0V,
 	WC_TX_VOUT_OFF=100,
-};
-
-enum sec_wireless_pad_mode {
-	SEC_WIRELESS_PAD_NONE = 0,
-	SEC_WIRELESS_PAD_WPC,
-	SEC_WIRELESS_PAD_WPC_HV,
-	SEC_WIRELESS_PAD_WPC_PACK,
-	SEC_WIRELESS_PAD_WPC_PACK_HV,
-	SEC_WIRELESS_PAD_WPC_STAND,
-	SEC_WIRELESS_PAD_WPC_STAND_HV,
-	SEC_WIRELESS_PAD_PMA,
-	SEC_WIRELESS_PAD_VEHICLE,
-	SEC_WIRELESS_PAD_VEHICLE_HV,
-	SEC_WIRELESS_PAD_PREPARE_HV,
-	SEC_WIRELESS_PAD_TX,
-	SEC_WIRELESS_PAD_WPC_PREPARE_HV_20,
-	SEC_WIRELESS_PAD_WPC_HV_20,
-	SEC_WIRELESS_PAD_WPC_DUO_HV_20_LIMIT,
-	SEC_WIRELESS_PAD_FAKE,
 };
 
 enum sec_wireless_pad_id {
@@ -505,26 +489,6 @@ typedef struct {
 	unsigned int cycle;
 	unsigned int asoc;
 } battery_health_condition;
-
-#define is_hv_wireless_pad_type(cable_type) ( \
-	cable_type == SEC_WIRELESS_PAD_WPC_HV || \
-	cable_type == SEC_WIRELESS_PAD_WPC_PACK_HV || \
-	cable_type == SEC_WIRELESS_PAD_WPC_STAND_HV || \
-	cable_type == SEC_WIRELESS_PAD_VEHICLE_HV || \
-	cable_type == SEC_WIRELESS_PAD_WPC_HV_20 || \
-	cable_type == SEC_WIRELESS_PAD_WPC_DUO_HV_20_LIMIT)
-
-#define is_nv_wireless_pad_type(cable_type) ( \
-	cable_type == SEC_WIRELESS_PAD_WPC || \
-	cable_type == SEC_WIRELESS_PAD_WPC_PACK || \
-	cable_type == SEC_WIRELESS_PAD_WPC_STAND || \
-	cable_type == SEC_WIRELESS_PAD_PMA || \
-	cable_type == SEC_WIRELESS_PAD_VEHICLE || \
-	cable_type == SEC_WIRELESS_PAD_WPC_PREPARE_HV_20 || \
-	cable_type == SEC_WIRELESS_PAD_PREPARE_HV)
-
-#define is_wireless_pad_type(cable_type) \
-	(is_hv_wireless_pad_type(cable_type) || is_nv_wireless_pad_type(cable_type))
 
 #define is_hv_wireless_type(cable_type) ( \
 	cable_type == SEC_BATTERY_CABLE_HV_WIRELESS || \

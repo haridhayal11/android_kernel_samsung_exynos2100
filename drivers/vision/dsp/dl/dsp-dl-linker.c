@@ -1236,7 +1236,8 @@ int dsp_linker_link_libs(struct dsp_lib **libs, int libs_size,
 				lib->link_info = dsp_link_info_create(elf);
 
 			l_info = lib->link_info;
-			text_offset = lib->pm->start_addr - dsp_pm_start_addr;
+			text_offset = lib->pm->start_addr -
+				dsp_pm_manager_get_pm_start_addr();
 
 			dsp_link_info_set_text(l_info, text_offset);
 			dsp_link_info_set_DMb(l_info, 0UL);

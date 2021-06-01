@@ -1,7 +1,7 @@
 /*
  * Linux cfg80211 driver scan related code
  *
- * Copyright (C) 2020, Broadcom.
+ * Copyright (C) 2021, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -3861,8 +3861,13 @@ static void wl_scan_timeout(unsigned long data)
 
 		bi = next_bss(bss_list, bi);
 		for_each_bss(bss_list, bi, i) {
-			channel = wf_chspec_ctlchan(wl_chspec_driver_to_host(bi->chanspec));
-			WL_ERR(("SSID :%s  Channel :%d\n", bi->SSID, channel));
+			if (wf_chspec_valid(bi->chanspec)) {
+				channel = wf_chspec_ctlchan(wl_chspec_driver_to_host(bi->chanspec));
+				WL_ERR(("SSID :%s  Channel :%d\n", bi->SSID, channel));
+			} else {
+				WL_ERR(("SSID :%s Invalid chanspec :0x%x\n",
+					bi->SSID, bi->chanspec));
+			}
 		}
 	}
 
@@ -4957,7 +4962,6 @@ wl_cfgscan_remain_on_channel(struct wiphy *wiphy, bcm_struct_cfgdev *cfgdev,
 		return -EINVAL;
 	}
 
-	mutex_lock(&cfg->usr_sync);
 	ndev = cfgdev_to_wlc_ndev(cfgdev, cfg);
 	target_channel = ieee80211_frequency_to_channel(channel->center_freq);
 
@@ -5027,6 +5031,8 @@ wl_cfgscan_remain_on_channel(struct wiphy *wiphy, bcm_struct_cfgdev *cfgdev,
 		if (unlikely(err)) {
 			goto exit;
 		}
+
+		mutex_lock(&cfg->usr_sync);
 		err = wl_cfgp2p_discover_listen(cfg, target_channel, duration);
 		if (err == BCME_OK) {
 			wl_set_drv_status(cfg, REMAINING_ON_CHANNEL, ndev);
@@ -5044,6 +5050,7 @@ wl_cfgscan_remain_on_channel(struct wiphy *wiphy, bcm_struct_cfgdev *cfgdev,
 			}
 #endif /* WL_CFG80211_VSDB_PRIORITIZE_SCAN_REQUEST */
 		}
+		mutex_unlock(&cfg->usr_sync);
 	} else if (wdev->iftype == NL80211_IFTYPE_STATION ||
 		wdev->iftype == NL80211_IFTYPE_AP) {
 		WL_DBG(("LISTEN ON CHANNEL\n"));
@@ -5072,7 +5079,6 @@ exit:
 		WL_ERR(("Fail to Set (err=%d cookie:%llu)\n", err, *cookie));
 		wl_flush_fw_log_buffer(ndev, FW_LOGSET_MASK_ALL);
 	}
-	mutex_unlock(&cfg->usr_sync);
 	return err;
 }
 
