@@ -63,6 +63,8 @@ enum sensor_2ld_mode_enum {
 	/* MODE 3 PRO VIDEO */
 	SENSOR_2LD_4032X2268_120FPS = 15,
 	SENSOR_2LD_3328X1872_120FPS = 16,
+	/* MODE 3 SUB CROP */
+	SENSOR_2LD_2800X2100_30FPS = 17,
 	SENSOR_2LD_MODE_MAX,
 };
 
@@ -90,6 +92,8 @@ static bool sensor_2ld_support_wdr[] = {
 	/* MODE 3 PRO VIDEO */
 	true, //SENSOR_2LD_4032X2268_120FPS = 15,
 	true, //SENSOR_2LD_3328X1872_120FPS = 16,
+	/* MODE 3 SUB CROP */
+	true, //SENSOR_2LD_2800X2100_30FPS = 17,
 };
 
 static bool sensor_2ld_support_aeb[] = {
@@ -116,6 +120,8 @@ static bool sensor_2ld_support_aeb[] = {
 	/* MODEE 3 PRO VIDEO */
 	false, //SENSOR_2LD_4032X2268_120FPS = 15,
 	false, //SENSOR_2LD_3328X1872_120FPS = 16,
+	/* MODE 3 SUB CROP */
+	false, //SENSOR_2LD_2800X2100_30FPS = 17,
 };
 
 enum sensor_2ld_load_sram_mode {

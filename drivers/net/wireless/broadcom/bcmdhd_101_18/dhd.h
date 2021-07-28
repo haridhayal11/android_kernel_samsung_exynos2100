@@ -1571,6 +1571,7 @@ typedef struct dhd_pub {
 	bool fw_mode_changed;
 	bool do_chip_bighammer;
 	uint chip_bighammer_count;
+	bool stop_in_progress;
 } dhd_pub_t;
 
 #if defined(__linux__)

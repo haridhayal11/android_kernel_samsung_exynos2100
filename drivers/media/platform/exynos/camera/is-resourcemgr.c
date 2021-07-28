@@ -426,7 +426,7 @@ static int is_resourcemgr_initmem(struct is_resourcemgr *resourcemgr)
 					crmem.size);
 	dbg_snapshot_add_bl_item_info(CLOG_DSS_NAME,
 					crmem.phys_addr, crmem.size);
-	probe_info("[RSC] CLOG RMEM INFO(V/P/S): 0x%lx/0x%08x/0x%08x\n",
+	probe_info("[RSC] CLOG RMEM INFO(V/P/S): 0x%pK/0x%08x/0x%08x\n",
 		resourcemgr->minfo.kvaddr_debug,
 		(unsigned int)resourcemgr->minfo.phaddr_debug,
 		(unsigned int)crmem.size);
@@ -496,14 +496,14 @@ static int is_resourcemgr_initmem(struct is_resourcemgr *resourcemgr)
 		resourcemgr->minfo.phaddr_dummy =
 			CALL_BUFOP(minfo->pb_dummy, phaddr, minfo->pb_dummy);
 
-		probe_info("[RSC] Dummy buffer: dva(0x%pad) kva(0x%lx) pha(0x%pad)\n",
+		probe_info("[RSC] Dummy buffer: dva(0x%pad) kva(0x%pK) pha(0x%pad)\n",
 			&resourcemgr->minfo.dvaddr_dummy,
 			resourcemgr->minfo.kvaddr_dummy,
 			&resourcemgr->minfo.phaddr_dummy);
 	}
 
-	probe_info("[RSC] Kernel virtual for library: %08lx\n", resourcemgr->minfo.kvaddr);
-	probe_info("[RSC] Kernel virtual for debug: %08lx\n", resourcemgr->minfo.kvaddr_debug);
+	probe_info("[RSC] Kernel virtual for library: 0x%pK\n", resourcemgr->minfo.kvaddr);
+	probe_info("[RSC] Kernel virtual for debug: 0x%pK\n", resourcemgr->minfo.kvaddr_debug);
 	probe_info("[RSC] is_init_mem done\n");
 p_err:
 	return ret;
@@ -618,30 +618,30 @@ static int is_resourcemgr_init_dynamic_mem(struct is_resourcemgr *resourcemgr)
 
 	kva = CALL_BUFOP(minfo->pb_taaisp, kvaddr, minfo->pb_taaisp);
 	dva = CALL_BUFOP(minfo->pb_taaisp, dvaddr, minfo->pb_taaisp);
-	info("[RSC] TAAISP_DMA memory kva:0x%lx, dva: %pad\n", kva, &dva);
+	info("[RSC] TAAISP_DMA memory kva:0x%pK, dva: %pad\n", kva, &dva);
 
 #if (MEDRC_DMA_SIZE > 0)
 	kva = CALL_BUFOP(minfo->pb_medrc, kvaddr, minfo->pb_medrc);
 	dva = CALL_BUFOP(minfo->pb_medrc, dvaddr, minfo->pb_medrc);
-	info("[RSC] ME_DRC memory kva:0x%lx, dva: %pad\n", kva, &dva);
+	info("[RSC] ME_DRC memory kva:0x%pK, dva: %pad\n", kva, &dva);
 #endif
 
 #if defined(ENABLE_TNR)
 	kva = CALL_BUFOP(minfo->pb_tnr, kvaddr, minfo->pb_tnr);
 	dva = CALL_BUFOP(minfo->pb_tnr, dvaddr, minfo->pb_tnr);
-	info("[RSC] TNR_DMA memory kva:0x%lx, dva: %pad\n", kva, &dva);
+	info("[RSC] TNR_DMA memory kva:0x%pK, dva: %pad\n", kva, &dva);
 #endif
 
 #if (ORBMCH_DMA_SIZE > 0)
 	kva = CALL_BUFOP(minfo->pb_orbmch, kvaddr, minfo->pb_orbmch);
 	dva = CALL_BUFOP(minfo->pb_orbmch, dvaddr, minfo->pb_orbmch);
-	info("[RSC] ORBMCH_DMA memory kva:0x%lx, dva: %pad\n", kva, &dva);
+	info("[RSC] ORBMCH_DMA memory kva:0x%pK, dva: %pad\n", kva, &dva);
 #endif
 
 #if (CLAHE_DMA_SIZE > 0)
 	kva = CALL_BUFOP(minfo->pb_clahe, kvaddr, minfo->pb_clahe);
 	dva = CALL_BUFOP(minfo->pb_clahe, dvaddr, minfo->pb_clahe);
-	info("[RSC] CLAHE_DMA memory kva:0x%lx, dva: %pad\n", kva, &dva);
+	info("[RSC] CLAHE_DMA memory kva:0x%pK, dva: %pad\n", kva, &dva);
 #endif
 
 	info("[RSC] %s done\n", __func__);
@@ -1042,7 +1042,7 @@ int is_heap_mem_alloc_dynamic(struct is_resourcemgr *resourcemgr,
 
 	if (type == IS_BIN_LIB_HINT_DDK) {
 		if (minfo->kvaddr_heap_ddk) {
-			info_lib("DDK heap is already allocated(addr:%lx), use it", minfo->kvaddr_heap_ddk);
+			info_lib("DDK heap is already allocated(addr:0x%pK), use it", minfo->kvaddr_heap_ddk);
 			return 0;
 		}
 
@@ -1054,10 +1054,10 @@ int is_heap_mem_alloc_dynamic(struct is_resourcemgr *resourcemgr,
 
 		minfo->kvaddr_heap_ddk = CALL_BUFOP(minfo->pb_heap_ddk, kvaddr, minfo->pb_heap_ddk);
 
-		info_lib("memory_alloc(DDK heap)(V/S): 0x%lx/0x%x", minfo->kvaddr_heap_ddk, heap_size);
+		info_lib("memory_alloc(DDK heap)(V/S): 0x%pK/0x%x", minfo->kvaddr_heap_ddk, heap_size);
 	} else if (type == IS_BIN_LIB_HINT_RTA) {
 		if (minfo->kvaddr_heap_rta) {
-			info_lib("RTA heap is already allocated(addr:%lx), use it", minfo->kvaddr_heap_rta);
+			info_lib("RTA heap is already allocated(addr:0x%pK), use it", minfo->kvaddr_heap_rta);
 			return 0;
 		}
 
@@ -1069,7 +1069,7 @@ int is_heap_mem_alloc_dynamic(struct is_resourcemgr *resourcemgr,
 
 		minfo->kvaddr_heap_rta = CALL_BUFOP(minfo->pb_heap_rta, kvaddr, minfo->pb_heap_rta);
 
-		info_lib("memory_alloc(RTA heap)(V/S): 0x%lx/0x%x", minfo->kvaddr_heap_rta, heap_size);
+		info_lib("memory_alloc(RTA heap)(V/S): 0x%pK/0x%x", minfo->kvaddr_heap_rta, heap_size);
 	}
 
 	return 0;
@@ -1428,11 +1428,11 @@ int is_resource_cdump(void)
 		if (!in_interrupt())
 			exynos_is_dump_clk(&core->pdev->dev);
 		cinfo("### 2. SFR DUMP ###\n");
-		cinfo("Base: 0x%lx\n", core->resourcemgr.minfo.kvaddr_debug);
+		cinfo("Base: 0x%pK\n", core->resourcemgr.minfo.kvaddr_debug);
 		core->resourcemgr.sfrdump_ptr =
 			core->resourcemgr.minfo.kvaddr_debug
 			+ DEBUG_REGION_SIZE + DEBUG_DUMP_SIZE;
-		cinfo("Dump base: 0x%lx\n", core->resourcemgr.sfrdump_ptr);
+		cinfo("Dump base: 0x%pK\n", core->resourcemgr.sfrdump_ptr);
 		break;
 	}
 

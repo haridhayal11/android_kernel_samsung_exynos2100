@@ -174,7 +174,6 @@ static void sensor_hm3_cis_data_calculation(const struct sensor_pll_info_compact
 	cis_data->line_length_pck = pll_info_compact->line_length_pck;
 	cis_data->line_readOut_time = (u64)cis_data->line_length_pck * 1000
 					* 1000 * 1000 / cis_data->pclk;
-	cis_data->stream_on = false;
 
 	/* Frame valid time calcuration */
 	frame_valid_us = (u64)cis_data->cur_height * cis_data->line_length_pck
@@ -498,6 +497,12 @@ int sensor_hm3_cis_log_status(struct v4l2_subdev *subdev)
 	else goto i2c_err;
 	ret = is_sensor_read16(client, 0x034E, &data16);
 	if (unlikely(!ret)) pr_info("0x034E(0x%x)\n", data16);
+	else goto i2c_err;
+	ret = is_sensor_read16(client, 0x00DE, &data16);
+	if (unlikely(!ret)) pr_info("0x00DE(0x%x)\n", data16);
+	else goto i2c_err;
+	ret = is_sensor_read16(client, 0x00E0, &data16);
+	if (unlikely(!ret)) pr_info("0x00E0(0x%x)\n", data16);
 	else goto i2c_err;
 	ret = is_sensor_write16(client, 0xFCFC, 0x2001);
 	if (unlikely(!ret)) pr_info("0x2001 page\n");

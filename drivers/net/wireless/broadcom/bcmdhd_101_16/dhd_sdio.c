@@ -8422,8 +8422,13 @@ dhdsdio_download_firmware(struct dhd_bus *bus, osl_t *osh, void *sdh)
 	dhdsdio_clkctl(bus, CLK_AVAIL, FALSE);
 
 	ret = _dhdsdio_download_firmware(bus);
-
+#ifdef BCM43013_CHIP
+	if (ret < 0) {
+		dhdsdio_clkctl(bus, CLK_SDONLY, FALSE);
+	}
+#else /* BCM43013_CHIP */
 	dhdsdio_clkctl(bus, CLK_SDONLY, FALSE);
+#endif /* BCM43013_CHIP */
 
 	DHD_OS_WAKE_UNLOCK(bus->dhd);
 	return ret;

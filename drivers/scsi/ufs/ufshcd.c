@@ -6954,6 +6954,7 @@ static int ufshcd_reset_and_restore(struct ufs_hba *hba)
 	if (err) {
 		hba->saved_err |= saved_err;
 		hba->saved_uic_err |= saved_uic_err;
+		hba->ufshcd_state = UFSHCD_STATE_ERROR;
 	}
 	spin_unlock_irqrestore(hba->host->host_lock, flags);
 
@@ -7785,9 +7786,13 @@ static int ufshcd_probe_hba(struct ufs_hba *hba, bool async)
 
 out:
 	spin_lock_irqsave(hba->host->host_lock, flags);
-	if (ret)
-		hba->ufshcd_state = UFSHCD_STATE_ERROR;
-	else if (hba->ufshcd_state == UFSHCD_STATE_RESET ||
+	if (ret) {
+		if (hba->pm_op_in_progress)
+			hba->ufshcd_state = UFSHCD_STATE_RESET;
+		else
+			hba->ufshcd_state = UFSHCD_STATE_ERROR;
+		ufshcd_print_host_regs(hba);
+	} else if (hba->ufshcd_state == UFSHCD_STATE_RESET ||
 			hba->ufshcd_state == UFSHCD_STATE_ERROR)
 		hba->ufshcd_state = UFSHCD_STATE_OPERATIONAL;
 	spin_unlock_irqrestore(hba->host->host_lock, flags);

@@ -457,15 +457,6 @@ wl_cfgvendor_set_country(struct wiphy *wiphy,
 		WL_ERR(("fccpwrlimit2g is deactivated\n"));
 	}
 #endif /* FCC_PWR_LIMIT_2G */
-#if defined(CUSTOM_CONTROL_HE_6G_FEATURES)
-	err = wl_android_set_he_6g_band(primary_ndev, TRUE);
-	if (err < 0) {
-		WL_ERR(("%s: 6g band activation is failed\n", __FUNCTION__));
-		goto exit;
-	} else {
-		WL_ERR(("%s: 6g band is activated\n", __FUNCTION__));
-	}
-#endif /* CUSTOM_CONTROL_HE_6G_FEATURES */
 exit:
 	return err;
 }

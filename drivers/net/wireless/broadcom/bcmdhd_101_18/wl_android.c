@@ -1635,7 +1635,8 @@ wl_android_set_disable_dtim_in_suspend(struct net_device *dev, char *command)
 }
 #endif /* DISABLE_DTIM_IN_SUSPEND */
 
-static int wl_android_get_band(struct net_device *dev, char *command, int total_len)
+static int
+wl_android_get_band(struct net_device *dev, char *command, int total_len)
 {
 	uint band;
 	int bytes_written;
@@ -3251,21 +3252,6 @@ wl_android_ncho_private_command(struct net_device *net, char *command, int total
 		bytes_written = wl_android_get_full_roam_scan_period(net, command, total_len);
 	} else if (strnicmp(command, CMD_COUNTRYREV_SET, strlen(CMD_COUNTRYREV_SET)) == 0) {
 		bytes_written = wl_android_set_country_rev(net, command);
-#ifdef FCC_PWR_LIMIT_2G
-		if (wldev_iovar_setint(net, "fccpwrlimit2g", FALSE)) {
-			WL_ERR(("fccpwrlimit2g deactivation is failed\n"));
-		} else {
-			WL_ERR(("fccpwrlimit2g is deactivated\n"));
-		}
-#endif /* FCC_PWR_LIMIT_2G */
-#if defined(CUSTOM_CONTROL_HE_6G_FEATURES)
-		if (wl_android_set_he_6g_band(net, TRUE) != BCME_OK) {
-			WL_ERR(("%s: 6g band activation is failed\n", __FUNCTION__));
-		} else {
-			WL_ERR(("%s: 6g band is activated\n", __FUNCTION__));
-		}
-#endif /* CUSTOM_CONTROL_HE_6G_FEATURES */
-
 	} else if (strnicmp(command, CMD_COUNTRYREV_GET, strlen(CMD_COUNTRYREV_GET)) == 0) {
 		bytes_written = wl_android_get_country_rev(net, command, total_len);
 	} else
@@ -12420,22 +12406,6 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 
 		bytes_written = wl_cfg80211_set_country_code(net, country_code,
 				true, true, revinfo);
-#ifdef CUSTOMER_HW4_PRIVATE_CMD
-#ifdef FCC_PWR_LIMIT_2G
-		if (wldev_iovar_setint(net, "fccpwrlimit2g", FALSE)) {
-			DHD_ERROR(("%s: fccpwrlimit2g deactivation is failed\n", __FUNCTION__));
-		} else {
-			DHD_ERROR(("%s: fccpwrlimit2g is deactivated\n", __FUNCTION__));
-		}
-#endif /* FCC_PWR_LIMIT_2G */
-#if defined(CUSTOM_CONTROL_HE_6G_FEATURES)
-		if (wl_android_set_he_6g_band(net, TRUE) != BCME_OK) {
-			DHD_ERROR(("%s: 6g band activation is failed\n", __FUNCTION__));
-		} else {
-			DHD_ERROR(("%s: 6g band is activated\n", __FUNCTION__));
-		}
-#endif /* CUSTOM_CONTROL_HE_6G_FEATURES */
-#endif /* CUSTOMER_HW4_PRIVATE_CMD */
 	}
 #endif /* CUSTOMER_SET_COUNTRY */
 #endif /* WL_CFG80211 */

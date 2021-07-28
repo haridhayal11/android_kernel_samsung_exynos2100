@@ -1,4 +1,20 @@
-BCM4389 DHD 101.18.39 for Android R OS - Palette(P3) Project
+BCM4389 DHD 101.18.42 for Android R OS - Palette(P3) Project
+
+
+DHD 101.18.42 - 2021.05.21
+Kernel Panic
+ - CS00012185904(By Jeong MinCheol) Fixed kernel panic caused by scheduling
+
+Others
+ - CS00011787606(By Lee SoonHo) Added NAN availability log when schedule changed
+ - CS00012039926(By Yun YeJi) Changed beacon rx interval during LCD off
+ - CS00012124462(By Lee SoonHo) Fixed to represent committed slot explicitly
+ - CS00012185627(By Kim TaeYoung) Fixed watchdog reset by calling request_firmware after wakelock
+ - CS00012186941(By Min Hyun-Kee) Removed to disable FCC Power Limit at set country
+ - CS00012187832(By Bang Haejung) Disabled broadcast packet filter in case of running as P2P GO
+ - CS00012188368(By Lee Sunghee) Enabled HE CAP report for 4389 Samsung project
+ - Added log to print out NAN private operation configuration
+ - Fixed to not enabling back the 6GHz band while setting the country code private command
 
 
 DHD 101.18.39 - 2021.04.02

@@ -218,7 +218,7 @@ DHDCFLAGS += -DDEBUG_SETROAMMODE
 # Enable Roam time thresh
 DHDCFLAGS += -DCUSTOM_ROAM_TIME_THRESH_IN_SUSPEND=6000
 DHDCFLAGS += -DENABLE_MAX_DTIM_IN_SUSPEND
-DHDCFLAGS += -DMAX_DTIM_ALLOWED_INTERVAL=925
+DHDCFLAGS += -DMAX_DTIM_ALLOWED_INTERVAL=517
 DHDCFLAGS += -DCUSTOM_SUSPEND_BCN_LI_DTIM=1
 DHDCFLAGS += -DDISABLE_DTIM_IN_SUSPEND
 
@@ -722,6 +722,8 @@ endif
 
 # Basic types and constants relating to 802.11ax
   DHDCFLAGS += -DWL11AX
+# Advertise HE capabilities
+  DHDCFLAGS += -DWL_CAP_HE
 # For Samsung factory mode only
 ifeq ($(CONFIG_SEC_FACTORY),y)
 # Detect NON DMA M2M corruption
@@ -1001,6 +1003,8 @@ endif
 
 # Basic types and constants relating to 802.11ax
   DHDCFLAGS += -DWL11AX
+# Advertise HE capabilities
+  DHDCFLAGS += -DWL_CAP_HE
 # Support Know HDM feature
   DHDCFLAGS += -DDHD_SUPPORT_HDM
 # For Samsung factory mode only

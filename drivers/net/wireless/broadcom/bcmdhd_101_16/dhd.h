@@ -1530,6 +1530,7 @@ typedef struct dhd_pub {
 #ifdef DHD_GRO_ENABLE_HOST_CTRL
 	bool permitted_gro;
 #endif /* DHD_GRO_ENABLE_HOST_CTRL */
+	bool stop_in_progress;
 } dhd_pub_t;
 
 #if defined(__linux__)

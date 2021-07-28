@@ -274,7 +274,7 @@ int move_flow(unsigned int to, struct eye *flow)
 	}
 
 	// move agro
-	ret = pending_migration(&flow->pendings, flow->hash, from, to);
+	ret = __move_flow(&mcps->sauron, to, flow);
 
 	return ret;
 }
@@ -835,10 +835,6 @@ int get_agro_cpu(struct sauron *sauron, struct sk_buff *skb)
 		return MCPS_CPU_DIRECT_GRO;
 	}
 #endif // #if defined(CONFIG_MCPS_V2)
-
-	if (check_pending(&eye->pendings, skb)) {
-		return MCPS_CPU_ON_PENDING;
-	}
 
 	if (!mcps_cpu_online(eye->cpu)) {
 		int ret = try_to_hqueue(eye->hash, eye->cpu, skb, MCPS_AGRO_LAYER);

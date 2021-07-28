@@ -1410,6 +1410,12 @@ void xhci_handle_command_timeout(struct work_struct *work)
 		goto time_out_completed;
 	}
 
+	/* host died */
+	if (!(hw_ring_state & CMD_RING_RUNNING)) {
+			xhci_hc_died(xhci);
+			goto time_out_completed;
+	}
+
 	/* command timeout on stopped ring, ring can't be aborted */
 	xhci_dbg(xhci, "Command timeout on stopped ring\n");
 	xhci_handle_stopped_cmd_ring(xhci, xhci->current_cmd);

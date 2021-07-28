@@ -3729,10 +3729,10 @@ static void sec_bat_cable_work(struct work_struct *work)
 	if (battery->cable_type != SEC_BATTERY_CABLE_WIRELESS_FAKE) {
 		sec_bat_set_current_event(battery, 0, SEC_BAT_CURRENT_EVENT_AICL);
 		sec_vote(battery->input_vote, VOTER_AICL, false, 0);
-		/* to init battery type current when wireless charging -> battery case */
-		sec_vote_refresh(battery->input_vote);
 		if (battery->status != POWER_SUPPLY_STATUS_DISCHARGING)
 			sec_bat_check_input_voltage(battery);
+		/* to init battery type current when wireless charging -> battery case */
+		sec_vote_refresh(battery->input_vote);
 #if IS_ENABLED(CONFIG_WIRELESS_CHARGING)
 		set_wireless_otg_input_current(battery);
 #endif

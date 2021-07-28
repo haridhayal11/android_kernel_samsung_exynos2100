@@ -1502,7 +1502,6 @@ free_it:
 			(*get_compound_page_dtor(page))(page);
 		else
 			list_add(&page->lru, &free_pages);
-		continue;
 		/*
 		 * If pagelist are from multiple zones, we should decrease
 		 * NR_ISOLATED_ANON + x on freed pages in here.
@@ -1510,6 +1509,7 @@ free_it:
 		if (!pgdat)
 			dec_node_page_state(page, NR_ISOLATED_ANON +
 					    page_is_file_cache(page));
+		continue;
 activate_locked_split:
 		/*
 		 * The tail pages that are failed to add into swap cache

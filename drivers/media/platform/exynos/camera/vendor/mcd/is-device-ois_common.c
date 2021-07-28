@@ -235,8 +235,11 @@ int is_ois_control_gpio(struct is_core *core, int position, int onoff)
 	struct exynos_platform_is_module *module_pdata;
 	struct is_module_enum *module = NULL;
 	int i = 0;
+	struct ois_mcu_dev *mcu = NULL;
 
 	info("%s E", __func__);
+
+	mcu = core->mcu;
 	
 	for (i = 0; i < IS_SENSOR_COUNT; i++) {
 		is_search_sensor_module_with_position(&core->sensor[i], position, &module);
@@ -258,11 +261,15 @@ int is_ois_control_gpio(struct is_core *core, int position, int onoff)
 		goto p_err;
 	}
 
+	mutex_lock(&mcu->power_mutex);
+
 	ret = module_pdata->gpio_cfg(module, SENSOR_SCENARIO_OIS_FACTORY, onoff);
 	if (ret) {
 		err("gpio_cfg is fail(%d)", ret);
 		goto p_err;
 	}
+
+	mutex_unlock(&mcu->power_mutex);
 
 p_err:
 	info("%s X", __func__);

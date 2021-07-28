@@ -1936,8 +1936,10 @@ dhd_enable_packet_filter(int value, dhd_pub_t *dhd)
 	int i;
 
 	DHD_ERROR(("%s: enter, value = %d\n", __FUNCTION__, value));
-	if ((dhd->op_mode & DHD_FLAG_HOSTAP_MODE) && value) {
-		DHD_ERROR(("%s: DHD_FLAG_HOSTAP_MODE\n", __FUNCTION__));
+	if ((dhd->op_mode &
+		(DHD_FLAG_HOSTAP_MODE | DHD_FLAG_P2P_GO_MODE)) &&
+		value) {
+		DHD_ERROR(("%s: DHD_FLAG_HOSTAP_MODE or DHD_FLAG_P2P_GO_MODE\n", __FUNCTION__));
 		return;
 	}
 	/* 1 - Enable packet filter, only allow unicast packet to send up */
@@ -4225,6 +4227,24 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 #endif /* SHOW_LOGTRACE */
 			continue;
 		}
+
+		eh = (struct ether_header *)PKTDATA(dhdp->osh, pktbuf);
+
+		/* Check if dhd_stop is in progress */
+		if (dhdp->stop_in_progress) {
+			DHD_ERROR_RLMT(("%s: dhd_stop in progress ignore received packet\n",
+				__FUNCTION__));
+			if (ntoh16(eh->ether_type) == ETHER_TYPE_BRCM) {
+#ifdef DHD_USE_STATIC_CTRLBUF
+				PKTFREE_STATIC(dhdp->osh, pktbuf, FALSE);
+#else
+				PKTFREE(dhdp->osh, pktbuf, FALSE);
+#endif /* DHD_USE_STATIC_CTRLBUF */
+			} else {
+				PKTCFREE(dhdp->osh, pktbuf, FALSE);
+			}
+			continue;
+		}
 #ifdef DHD_WAKE_STATUS
 		pkt_wake = dhd_bus_get_bus_wake(dhdp);
 		wcp = dhd_bus_get_wakecount(dhdp);
@@ -4233,8 +4253,6 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 			pkt_wake = 0;
 		}
 #endif /* DHD_WAKE_STATUS */
-
-		eh = (struct ether_header *)PKTDATA(dhdp->osh, pktbuf);
 
 		if (dhd->pub.tput_data.tput_test_running &&
 			dhd->pub.tput_data.direction == TPUT_DIR_RX &&
@@ -6708,6 +6726,11 @@ dhd_stop(struct net_device *net)
 	dhd->pub.d3ackcnt_timeout = 0;
 #endif /* BCMPCIE */
 
+	/* Synchronize between the stop and rx path */
+	dhd->pub.stop_in_progress = true;
+	OSL_SMP_WMB();
+	dhd_os_busbusy_wait_negation(&dhd->pub, &dhd->pub.dhd_bus_busy_state);
+
 	mutex_lock(&dhd->pub.ndev_op_sync);
 	if (dhd->pub.up == 0) {
 		goto exit;
@@ -6938,6 +6961,8 @@ exit:
 	dhd_ctrl_tcp_limit_output_bytes(0);
 #endif /* LINUX_VERSION_CODE > 4.19.0 && DHD_TCP_LIMIT_OUTPUT */
 	mutex_unlock(&dhd->pub.ndev_op_sync);
+	/* Clear stop in progress flag */
+	dhd->pub.stop_in_progress = false;
 	DHD_ERROR(("%s: EXIT\n", __FUNCTION__));
 	return 0;
 }
@@ -7095,21 +7120,6 @@ dhd_open(struct net_device *net)
 			DHD_OS_WAKE_LOCK_INIT(dhd);
 			dhd->dhd_state |= DHD_ATTACH_STATE_WAKELOCKS_INIT;
 		}
-
-#ifdef SHOW_LOGTRACE
-		skb_queue_head_init(&dhd->evt_trace_queue);
-
-		if (!(dhd->dhd_state & DHD_ATTACH_LOGTRACE_INIT)) {
-			ret = dhd_init_logstrs_array(dhd->pub.osh, &dhd->event_data);
-			if (ret == BCME_OK) {
-				dhd_init_static_strs_array(dhd->pub.osh, &dhd->event_data,
-					st_str_file_path, map_file_path);
-				dhd_init_static_strs_array(dhd->pub.osh, &dhd->event_data,
-					rom_st_str_file_path, rom_map_file_path);
-				dhd->dhd_state |= DHD_ATTACH_LOGTRACE_INIT;
-			}
-		}
-#endif /* SHOW_LOGTRACE */
 	}
 
 #if defined(MULTIPLE_SUPPLICANT)
@@ -7150,6 +7160,24 @@ dhd_open(struct net_device *net)
 #ifdef DHD_GRO_ENABLE_HOST_CTRL
 	dhd->pub.permitted_gro = TRUE;
 #endif /* DHD_GRO_ENABLE_HOST_CTRL */
+
+#ifdef SHOW_LOGTRACE
+	if (!dhd_download_fw_on_driverload) {
+		skb_queue_head_init(&dhd->evt_trace_queue);
+
+		if (!(dhd->dhd_state & DHD_ATTACH_LOGTRACE_INIT)) {
+			ret = dhd_init_logstrs_array(dhd->pub.osh, &dhd->event_data);
+			if (ret == BCME_OK) {
+				dhd_init_static_strs_array(dhd->pub.osh, &dhd->event_data,
+						st_str_file_path, map_file_path);
+				dhd_init_static_strs_array(dhd->pub.osh, &dhd->event_data,
+						rom_st_str_file_path, rom_map_file_path);
+				dhd->dhd_state |= DHD_ATTACH_LOGTRACE_INIT;
+			}
+		}
+	}
+#endif /* SHOW_LOGTRACE */
+
 #if !defined(WL_CFG80211)
 	/*
 	 * Force start if ifconfig_up gets called before START command

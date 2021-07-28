@@ -11711,12 +11711,6 @@ wl_post_linkdown_ops(struct bcm_cfg80211 *cfg,
 	}
 #endif /* P2PLISTEN_AP_SAMECHN */
 
-#ifdef WL_NAN
-	if (wl_cfgnan_is_enabled(cfg)) {
-		wl_cfgnan_get_stats(cfg);
-	}
-#endif /* WL_NAN */
-
 #if defined(KEEP_ALIVE) && defined(DHD_CLEANUP_KEEP_ALIVE)
 	if (ndev == bcmcfg_to_prmry_ndev(cfg) && cfg->mkeep_alive_avail) {
 		wl_cleanup_keep_alive(cfg);
@@ -21243,20 +21237,6 @@ wl_cfg80211_handle_set_ssid_complete(struct bcm_cfg80211 *cfg, wl_assoc_status_t
 		/* Report connect failure */
 		as->link_action = wl_set_link_action(assoc_state, false);
 	}
-#ifdef WL_NAN
-	else if ((as->status == WLC_E_STATUS_SUCCESS) &&
-			wl_cfgnan_is_enabled(cfg) &&
-			wl_get_drv_status(cfg, CONNECTED, as->ndev)) {
-		u8 *curbssid = wl_read_prof(cfg, as->ndev, WL_PROF_BSSID);
-		u8 *conn_req_bssid =
-			wl_read_prof(cfg, as->ndev, WL_PROF_LATEST_BSSID);
-
-		if (memcmp(curbssid, conn_req_bssid, ETHER_ADDR_LEN) == 0) {
-			wl_cfgnan_get_stats(cfg);
-		}
-	}
-#endif /* WL_NAN */
-
 	return;
 }
 

@@ -1073,7 +1073,7 @@ static int is_hw_3aa_apply_setfile(struct is_hw_ip *hw_ip, u32 scenario,
 	if (sensor_position < SENSOR_POSITION_MAX) {
 		cal_addr = hw_3aa->lib_support->minfo->kvaddr_cal[sensor_position];
 
-		msinfo_hw("load cal data, position: %d, addr: 0x%lx\n", instance, hw_ip,
+		msinfo_hw("load cal data, position: %d, addr: 0x%pK\n", instance, hw_ip,
 				sensor_position, cal_addr);
 		ret = is_lib_isp_load_cal_data(&hw_3aa->lib[instance], instance, cal_addr);
 		ret = is_lib_isp_get_cal_data(&hw_3aa->lib[instance], instance,

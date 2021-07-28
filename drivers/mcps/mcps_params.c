@@ -844,7 +844,10 @@ int set_mcps_move(const char *val, const struct kernel_param *kp)
 
 	MCPS_DEBUG("%u -> %u [%u]\n", in[0], in[1], in[2]);
 
+	local_bh_disable();
 	migrate_flow(in[0], in[1], in[2]);
+	local_bh_enable();
+
 fail:
 	kfree(copy);
 end:

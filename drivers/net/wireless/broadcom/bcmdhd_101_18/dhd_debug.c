@@ -1440,6 +1440,7 @@ __dhd_dbg_map_tx_status_to_pkt_fate(uint16 status)
 			break;
 		case WLFC_CTL_PKTFLAG_DROPPED:
 			pkt_fate = TX_PKT_FATE_DRV_DROP_OTHER;
+			break;
 		case WLFC_CTL_PKTFLAG_MKTFREE:
 			pkt_fate = TX_PKT_FATE_FW_PKT_FREE;
 			break;
@@ -2213,12 +2214,7 @@ dhd_dbg_monitor_get_rx_pkts(dhd_pub_t *dhdp, void __user *user_buf,
 			compat_wifi_rx_report_t *comp_ptr = compat_ptr((uintptr_t) cptr);
 			compat_dhd_dbg_pkt_info_t compat_rx_pkt;
 			__dhd_dbg_dump_rx_pkt_info(dhdp, rx_pkt, count);
-			/* fate convert asscording to wifi_logger.h */
-			{
-				wifi_tx_packet_fate new_fate = rx_pkt->fate;
-				new_fate = __dhd_dbg_convert_fate(new_fate);
-				__COPY_TO_USER(&comp_ptr->fate, &new_fate, sizeof(new_fate));
-			}
+			__COPY_TO_USER(&comp_ptr->fate, &rx_pkt->fate, sizeof(rx_pkt->fate));
 
 			compat_rx_pkt.payload_type = rx_pkt->info.payload_type;
 			compat_rx_pkt.pkt_len = rx_pkt->info.pkt_len;
@@ -2241,12 +2237,7 @@ dhd_dbg_monitor_get_rx_pkts(dhd_pub_t *dhdp, void __user *user_buf,
 		ptr = (wifi_rx_report_t *)user_buf;
 		while ((count < pkt_count) && rx_pkt && ptr) {
 			__dhd_dbg_dump_rx_pkt_info(dhdp, rx_pkt, count);
-			/* fate convert asscording to wifi_logger.h */
-			{
-				wifi_tx_packet_fate new_fate = rx_pkt->fate;
-				new_fate = __dhd_dbg_convert_fate(new_fate);
-				__COPY_TO_USER(&ptr->fate, &new_fate, sizeof(new_fate));
-			}
+			__COPY_TO_USER(&ptr->fate, &rx_pkt->fate, sizeof(rx_pkt->fate));
 			__COPY_TO_USER(&ptr->frame_inf.payload_type,
 				&rx_pkt->info.payload_type,
 				OFFSETOF(dhd_dbg_pkt_info_t, pkt_hash));

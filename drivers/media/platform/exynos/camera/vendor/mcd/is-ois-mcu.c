@@ -3614,6 +3614,7 @@ static int ois_mcu_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, mcu);
 	core->mcu = mcu;
 	atomic_set(&mcu->shared_rsc_count, 0);
+	mutex_init(&mcu->power_mutex);
 
 	specific = core->vender.private_data;
 	specific->ois_ver_read = false;

@@ -300,7 +300,7 @@ int npu_memory_alloc_from_heap(struct platform_device *pdev,
 
 	buffer->daddr = daddr;
 	vaddr = dma_buf_vmap(dma_buf);
-	if (IS_ERR(vaddr) || !vaddr) {
+	if (IS_ERR_OR_NULL(vaddr)) {
 		if (vaddr)
 			probe_err("fail(err %p) in dma_buf_vmap\n", vaddr);
 		else /* !vaddr */
@@ -326,15 +326,15 @@ p_err:
 
 void npu_memory_free_from_heap(struct device *dev, struct npu_memory_buffer *buffer)
 {
-  if (buffer->vaddr)
+	if (!IS_ERR_OR_NULL(buffer->vaddr))
 		dma_buf_vunmap(buffer->dma_buf, buffer->vaddr);
 	if (buffer->daddr && !IS_ERR_VALUE(buffer->daddr))
 		npu_memory_dma_buf_dva_unmap(buffer);
-	if (buffer->sgt)
+	if (!IS_ERR_OR_NULL(buffer->sgt))
 		dma_buf_unmap_attachment(buffer->attachment, buffer->sgt, DMA_BIDIRECTIONAL);
-	if (buffer->attachment)
+	if (!IS_ERR_OR_NULL(buffer->attachment) && !IS_ERR_OR_NULL(buffer->dma_buf))
 		dma_buf_detach(buffer->dma_buf, buffer->attachment);
-	if (buffer->dma_buf)
+	if (!IS_ERR_OR_NULL(buffer->dma_buf))
 		dma_buf_put(buffer->dma_buf);
 
 	buffer->dma_buf = NULL;

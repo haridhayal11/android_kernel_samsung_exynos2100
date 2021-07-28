@@ -30,6 +30,16 @@
 #include <linux/fscrypt.h>
 #include <linux/fsverity.h>
 
+#ifdef CONFIG_F2FS_SUPPORT_STLOG
+#ifdef CONFIG_PROC_FSLOG
+#include <linux/fslog.h>
+#else
+#include <linux/stlog.h>
+#endif
+#else
+#define ST_LOG(fmt, ...)
+#endif
+
 /* @fs.sec -- ef5f3ea8a5ac82ae371e21c3f69ae858 -- */
 /* @fs.sec -- 57e05a5599690232e533bfcdd864042b -- */
 /* @fs.sec -- 06866fdb03315a8b0fdeb981afd76d82 -- */

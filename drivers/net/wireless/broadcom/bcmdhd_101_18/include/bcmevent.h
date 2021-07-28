@@ -971,6 +971,7 @@ typedef enum wl_nan_events {
 	WL_NAN_EVENT_OOB_AF_TXS			= 47,	/* OOB AF transmit status */
 	WL_NAN_EVENT_OOB_AF_RX			= 48,   /* OOB AF receive event */
 	WL_NAN_EVENT_NMI_ADDR			= 49,	/* NMI address change event */
+	WL_NAN_EVENT_SCHED_CHANGE		= 50,	/* Sched change event */
 
 	/* keep WL_NAN_EVENT_INVALID as the last element */
 	WL_NAN_EVENT_INVALID				/* delimiter for max value */

@@ -1,4 +1,51 @@
-BCM4361/BCM4375 DHD 101.16.64 for Android R OS - Palette(O1,T2)/Canvas/Hubble/Davinci/Beyond/R7 Project
+BCM4361/BCM4375/BCM430132 DHD 101.16.74 for Android R OS - Palette(O1,T2)/Canvas/Hubble/Davinci/Beyond/R7/R9/Watch Project
+
+DHD 101.16.74 - 2021.05.07
+Kernel Panic
+ - CS00012185904(By Jeong MinCheol) Fixed kernel panic caused by scheduling
+
+
+DHD 101.16.73 - 2021.04.30
+Kernel Panic
+ - CS00012185988(By Jeong MinCheol) Fixed kernel panic by using workq for scantime memdump in sdio project
+
+Others
+ - CS00012039926(By Yun YeJi) Changed beacon rx interval during LCD off
+ - CS00012184932(By Kim TaeYoung) Added memory prealloc feature in 43013 project
+ - CS00012185627(By Kim TaeYoung) Fixed watchdog reset by calling request_firmware after wakelock
+ - CS00012185632(By Choi SungGi) Fixed WIFI turn on failure when host entering suspend
+ - CS00012185900(By Choi SungGi) Removed 6G channel info in watch project
+ - Added log to print out NAN private operation configuration
+ - Fixed to represent committed slot properly
+
+
+DHD 101.16.70 - 2021.04.16
+Others
+ - CS00012079467(By Choi Hyeonu) Added dongle trap when the RX DMA stall health check is triggered
+   (This patch should be sync up with FW 18.41.103 or higher version)
+
+
+DHD 101.16.69 - 2021.04.09
+Kernel Panic
+ - CS00012072643(By Choi Sunggi) Fixed kernel panic caused by cfi_check
+
+Others
+ - CS00012012838(By Kim MoonSoo) Added more tx status
+ - CS00012047464(By Kim Tae-Yong) Changed buffer virtual/physical address print condition
+ - CS00012072862(By Kim Seong Hwan) Added condition to check early suspend mode at BEACON_RECV start
+ - CS00012073142(By Park Jun-young) Added dump PM duration to debug power consumption issue
+ - CS00012093344(By Choi Sunggi) Fixed how to update tx/rx link speed
+ - CS00012104376(By Choi Sunggi) Fixed roam_off not to be reset after AP disassociation
+ - Added necessary config for 430132 hang recovery in Makefile
+
+
+DHD 101.16.66.1 - 2021.03.19
+Kernel Panic
+ - CS00012072643(By Choi Sunggi) Fixed kernel panic caused by cfi_check
+
+Others
+ - Removed unnecessary string(WearOs) in Kconfig
+
 
 DHD 101.16.64 - 2021.03.05
 Others

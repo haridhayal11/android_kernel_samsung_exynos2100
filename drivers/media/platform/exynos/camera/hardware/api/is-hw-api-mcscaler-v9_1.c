@@ -2309,8 +2309,7 @@ void is_scaler_set_wdma_dither(void __iomem *base_addr, u32 output_id,
 	u32 round_en = 0;
 	u32 dither_en = 0;
 
-	if ((fmt == DMA_INOUT_FORMAT_RGB && bitwidth == DMA_INOUT_BIT_WIDTH_8BIT)
-		|| (sensor_position == SENSOR_POSITION_FRONT)) {
+	if (fmt == DMA_INOUT_FORMAT_RGB && bitwidth == DMA_INOUT_BIT_WIDTH_8BIT) {
 		dither_en = 0;
 		round_en = 1;
 	} else if (bitwidth == DMA_INOUT_BIT_WIDTH_8BIT || plane == 4) {

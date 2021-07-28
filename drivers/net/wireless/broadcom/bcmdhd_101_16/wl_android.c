@@ -4070,10 +4070,9 @@ wl_android_wtc_config(struct net_device *dev, char *command, int total_len)
 	wlc_wtcconfig_info_v1_t *wtc_config;
 	u32 i, wtc_paramslen, maxbands = WL_DUALBAND;
 	u8 buf[WLC_IOCTL_SMLEN] = {0};
-#ifdef WL_6G_BAND
 	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
-#endif	/* WL_6G_BAND */
 
+	BCM_REFERENCE(cfg);
 	WL_DBG_MEM(("Enter. cmd:%s\n", command));
 #ifdef WL_6G_BAND
 	if (cfg->band_6g_supported) {

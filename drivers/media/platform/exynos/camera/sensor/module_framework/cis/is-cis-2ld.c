@@ -237,6 +237,7 @@ static void sensor_2ld_set_integration_max_margin(u32 mode, cis_shared_data *cis
 	case SENSOR_2LD_4032X2268_24FPS:
 	case SENSOR_2LD_4032X2268_120FPS:
 	case SENSOR_2LD_3328X1872_120FPS:
+	case SENSOR_2LD_2800X2100_30FPS:
 		/* FRS */
 		cis_data->max_margin_coarse_integration_time = SENSOR_2LD_COARSE_INTEGRATION_TIME_MAX_MARGIN;
 		break;
@@ -865,6 +866,7 @@ static void sensor_2ld_cis_set_paf_stat_enable(u32 mode, cis_shared_data *cis_da
 	case SENSOR_2LD_2016X1134_240FPS:
 	case SENSOR_2LD_4032X2268_120FPS:
 	case SENSOR_2LD_3328X1872_120FPS:
+	case SENSOR_2LD_2800X2100_30FPS:
 		cis_data->is_data.paf_stat_enable = true;
 		break;
 	default:
@@ -881,13 +883,32 @@ bool sensor_2ld_cis_get_lownoise_supported(cis_shared_data *cis_data)
 		return false;
 
 	switch (cis_data->sens_config_index_cur) {
-	case SENSOR_2LD_4032X3024_60FPS:
-	case SENSOR_2LD_4032X2268_60FPS:
 	case SENSOR_2LD_4032X3024_30FPS:
 	case SENSOR_2LD_4032X2268_30FPS:
 	case SENSOR_2LD_4032X3024_24FPS:
 	case SENSOR_2LD_4032X2268_24FPS:
 		return true;
+	default:
+		break;
+	}
+
+	return false;
+}
+
+/* For FHD autofps only support LN2 in case of below 30fps */
+bool sensor_2ld_cis_get_lownoise_autofps_supported(cis_shared_data *cis_data)
+{
+	WARN_ON(!cis_data);
+
+	if (cis_data->cur_aeb_mode)
+		return false;
+
+	switch (cis_data->sens_config_index_cur) {
+	case SENSOR_2LD_4032X3024_60FPS:
+	case SENSOR_2LD_4032X2268_60FPS:
+		if (cis_data->cur_frame_us_time > 33000 &&
+			cis_data->cur_lownoise_mode != IS_CIS_LN4)
+			return true;
 	default:
 		break;
 	}
@@ -1093,9 +1114,10 @@ int sensor_2ld_cis_set_lownoise_mode_change(struct v4l2_subdev *subdev)
 
 	mode = cis->cis_data->sens_config_index_cur;
 
-	if (!sensor_2ld_cis_get_lownoise_supported(cis->cis_data)) {
-		pr_info("[%s] not support mode %d evt %x\n", __func__,
-			mode, cis->cis_data->cis_rev);
+	if (!sensor_2ld_cis_get_lownoise_supported(cis->cis_data)
+		&& !sensor_2ld_cis_get_lownoise_autofps_supported(cis->cis_data)) {
+		pr_info("[%s] not support mode (%d) evt (%x) frame_duration(%d) LN_mode(%d)\n", __func__,
+			mode, cis->cis_data->cis_rev, cis->cis_data->cur_frame_us_time, cis->cis_data->cur_lownoise_mode);
 		cis->cis_data->pre_lownoise_mode = cis->cis_data->cur_lownoise_mode;
 		return ret;
 	}
@@ -1142,25 +1164,31 @@ int sensor_2ld_cis_set_lownoise_mode_change(struct v4l2_subdev *subdev)
 		break;
 	case IS_CIS_LN2:
 		dbg_sensor(1, "[%s] IS_CIS_LN2\n", __func__);
-		ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
-		ret |= is_sensor_write16(cis->client, 0x0B30, 0x0101);
 #ifdef CAMERA_REAR2
 		switch (mode) {
 		case SENSOR_2LD_4032X3024_60FPS:
 		case SENSOR_2LD_4032X3024_30FPS:
+			ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
+			ret |= is_sensor_write16(cis->client, 0x0B30, 0x0101);
 			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x0065);
 			ret |= is_sensor_write16(cis->client, 0x0A7C, 0x0010);
 			break;
 		case SENSOR_2LD_4032X2268_60FPS:
 		case SENSOR_2LD_4032X2268_30FPS:
+			ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
+			ret |= is_sensor_write16(cis->client, 0x0B30, 0x0101);
 			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x0060);
 			ret |= is_sensor_write16(cis->client, 0x0A7C, 0x0010);
 			break;
 		case SENSOR_2LD_4032X3024_24FPS:
+			ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
+			ret |= is_sensor_write16(cis->client, 0x0B30, 0x0101);
 			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x0066);
 			ret |= is_sensor_write16(cis->client, 0x0A7C, 0x0010);
 			break;
 		case SENSOR_2LD_4032X2268_24FPS:
+			ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
+			ret |= is_sensor_write16(cis->client, 0x0B30, 0x0101);
 			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x0025);
 			ret |= is_sensor_write16(cis->client, 0x0A7C, 0x0010);
 			break;
@@ -1171,23 +1199,29 @@ int sensor_2ld_cis_set_lownoise_mode_change(struct v4l2_subdev *subdev)
 		break;
 	case IS_CIS_LN4:
 		dbg_sensor(1, "[%s] IS_CIS_LN4\n", __func__);
-		ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
-		ret |= is_sensor_write16(cis->client, 0x0B30, 0x0102);
 #ifdef CAMERA_REAR2
 		switch (mode) {
 		case SENSOR_2LD_4032X3024_30FPS:
+			ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
+			ret |= is_sensor_write16(cis->client, 0x0B30, 0x0102);
 			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x0265);
 			ret |= is_sensor_write16(cis->client, 0x0A7C, 0x0010);
 			break;
 		case SENSOR_2LD_4032X2268_30FPS:
+			ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
+			ret |= is_sensor_write16(cis->client, 0x0B30, 0x0102);
 			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x01F0);
 			ret |= is_sensor_write16(cis->client, 0x0A7C, 0x0010);
 			break;
 		case SENSOR_2LD_4032X3024_24FPS:
+			ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
+			ret |= is_sensor_write16(cis->client, 0x0B30, 0x0102);
 			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x0240);
 			ret |= is_sensor_write16(cis->client, 0x0A7C, 0x0010);
 			break;
 		case SENSOR_2LD_4032X2268_24FPS:
+			ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
+			ret |= is_sensor_write16(cis->client, 0x0B30, 0x0102);
 			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x01C0);
 			ret |= is_sensor_write16(cis->client, 0x0A7C, 0x0010);
 			break;
@@ -3331,6 +3365,8 @@ int sensor_2ld_cis_set_super_slow_motion_roi(struct v4l2_subdev *subdev, struct 
 		pr_err("ERR[%s]: super slow roi setting fail\n", __func__);
 		return ret;
 	}
+
+	msleep(17); // sensor limitation : start cue needs delay margin
 
 	return ret;
 }

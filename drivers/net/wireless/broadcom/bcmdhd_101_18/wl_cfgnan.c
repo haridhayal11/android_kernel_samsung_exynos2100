@@ -80,6 +80,7 @@ static nan_ndp_peer_t* wl_cfgnan_data_get_peer(struct bcm_cfg80211 *cfg,
 static int wl_cfgnan_disable(struct bcm_cfg80211 *cfg);
 static s32 wl_cfgnan_del_ndi_data(struct bcm_cfg80211 *cfg, char *name);
 static s32 wl_cfgnan_add_ndi_data(struct bcm_cfg80211 *cfg, s32 idx, char *name);
+static int wl_nan_print_stats_tlvs(void *ctx, const uint8 *data, uint16 type, uint16 len);
 
 #ifdef RTT_SUPPORT
 static int wl_cfgnan_clear_disc_cache(struct bcm_cfg80211 *cfg, wl_nan_instance_id_t sub_id);
@@ -226,6 +227,8 @@ nan_event_to_str(u16 cmd)
 	C2S(WL_NAN_EVENT_OOB_AF_TXS);
 		break;
 	C2S(WL_NAN_EVENT_OOB_AF_RX);
+		break;
+	C2S(WL_NAN_EVENT_SCHED_CHANGE);
 		break;
 	C2S(WL_NAN_EVENT_INVALID);
 		break;
@@ -930,7 +933,6 @@ wl_cfgnan_set_vars_cbfn(void *ctx, const uint8 *data, uint16 type, uint16 len)
 	nan_event_data_t *tlv_data = ((nan_event_data_t *)(ctx_tlv_data->nan_evt_data));
 	int ret = BCME_OK;
 
-	NAN_DBG_ENTER();
 	if (!data || !len) {
 		WL_ERR(("data length is invalid\n"));
 		ret = BCME_ERROR;
@@ -1033,13 +1035,15 @@ wl_cfgnan_set_vars_cbfn(void *ctx, const uint8 *data, uint16 type, uint16 len)
 	case WL_NAN_XTLV_DAM_NA_ATTR:
 		/* No action -intentionally added to avoid prints when these events are rcvd */
 		break;
+	case WL_NAN_XTLV_GEN_AVAIL_STATS_SCHED:
+		ret = wl_nan_print_stats_tlvs(ctx, data, type, len);
+		break;
 	default:
 		WL_ERR(("Not available for tlv type = 0x%x\n", type));
 		ret = BCME_ERROR;
 		break;
 	}
 fail:
-	NAN_DBG_EXIT();
 	return ret;
 }
 
@@ -3618,6 +3622,9 @@ wl_cfgnan_config_handler(struct net_device *ndev, struct bcm_cfg80211 *cfg,
 				goto fail;
 			}
 
+			WL_INFORM_MEM(("Cluster merge : %s\n",
+					merge_enable ? "Enabled" : "Disabled"));
+
 			lwt_mode_enable = !!(cmd_data->nmi_rand_intvl &
 					NAN_NMI_RAND_AUTODAM_LWT_MODE_ENAB);
 
@@ -3635,6 +3642,9 @@ wl_cfgnan_config_handler(struct net_device *ndev, struct bcm_cfg80211 *cfg,
 				}
 				goto fail;
 			}
+
+			WL_INFORM_MEM(("LWT mode : %s\n",
+					lwt_mode_enable ? "Enabled" : "Disabled"));
 
 			/* reset pvt merge enable bits */
 			cmd_data->nmi_rand_intvl &= ~(NAN_NMI_RAND_PVT_CMD_VENDOR |
@@ -7717,7 +7727,6 @@ wl_nan_dp_cmn_event_data(struct bcm_cfg80211 *cfg, void *event_data,
 				wl_cfgnan_data_set_peer_dp_state(cfg, &ev_dp->peer_nmi,
 					NAN_PEER_DP_CONNECTED);
 				wl_cfgnan_update_dp_info(cfg, true, nan_event_data->ndp_id);
-				wl_cfgnan_get_stats(cfg);
 			} else if (ev_dp->status == NAN_NDP_STATUS_REJECT) {
 				nan_event_data->status = NAN_DP_REQUEST_REJECT;
 #ifdef WL_NAN_DISC_CACHE
@@ -8868,6 +8877,14 @@ wl_cfgnan_notify_nan_status(struct bcm_cfg80211 *cfg,
 		/* No action -intentionally added to avoid prints when this event is rcvd */
 		break;
 	}
+	case WL_NAN_EVENT_SCHED_CHANGE:
+	{
+		tlvs_offset = OFFSETOF(wl_nan_ev_sched_info_t, opt_tlvs) +
+			OFFSETOF(bcm_xtlv_t, data);
+		nan_opts_len = data_len - tlvs_offset;
+		xtlv_opt = BCM_IOV_CMD_OPT_ALIGN_NONE;
+		break;
+	}
 	default:
 		WL_ERR_RLMT(("WARNING: unimplemented NAN APP EVENT = %d\n", event_num));
 		ret = BCME_ERROR;
@@ -8882,6 +8899,11 @@ wl_cfgnan_notify_nan_status(struct bcm_cfg80211 *cfg,
 		if (ret != BCME_OK) {
 			WL_ERR(("Failed to unpack tlv data, ret=%d\n", ret));
 		}
+	}
+
+	if (event_num == WL_NAN_EVENT_SCHED_CHANGE) {
+		/* no need to send this event to HAL */
+		goto exit;
 	}
 
 #ifdef WL_NAN_DISC_CACHE
@@ -9439,7 +9461,7 @@ wl_nan_print_avail_stats(const uint8 *data)
 	int s_chan = 0;
 	char pbuf[NAN_IOCTL_BUF_SIZE_MED];
 	const wl_nan_stats_sched_t *sched = (const wl_nan_stats_sched_t *)data;
-#define SLOT_PRINT_SIZE 4
+#define SLOT_PRINT_SIZE 6
 
 	char *buf = pbuf;
 	int remained_len = 0, bytes_written = 0;
@@ -9467,8 +9489,10 @@ wl_nan_print_avail_stats(const uint8 *data)
 
 		buf += bytes_written;
 		remained_len -= bytes_written;
-		bytes_written = snprintf(buf, remained_len, "%03d|", s_chan);
-
+		bytes_written = snprintf(buf, remained_len, "%3u%c|",
+				s_chan, ((s_chan) &&
+				(slot->info & WL_NAN_SCHED_STAT_SLOT_COMM)) ? 'C' :
+				' ');	/* Committed */
 	}
 	WL_INFORM_MEM(("%s\n", pbuf));
 exit:

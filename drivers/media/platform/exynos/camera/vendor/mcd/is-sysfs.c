@@ -69,15 +69,41 @@ extern bool is_iris_mtf_test_check;
 extern u8 is_iris_mtf_read_data[3];	/* 0:year 1:month 2:company */
 #endif
 
+#define SSRM_INFO_PRINT(container, member)						\
+	do {										\
+		sprintf(temp_buffer, #member"=%d;", (container.member));		\
+		strncat(buf, temp_buffer, strlen(temp_buffer));				\
+	} while(0)
+
 struct ssrm_camera_data {
+	int ID;
+	int ON;
+	int ISPWidth;
+	int ISPHeight;
+};
+
+struct ssrm_camera_data_common {
+	int previewWidth;
+	int previewHeight;
+	int minFPS;
+	int maxFPS;
+	int FPSHint;
+	int capture;
+	int HDRCapture;
+	int MODE;
+	int HDR10;
+	int zoom;
+	int flash;
+	int ssteady;
+	int mem;
+} SsrmCameraInfoExt;
+
+struct ssrm_send_format {
 	int operation;
-	int cameraID;
-	int previewSizeWidth;
-	int previewSizeHeight;
-	int previewMinFPS;
-	int previewMaxFPS;
-	int sensorOn;
-	int shotMode;
+	// per Camera Info
+	struct ssrm_camera_data per_camera_info;
+	// Common Info
+	struct ssrm_camera_data_common common_info;
 };
 
 enum ssrm_camerainfo_operation {
@@ -87,6 +113,7 @@ enum ssrm_camerainfo_operation {
 };
 
 struct ssrm_camera_data SsrmCameraInfo[IS_SENSOR_COUNT];
+int ssrmCameraInfoCnt = 0;
 
 /* read firmware */
 int read_from_firmware_version(int rom_id)
@@ -1101,34 +1128,36 @@ static ssize_t camera_ssrm_camera_info_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t count)
 {
-	struct ssrm_camera_data temp;
+	struct ssrm_send_format recv_data;
+	struct ssrm_camera_data *per_camera_info;
+	struct ssrm_camera_data_common *common_info;
 	int index = -1;
-	int i = 0;
+	int i = 0, capturetmp[2] = {SsrmCameraInfoExt.capture, SsrmCameraInfoExt.HDRCapture};
 
-	memset(&temp, 0, sizeof(temp));
-	temp.cameraID = -1;
+	if (count != sizeof(struct ssrm_send_format)) {
+		err("err not matched format");
+		return -EINVAL;
+	}
+	memcpy(&recv_data, buf, sizeof(struct ssrm_send_format));
 
-	sscanf(buf, "%d%d%d%d%d%d%d%d", &temp.operation, &temp.cameraID, &temp.previewMinFPS,
-		&temp.previewMaxFPS, &temp.previewSizeWidth,  &temp.previewSizeHeight, &temp.sensorOn, &temp.shotMode);
+	per_camera_info = &recv_data.per_camera_info;
+	common_info = &recv_data.common_info;
+	common_info->capture += capturetmp[0];
+	common_info->HDRCapture += capturetmp[1];
 
-	switch (temp.operation) {
+	switch (recv_data.operation) {
 	case SSRM_CAMERA_INFO_CLEAR:
 		for (i = 0; i < IS_SENSOR_COUNT; i++) { /* clear */
-			if (SsrmCameraInfo[i].cameraID == temp.cameraID) {
-				SsrmCameraInfo[i].previewMaxFPS = 0;
-				SsrmCameraInfo[i].previewMinFPS = 0;
-				SsrmCameraInfo[i].previewSizeHeight = 0;
-				SsrmCameraInfo[i].previewSizeWidth = 0;
-				SsrmCameraInfo[i].sensorOn = 0;
-				SsrmCameraInfo[i].shotMode = -1;
-				SsrmCameraInfo[i].cameraID = -1;
+			if (SsrmCameraInfo[i].ID == per_camera_info->ID) {
+				SsrmCameraInfo[i].ID = -1;
+				ssrmCameraInfoCnt--;
 			}
 		}
 		break;
 
 	case SSRM_CAMERA_INFO_SET:
 		for (i = 0; i < IS_SENSOR_COUNT; i++) { /* find empty space*/
-			if (SsrmCameraInfo[i].cameraID == -1) {
+			if (SsrmCameraInfo[i].ID == -1) {
 				index = i;
 				break;
 			}
@@ -1137,21 +1166,23 @@ static ssize_t camera_ssrm_camera_info_store(struct device *dev,
 		if (index == -1)
 			return -EPERM;
 
-		memcpy(&SsrmCameraInfo[i], &temp, sizeof(temp));
+		memcpy(&SsrmCameraInfo[i], per_camera_info, sizeof(struct ssrm_camera_data));
+		memcpy(&SsrmCameraInfoExt, common_info, sizeof(struct ssrm_camera_data_common));
+		ssrmCameraInfoCnt++;
 		break;
 
 	case SSRM_CAMERA_INFO_UPDATE:
 		for (i = 0; i < IS_SENSOR_COUNT; i++) {
-			if (SsrmCameraInfo[i].cameraID == temp.cameraID) {
-				SsrmCameraInfo[i].previewMaxFPS = temp.previewMaxFPS;
-				SsrmCameraInfo[i].previewMinFPS = temp.previewMinFPS;
-				SsrmCameraInfo[i].previewSizeHeight = temp.previewSizeHeight;
-				SsrmCameraInfo[i].previewSizeWidth = temp.previewSizeWidth;
-				SsrmCameraInfo[i].sensorOn = temp.sensorOn;
-				SsrmCameraInfo[i].shotMode = temp.shotMode;
+			if (SsrmCameraInfo[i].ID == per_camera_info->ID) {
+				index = i;
 				break;
 			}
 		}
+		if (index == -1)
+			return -EPERM;
+
+		memcpy(&SsrmCameraInfo[i], per_camera_info, sizeof(struct ssrm_camera_data));
+		memcpy(&SsrmCameraInfoExt, common_info, sizeof(struct ssrm_camera_data_common));
 		break;
 	default:
 		break;
@@ -1164,44 +1195,60 @@ static ssize_t camera_ssrm_camera_info_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	char temp_buffer[65] = {0,};
-	int i = 0;
+	int i = 0, zoomtmp = 0;
+
+	if (ssrmCameraInfoCnt <= 0) {
+		SsrmCameraInfoExt.capture = 0;
+		SsrmCameraInfoExt.HDRCapture = 0;
+		return 0;
+	}
+
+	SSRM_INFO_PRINT(SsrmCameraInfoExt, MODE);
+	strncat(buf, "\n", strlen("\n"));
 
 	for (i = 0; i < IS_SENSOR_COUNT; i++) {
-		if (SsrmCameraInfo[i].cameraID != -1) {
-			strncat(buf, "SHOTMODE=", strlen("SHOTMODE="));
-			sprintf(temp_buffer, "%d;", SsrmCameraInfo[i].shotMode);
+		if (SsrmCameraInfo[i].ID != -1) {
+			strncat(buf, "[", strlen("["));
+			sprintf(temp_buffer, "ID=%d<%d>;", SsrmCameraInfo[i].ID, SsrmCameraInfo[i].ON);
 			strncat(buf, temp_buffer, strlen(temp_buffer));
-
-			strncat(buf, "\n", strlen("\n"));
-			break;
+			if (SsrmCameraInfo[i].ISPWidth && SsrmCameraInfo[i].ISPHeight) {
+				sprintf(temp_buffer, "ISP=%d,%d;",
+						SsrmCameraInfo[i].ISPWidth, SsrmCameraInfo[i].ISPHeight);
+				strncat(buf, temp_buffer, strlen(temp_buffer));
+			}
+			strncat(buf, "]\n", strlen("]\n"));
 		}
 	}
 
-	for (i = 0; i < IS_SENSOR_COUNT; i++) {
-		if (SsrmCameraInfo[i].cameraID != -1) {
-			strncat(buf, "ID=", strlen("ID="));
-			sprintf(temp_buffer, "%d;", SsrmCameraInfo[i].cameraID);
-			strncat(buf, temp_buffer, strlen(temp_buffer));
-
-			strncat(buf, "ON=", strlen("ON="));
-			sprintf(temp_buffer, "%d;", SsrmCameraInfo[i].sensorOn);
-			strncat(buf, temp_buffer, strlen(temp_buffer));
-
-			if (SsrmCameraInfo[i].previewMinFPS && SsrmCameraInfo[i].previewMaxFPS) {
-				strncat(buf, "FPS=", strlen("FPS="));
-				sprintf(temp_buffer, "%d,%d;",
-					SsrmCameraInfo[i].previewMinFPS, SsrmCameraInfo[i].previewMaxFPS);
-				strncat(buf, temp_buffer, strlen(temp_buffer));
-			}
-			if (SsrmCameraInfo[i].previewSizeWidth && SsrmCameraInfo[i].previewSizeHeight) {
-				strncat(buf, "SIZE=", strlen("SIZE="));
-				sprintf(temp_buffer, "%d,%d;",
-					SsrmCameraInfo[i].previewSizeWidth, SsrmCameraInfo[i].previewSizeHeight);
-				strncat(buf, temp_buffer, strlen(temp_buffer));
-			}
-			strncat(buf, "\n", strlen("\n"));
-		}
+	if (SsrmCameraInfoExt.minFPS && SsrmCameraInfoExt.maxFPS) {
+		sprintf(temp_buffer, "[FPS=%d,%d(%d);",
+				SsrmCameraInfoExt.minFPS, SsrmCameraInfoExt.maxFPS, SsrmCameraInfoExt.FPSHint);
+		strncat(buf, temp_buffer, strlen(temp_buffer));
 	}
+	if (SsrmCameraInfoExt.previewWidth && SsrmCameraInfoExt.previewHeight) {
+		sprintf(temp_buffer, "SIZE=%d,%d;",
+				SsrmCameraInfoExt.previewWidth, SsrmCameraInfoExt.previewHeight);
+		strncat(buf, temp_buffer, strlen(temp_buffer));
+	}
+	sprintf(temp_buffer, "cap=%d(%d);", SsrmCameraInfoExt.capture, SsrmCameraInfoExt.HDRCapture);
+	strncat(buf, temp_buffer, strlen(temp_buffer));
+	SsrmCameraInfoExt.capture = SsrmCameraInfoExt.HDRCapture = 0;
+
+	if (SsrmCameraInfoExt.zoom >= 1000) {
+	    zoomtmp = SsrmCameraInfoExt.zoom / 1000;
+	    sprintf(temp_buffer, "zoom=%dx;", zoomtmp);
+	} else {
+	    zoomtmp = SsrmCameraInfoExt.zoom / 100;
+	    sprintf(temp_buffer, "zoom=0.%dx;", zoomtmp);
+	}
+	strncat(buf, temp_buffer, strlen(temp_buffer));
+
+	SSRM_INFO_PRINT(SsrmCameraInfoExt, ssteady);
+	SSRM_INFO_PRINT(SsrmCameraInfoExt, HDR10);
+	SSRM_INFO_PRINT(SsrmCameraInfoExt, flash);
+	SSRM_INFO_PRINT(SsrmCameraInfoExt, mem);
+	strncat(buf, "]\n", strlen("]\n"));
+
 	return strlen(buf);
 }
 
@@ -3004,7 +3051,7 @@ static ssize_t camera_hw_init_show(struct device *dev,
 		is_vender_hw_init(vender);
 		check_module_init = true;
 		for (i = 0; i < IS_SENSOR_COUNT; i++) {
-			SsrmCameraInfo[i].cameraID = -1;
+			SsrmCameraInfo[i].ID = -1;
 		}
 	}
 	is_load_ctrl_unlock();

@@ -1785,8 +1785,8 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 		}
 
 		list_add(&page->lru, &page_list);
-		inc_zone_page_state(page, NR_ISOLATED_ANON +
-					page_is_file_cache(page));
+		inc_node_page_state(page, NR_ISOLATED_ANON +
+				    page_is_file_cache(page));
 		isolated++;
 		if (isolated >= SWAP_CLUSTER_MAX) {
 			pte_unmap_unlock(orig_pte, ptl);

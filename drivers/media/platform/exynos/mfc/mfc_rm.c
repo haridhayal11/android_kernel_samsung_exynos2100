@@ -204,16 +204,6 @@ static int __mfc_rm_move_core_running(struct mfc_ctx *ctx, int to_core_num, int 
 		return -EINVAL;
 	}
 
-	if (core_ctx->state != MFCINST_RUNNING) {
-		mfc_debug(3, "[RMLB] it is not running state: %d\n", core_ctx->state);
-		return -EAGAIN;
-	}
-
-	if (IS_MULTI_MODE(ctx)) {
-		mfc_ctx_err("[RMLB] multi core mode couldn't migration, need to switch to single\n");
-		return -EAGAIN;
-	}
-
 	ret = mfc_get_corelock_migrate(ctx);
 	if (ret < 0) {
 		mfc_ctx_err("[RMLB] failed to get corelock\n");
@@ -226,6 +216,16 @@ static int __mfc_rm_move_core_running(struct mfc_ctx *ctx, int to_core_num, int 
 		mfc_ctx_err("Failed to get hwlock\n");
 		mfc_release_corelock_migrate(ctx);
 		return ret;
+	}
+
+	if (core_ctx->state != MFCINST_RUNNING) {
+		mfc_debug(3, "[RMLB] it is not running state: %d\n", core_ctx->state);
+		goto err_state;
+	}
+
+	if (IS_MULTI_MODE(ctx)) {
+		mfc_ctx_err("[RMLB] multi core mode couldn't migration, need to switch to single\n");
+		goto err_state;
 	}
 
 	mfc_change_state(core_ctx, MFCINST_MOVE_INST);
@@ -295,6 +295,7 @@ static int __mfc_rm_move_core_running(struct mfc_ctx *ctx, int to_core_num, int 
 
 err_migrate:
 	mfc_change_state(core_ctx, MFCINST_RUNNING);
+err_state:
 	mfc_core_release_hwlock_dev(from_core);
 	if (is_to_core)
 		mfc_core_release_hwlock_dev(to_core);

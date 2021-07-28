@@ -678,7 +678,7 @@ int mfc_check_for_dpb(struct mfc_core_ctx *core_ctx)
 	struct mfc_ctx *ctx = core_ctx->ctx;
 	struct mfc_dec *dec = ctx->dec_priv;
 	struct mfc_buf *mfc_buf = NULL;
-	unsigned long flags;
+	unsigned long flags, used_flag_count;
 
 	spin_lock_irqsave(&ctx->buf_queue_lock, flags);
 
@@ -701,8 +701,10 @@ int mfc_check_for_dpb(struct mfc_core_ctx *core_ctx)
 		}
 	}
 
-	if (hweight64(dec->dynamic_used) == ctx->dpb_count + MFC_EXTRA_DPB) {
-		mfc_debug(2, "[DPB] All queued buf referencing\n");
+	used_flag_count = hweight64(dec->dynamic_used);
+	if (used_flag_count >= ctx->dpb_count) {
+		mfc_debug(2, "[DPB] All DPB(%ld) of min count are referencing\n",
+				used_flag_count);
 		spin_unlock_irqrestore(&ctx->buf_queue_lock, flags);
 		return 1;
 	}
@@ -718,7 +720,7 @@ struct mfc_buf *mfc_search_for_dpb(struct mfc_core_ctx *core_ctx)
 {
 	struct mfc_ctx *ctx = core_ctx->ctx;
 	struct mfc_dec *dec = ctx->dec_priv;
-	unsigned long flags;
+	unsigned long flags, used_flag_count;
 	struct mfc_buf *mfc_buf = NULL;
 
 	spin_lock_irqsave(&ctx->buf_queue_lock, flags);
@@ -738,17 +740,19 @@ struct mfc_buf *mfc_search_for_dpb(struct mfc_core_ctx *core_ctx)
 	}
 
 	/*
+	 * Bumping process
 	 * In case of H.264/HEVC codec,
 	 * all of the queued buffers can be referenced by F/W.
 	 * At that time, we should set the any DPB to F/W,
 	 * F/W will returns display only buffer whether if reference or not.
 	 * In this way the reference can be released by circulating.
 	 */
-	if (hweight64(dec->dynamic_used) == ctx->dpb_count + MFC_EXTRA_DPB) {
+	used_flag_count = hweight64(dec->dynamic_used);
+	if (used_flag_count >= ctx->dpb_count) {
 		mfc_buf = list_entry(ctx->dst_buf_queue.head.next, struct mfc_buf, list);
 		mfc_buf->used = 1;
-		mfc_debug(2, "[DPB] All queued buf referencing. select buf[%d][%d]\n",
-				mfc_buf->vb.vb2_buf.index, mfc_buf->dpb_index);
+		mfc_debug(2, "[DPB] All DPB(%ld) of min count are referencing. select buf[%d][%d]\n",
+				used_flag_count, mfc_buf->vb.vb2_buf.index, mfc_buf->dpb_index);
 		dec->dynamic_set = 1UL << mfc_buf->dpb_index;
 		core_ctx->dynamic_set = 1UL << mfc_buf->dpb_index;
 		spin_unlock_irqrestore(&ctx->buf_queue_lock, flags);
@@ -780,7 +784,7 @@ struct mfc_buf *mfc_search_move_dpb_nal_q(struct mfc_core_ctx *core_ctx)
 	struct mfc_ctx *ctx = core_ctx->ctx;
 	struct mfc_dec *dec = ctx->dec_priv;
 	struct mfc_buf *mfc_buf = NULL;
-	unsigned long flags;
+	unsigned long flags, used_flag_count;
 
 	spin_lock_irqsave(&ctx->buf_queue_lock, flags);
 	list_for_each_entry(mfc_buf, &ctx->dst_buf_queue.head, list) {
@@ -799,15 +803,18 @@ struct mfc_buf *mfc_search_move_dpb_nal_q(struct mfc_core_ctx *core_ctx)
 	}
 
 	/*
+	 * Bumping process
 	 * In case of H.264/HEVC codec,
 	 * all of the queued buffers can be referenced by F/W.
 	 * In NAL_Q mode, F/W couldn't know when the buffer
 	 * that returned to the display index was displayed.
 	 * Therefore, NAL_Q mode can't be continued.
 	 */
-	if (hweight64(dec->dynamic_used) == ctx->dpb_count + MFC_EXTRA_DPB) {
+	used_flag_count = hweight64(dec->dynamic_used);
+	if (used_flag_count >= ctx->dpb_count) {
 		dec->is_dpb_full = 1;
-		mfc_debug(2, "[NALQ][DPB] full reference\n");
+		mfc_debug(2, "[NALQ][DPB] All DPB(%ld) of min count are referencing\n",
+				used_flag_count);
 		spin_unlock_irqrestore(&ctx->buf_queue_lock, flags);
 		return NULL;
 	}

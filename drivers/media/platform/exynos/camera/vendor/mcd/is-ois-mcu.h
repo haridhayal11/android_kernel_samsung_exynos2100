@@ -87,6 +87,7 @@ struct ois_mcu_dev {
 	struct device		*dev;
 	struct clk		*clk;
 	struct clk		*spi_clk;
+	struct mutex 	power_mutex;
 	int			irq;
 	void __iomem		*regs[OM_REG_MAX];
 	resource_size_t		regs_start[OM_REG_MAX];

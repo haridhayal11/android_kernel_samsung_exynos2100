@@ -1537,6 +1537,7 @@ int is_itf_i2c_lock(struct is_device_ischain *this,
 	return ret;
 }
 
+#ifdef PRINT_CAPABILITY
 static int is_itf_g_capability(struct is_device_ischain *this)
 {
 	int ret = 0;
@@ -1637,6 +1638,7 @@ static int is_itf_g_capability(struct is_device_ischain *this)
 #endif
 	return ret;
 }
+#endif
 
 int is_itf_power_down(struct is_interface *interface)
 {
@@ -2667,6 +2669,7 @@ int is_ischain_g_capability(struct is_device_ischain *device,
 	ulong user_ptr)
 {
 	int ret = 0;
+#ifdef PRINT_CAPABILITY
 	struct camera2_sm *capability;
 
 	capability = vzalloc(sizeof(struct camera2_sm));
@@ -2687,6 +2690,8 @@ int is_ischain_g_capability(struct is_device_ischain *device,
 
 p_err:
 	vfree(capability);
+#endif
+
 	return ret;
 }
 
