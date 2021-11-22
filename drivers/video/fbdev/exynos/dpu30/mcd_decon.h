@@ -35,6 +35,7 @@ inline void mcd_fill_hdr_info(int win_idx, struct dpp_config *config, struct dec
 void mcd_unmap_all_hdr_info(struct decon_device *decon);
 #else
 static inline int mcd_prepare_hdr_config(struct decon_device *decon, struct decon_win_config_data *win_data, struct decon_reg_data *regs) { return 0; }
+static inline void mcd_clear_hdr_info(struct decon_device *decon, struct decon_reg_data *regs) { return; }
 static inline void mcd_free_hdr_info(struct decon_device *decon, struct decon_reg_data *regs) { return; }
 static inline void mcd_fill_hdr_info(int win_idx, struct dpp_config *config, struct decon_reg_data *regs) { return; };
 static inline void mcd_unmap_all_hdr_info(struct decon_device *decon) {};

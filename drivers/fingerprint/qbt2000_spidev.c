@@ -68,7 +68,7 @@ struct qbtspi_data {
 
 static LIST_HEAD(device_list);
 static DEFINE_MUTEX(device_list_lock);
-static unsigned bufsiz = 4096 * 16;
+static unsigned int bufsiz = 1024 * 256;
 
 module_param(bufsiz, uint, S_IRUGO);
 MODULE_PARM_DESC(bufsiz, "data bytes in biggest supported SPI message");

@@ -1190,6 +1190,7 @@ static int _is_queue_subbuf_prepare(struct device *dev,
 	struct is_video_ctx *vctx = vb->vb2_queue->drv_priv;
 	struct is_video *video = GET_VIDEO(vctx);
 	struct is_queue *queue = GET_QUEUE(vctx);
+	struct is_device_ischain *device = GET_DEVICE_ISCHAIN(vctx);
 	struct camera2_node *node;
 	struct is_sub_buf *sbuf;
 	struct v4l2_plane planes[IS_MAX_PLANES];
@@ -1224,8 +1225,14 @@ static int _is_queue_subbuf_prepare(struct device *dev,
 	sdbuf->vid = node->vid;
 	sdbuf->num_plane = num_i_planes;
 
-	copy_from_user(planes, node->buf.m.planes,
-		sizeof(struct v4l2_plane) * num_i_planes);
+	if (copy_from_user(planes, node->buf.m.planes,
+		sizeof(struct v4l2_plane) * num_i_planes) != 0) {
+		mverr("[%s][%s][I%d] Failed copy_from_user", vctx, video,
+				queue->name,
+				vn_name[node->vid],
+				index);
+		return -EFAULT;
+	}
 
 	vbuf->ops->subbuf_prepare(sdbuf, planes, dev);
 
@@ -1271,8 +1278,14 @@ static int _is_queue_subbuf_prepare(struct device *dev,
 		sdbuf->vid = node->vid;
 		sdbuf->num_plane = num_i_planes;
 
-		copy_from_user(planes, node->buf.m.planes,
-				sizeof(struct v4l2_plane) * num_i_planes);
+		if (copy_from_user(planes, node->buf.m.planes,
+				sizeof(struct v4l2_plane) * num_i_planes) != 0) {
+			mverr("[%s][%s][I%d] Failed copy_from_user", vctx, video,
+					queue->name,
+					vn_name[node->vid],
+					index);
+			continue;
+		}
 
 		vbuf->ops->subbuf_prepare(sdbuf, planes, dev);
 
@@ -1296,6 +1309,9 @@ static int _is_queue_subbuf_prepare(struct device *dev,
 
 				return ret;
 			}
+
+			/* need cache maintenance */
+			is_q_dbuf_q(device->dbuf_q, sdbuf, vb->vb2_queue->queued_count);
 
 			/* Disable SBWC for drawing digit on it */
 			if (dbg_draw_digit_ctrl)
@@ -2223,6 +2239,7 @@ int is_video_open(struct is_video_ctx *vctx,
 	if (ret) {
 		mverr("queue_init fail", vctx, video);
 		vfree(queue->vbq);
+		queue->vbq = NULL;
 		goto p_err;
 	}
 
@@ -2251,6 +2268,7 @@ int is_video_close(struct is_video_ctx *vctx)
 
 	vb2_queue_release(queue->vbq);
 	vfree(queue->vbq);
+	queue->vbq = NULL;
 	is_queue_close(queue);
 
 	/*
@@ -2827,8 +2845,8 @@ int is_video_streamoff(struct file *file,
 	framemgr_x_barrier_irq(framemgr, FMGR_IDX_0);
 
 	if (rcnt + pcnt + ccnt > 0)
-		mvwarn("stream off : queued buffer is not empty(R%d, P%d, C%d)", vctx,
-			video, rcnt, pcnt, ccnt);
+		mvinfo("[%s] stream off : queued buffer is not empty(R%d, P%d, C%d)", vctx,
+			video, __func__, rcnt, pcnt, ccnt);
 
 	if (vbq->type != type) {
 		mverr("invalid stream type(%d != %d)", vctx, video, vbq->type, type);
@@ -3019,6 +3037,9 @@ int is_video_s_ctrl(struct file *file,
 			clear_bit(IS_QUEUE_NEED_TO_EXTMAP, &queue->state);
 		mvinfo("[%s]use ext_plane:%d\n", vctx, video, queue->name,
 				ctrl->value);
+		break;
+	case V4L2_CID_IS_S_LLC_CONFIG:
+		device->llc_mode = ctrl->value;
 		break;
 	default:
 		mverr("unsupported ioctl(0x%X)", vctx, video, ctrl->id);

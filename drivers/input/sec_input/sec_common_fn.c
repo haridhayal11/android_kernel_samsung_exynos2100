@@ -11,8 +11,99 @@
 
 #include "sec_input.h"
 
+#if !IS_ENABLED(CONFIG_SEC_KUNIT)
+#define __visible_for_testing static
+#endif
+
+static char *lcd_id;
+module_param(lcd_id, charp, S_IRUGO);
+
 struct device *ptsp;
 EXPORT_SYMBOL(ptsp);
+
+static int sec_input_lcd_parse_panel_id(void)
+{
+	char *pt;
+	int lcd_id_p = 0;
+
+	if (IS_ERR_OR_NULL(lcd_id))
+		return lcd_id_p;
+
+	for (pt = lcd_id; *pt != 0; pt++)  {
+		lcd_id_p <<= 4;
+		switch (*pt) {
+		case '0' ... '9':
+			lcd_id_p += *pt - '0';
+			break;
+		case 'a' ... 'f':
+			lcd_id_p += 10 + *pt - 'a';
+			break;
+		case 'A' ... 'F':
+			lcd_id_p += 10 + *pt - 'A';
+			break;
+		}
+	}
+	return lcd_id_p;
+}
+
+int sec_input_get_lcd_id(struct device *dev)
+{
+#if !IS_ENABLED(CONFIG_SMCDSD_PANEL)
+	int lcdtype = 0;
+#endif
+#if IS_ENABLED(CONFIG_EXYNOS_DPU30) || IS_ENABLED(CONFIG_MCD_PANEL)
+	int connected;
+#endif
+	int lcd_id_param = 0;
+
+#if IS_ENABLED(CONFIG_DISPLAY_SAMSUNG)
+	lcdtype = get_lcd_attached("GET");
+	if (lcdtype == 0xFFFFFF) {
+		input_err(true, dev, "%s: lcd is not attached(GET)\n", __func__);
+		return -ENODEV;
+	}
+#endif
+
+#if IS_ENABLED(CONFIG_EXYNOS_DPU30) || IS_ENABLED(CONFIG_MCD_PANEL)
+	connected = get_lcd_info("connected");
+	if (connected < 0) {
+		input_err(true, dev, "%s: Failed to get lcd info(connected)\n", __func__);
+		return -EINVAL;
+	}
+
+	if (!connected) {
+		input_err(true, dev, "%s: lcd is disconnected(connected)\n", __func__);
+		return -ENODEV;
+	}
+
+	input_info(true, dev, "%s: lcd is connected\n", __func__);
+
+	lcdtype = get_lcd_info("id");
+	if (lcdtype < 0) {
+		input_err(true, dev, "%s: Failed to get lcd info(id)\n", __func__);
+		return -EINVAL;
+	}
+#endif
+#if IS_ENABLED(CONFIG_SMCDSD_PANEL)
+	if (!lcdtype) {
+		input_err(true, dev, "%s: lcd is disconnected(lcdtype)\n", __func__);
+		return -ENODEV;
+	}
+#endif
+
+	lcd_id_param = sec_input_lcd_parse_panel_id();
+	if (lcdtype <= 0 && lcd_id_param != 0) {
+		lcdtype = lcd_id_param;
+		if (lcdtype == 0xFFFFFF) {
+			input_err(true, dev, "%s: lcd is not attached(PARAM)\n", __func__);
+			return -ENODEV;
+		}
+	}
+
+	input_info(true, dev, "%s: lcdtype 0x%08X\n", __func__, lcdtype);
+	return lcdtype;
+}
+EXPORT_SYMBOL(sec_input_get_lcd_id);
 
 int sec_input_handler_start(struct device *dev)
 {
@@ -194,6 +285,7 @@ int sec_input_check_cover_type(struct device *dev)
 	case SEC_TS_CLEAR_SIDE_VIEW_COVER:
 	case SEC_TS_MINI_SVIEW_WALLET_COVER:
 	case SEC_TS_MONTBLANC_COVER:
+	case SEC_TS_CLEAR_CAMERA_VIEW_COVER:
 		cover_cmd = pdata->cover_type;
 		break;
 	default:
@@ -206,7 +298,7 @@ int sec_input_check_cover_type(struct device *dev)
 }
 EXPORT_SYMBOL(sec_input_check_cover_type);
 
-void sec_input_set_fod_info(struct device *dev, int vi_x, int vi_y, int vi_size)
+void sec_input_set_fod_info(struct device *dev, int vi_x, int vi_y, int vi_size, int vi_event)
 {
 	struct sec_ts_plat_data *pdata = dev->platform_data;
 	int byte_size = vi_x * vi_y / 8;
@@ -217,13 +309,14 @@ void sec_input_set_fod_info(struct device *dev, int vi_x, int vi_y, int vi_size)
 	pdata->fod_data.vi_x = vi_x;
 	pdata->fod_data.vi_y = vi_y;
 	pdata->fod_data.vi_size = vi_size;
+	pdata->fod_data.vi_event = vi_event;
 
 	if (byte_size != vi_size)
 		input_err(true, dev, "%s: NEED TO CHECK! vi size %d maybe wrong (byte size should be %d)\n",
 				__func__, vi_size, byte_size);
 
-	input_info(true, dev, "%s: x:%d, y:%d, size:%d\n",
-			__func__, pdata->fod_data.vi_x, pdata->fod_data.vi_y,
+	input_info(true, dev, "%s: vi_event:%d, x:%d, y:%d, size:%d\n",
+			__func__, pdata->fod_data.vi_event, pdata->fod_data.vi_x, pdata->fod_data.vi_y,
 			pdata->fod_data.vi_size);
 }
 EXPORT_SYMBOL(sec_input_set_fod_info);
@@ -390,7 +483,9 @@ void sec_input_print_info(struct device *dev, struct sec_tclm_data *tdata)
 		pdata->print_info_cnt_release++;
 
 #if IS_ENABLED(CONFIG_INPUT_TOUCHSCREEN_TCLMV2)
-	if (tdata && tdata->tclm_string)
+	if (tdata && (tdata->tclm_level == TCLM_LEVEL_NOT_SUPPORT))
+		snprintf(tclm_buff, sizeof(tclm_buff), "");
+	else if (tdata && tdata->tclm_string)
 		snprintf(tclm_buff, sizeof(tclm_buff), "C%02XT%04X.%4s%s Cal_flag:%d fail_cnt:%d",
 			tdata->nvdata.cal_count, tdata->nvdata.tune_fix_ver,
 			tdata->tclm_string[tdata->nvdata.cal_position].f_name,
@@ -667,6 +762,9 @@ void sec_input_release_all_finger(struct device *dev)
 	struct sec_ts_plat_data *pdata = dev->platform_data;
 	int i;
 
+	if (!pdata->input_dev)
+		return;
+
 	if (pdata->prox_power_off) {
 		input_report_key(pdata->input_dev, KEY_INT_CANCEL, 1);
 		input_sync(pdata->input_dev);
@@ -674,7 +772,7 @@ void sec_input_release_all_finger(struct device *dev)
 		input_sync(pdata->input_dev);
 	}
 
-	if (pdata->support_ear_detect) {
+	if (pdata->input_dev_proximity) {
 		input_report_abs(pdata->input_dev_proximity, ABS_MT_CUSTOM, 0xff);
 		input_sync(pdata->input_dev_proximity);
 	}
@@ -699,6 +797,7 @@ void sec_input_release_all_finger(struct device *dev)
 	input_mt_slot(pdata->input_dev, 0);
 
 	input_report_key(pdata->input_dev, BTN_PALM, false);
+	input_report_key(pdata->input_dev, BTN_LARGE_PALM, false);
 	input_report_key(pdata->input_dev, BTN_TOUCH, false);
 	input_report_key(pdata->input_dev, BTN_TOOL_FINGER, false);
 	pdata->palm_flag = 0;
@@ -726,11 +825,13 @@ static void sec_input_set_prop(struct device *dev, struct input_dev *input_dev, 
 	set_bit(BTN_TOUCH, input_dev->keybit);
 	set_bit(BTN_TOOL_FINGER, input_dev->keybit);
 	set_bit(BTN_PALM, input_dev->keybit);
+	set_bit(BTN_LARGE_PALM, input_dev->keybit);
 	set_bit(KEY_BLACK_UI_GESTURE, input_dev->keybit);
 	set_bit(KEY_INT_CANCEL, input_dev->keybit);
 
 	set_bit(propbit, input_dev->propbit);
 	set_bit(KEY_WAKEUP, input_dev->keybit);
+	set_bit(KEY_WATCH, input_dev->keybit);
 
 	input_set_abs_params(input_dev, ABS_MT_POSITION_X, 0, pdata->max_x, 0, 0);
 	input_set_abs_params(input_dev, ABS_MT_POSITION_Y, 0, pdata->max_y, 0, 0);
@@ -810,7 +911,7 @@ int sec_input_device_register(struct device *dev, void *data)
 		}
 	}
 
-	if (pdata->support_ear_detect) {
+	if (pdata->support_ear_detect || pdata->support_lightsensor_detect) {
 		/* register input_dev_proximity */
 		pdata->input_dev_proximity = devm_input_allocate_device(dev);
 		if (!pdata->input_dev_proximity) {
@@ -864,11 +965,12 @@ EXPORT_SYMBOL(sec_input_pinctrl_configure);
 int sec_input_power(struct device *dev, bool on)
 {
 	struct sec_ts_plat_data *pdata = dev->platform_data;
-	static bool enabled;
 	int ret = 0;
 
-	if (enabled == on)
+	if (pdata->power_enabled == on) {
+		input_info(true, dev, "%s: power_enabled %d\n", __func__, pdata->power_enabled);
 		return ret;
+	}
 
 	if (on) {
 		ret = regulator_enable(pdata->dvdd);
@@ -890,7 +992,7 @@ int sec_input_power(struct device *dev, bool on)
 		regulator_disable(pdata->dvdd);
 	}
 
-	enabled = on;
+	pdata->power_enabled = on;
 
 out:
 	input_err(true, dev, "%s: %s: avdd:%s, dvdd:%s\n", __func__, on ? "on" : "off",
@@ -907,15 +1009,28 @@ int sec_input_parse_dt(struct device *dev)
 	struct device_node *np = dev->of_node;
 	u32 coords[2];
 	int ret = 0;
-	int count = 0;
+	int count = 0, i;
 	u32 ic_match_value;
-#if !IS_ENABLED(CONFIG_SMCDSD_PANEL)
-	int lcdtype = 0;
-#endif
-#if IS_ENABLED(CONFIG_EXYNOS_DPU30)
-	int connected;
-#endif
 	u32 px_zone[3] = { 0 };
+	int lcd_type = 0, lcd_type_unload = 0;
+
+	lcd_type = sec_input_get_lcd_id(dev);
+#if !defined(DUAL_FOLDABLE_GKI)
+	if (lcd_type < 0) {
+		input_err(true, dev, "%s: lcd is not attached\n", __func__);
+#if !IS_ENABLED(CONFIG_TOUCHSCREEN_STM_SUB)
+		return -ENODEV;
+#endif
+	}
+#endif
+	input_info(true, dev, "%s: lcdtype 0x%08X\n", __func__, lcd_type);
+
+	if (!of_property_read_u32(np, "sec,lcd_type_unload", &lcd_type_unload)) {
+		if ((lcd_type != 0) && (lcd_type == lcd_type_unload)) {
+			input_err(true, dev, "%s: do not load lcdtype 0x%08X\n", __func__, lcd_type);
+			return -ENODEV;
+		}
+	}
 
 	pdata->tsp_icid = of_get_named_gpio(np, "sec,tsp-icid_gpio", 0);
 	if (gpio_is_valid(pdata->tsp_icid)) {
@@ -936,7 +1051,7 @@ int sec_input_parse_dt(struct device *dev)
 
 	pdata->irq_gpio = of_get_named_gpio(np, "sec,irq_gpio", 0);
 	if (gpio_is_valid(pdata->irq_gpio)) {
-		ret = gpio_request_one(pdata->irq_gpio, GPIOF_DIR_IN, "sec,tsp_int");
+		ret = devm_gpio_request_one(dev, pdata->irq_gpio, GPIOF_DIR_IN, "sec,tsp_int");
 		if (ret) {
 			input_err(true, dev, "%s: Unable to request tsp_int [%d]\n", __func__, pdata->irq_gpio);
 			return -EINVAL;
@@ -950,6 +1065,7 @@ int sec_input_parse_dt(struct device *dev)
 	if (gpio_is_valid(pdata->gpio_spi_cs)) {
 		ret = gpio_request(pdata->gpio_spi_cs, "tsp,gpio_spi_cs");
 		input_info(true, dev, "%s: gpio_spi_cs: %d, ret: %d\n", __func__, pdata->gpio_spi_cs, ret);
+		ret = 0;
 	}
 
 	if (of_property_read_u32(np, "sec,i2c-burstmax", &pdata->i2c_burstmax)) {
@@ -985,56 +1101,61 @@ int sec_input_parse_dt(struct device *dev)
 			if (pdata->bringup == 4)
 				pdata->bringup = 2;
 		} else {
-			of_property_read_string_index(np, "sec,firmware_name", 0, &pdata->firmware_name);
+			u8 lcd_id_num = of_property_count_u32_elems(np, "sec,select_lcdid");
+
+			if ((lcd_id_num != count) || (lcd_id_num <= 0)) {
+				of_property_read_string_index(np, "sec,firmware_name", 0, &pdata->firmware_name);
+			} else {
+				u32 *lcd_id_t;
+				u32 lcd_id_mask;
+
+				lcd_id_t = kcalloc(lcd_id_num, sizeof(u32), GFP_KERNEL);
+				if  (!lcd_id_t)
+					return -ENOMEM;
+
+				of_property_read_u32_array(np, "sec,select_lcdid", lcd_id_t, lcd_id_num);
+				if (of_property_read_u32(np, "sec,lcdid_mask", &lcd_id_mask) < 0)
+					lcd_id_mask = 0xFFFFFF;
+				else
+					input_info(true, dev, "%s: lcd_id_mask: 0x%06X\n", __func__, lcd_id_mask);
+
+				for (i = 0; i < lcd_id_num; i++) {
+					if ((lcd_id_t[i] & lcd_id_mask) == (lcd_type & lcd_id_mask)) {
+						of_property_read_string_index(np, "sec,firmware_name", i, &pdata->firmware_name);
+						break;
+					}
+
+					if (i == (lcd_id_num - 1))
+						of_property_read_string_index(np, "sec,firmware_name", i, &pdata->firmware_name);
+				}
+				if (!pdata->firmware_name)
+					pdata->bringup = 1;
+				else if (strlen(pdata->firmware_name) == 0)
+					pdata->bringup = 1;
+
+				input_info(true, dev, "%s: count: %d, index:%d, lcd_id: 0x%X, firmware: %s\n",
+							__func__, count, i, lcd_id_t[i], pdata->firmware_name);
+				kfree(lcd_id_t);
+			}
+
 			if (pdata->bringup == 4)
 				pdata->bringup = 3;
 		}
 	}
 
-#if IS_ENABLED(CONFIG_DISPLAY_SAMSUNG)
-	lcdtype = get_lcd_attached("GET");
-	if (lcdtype == 0xFFFFFF) {
-		input_err(true, dev, "%s: lcd is not attached\n", __func__);
-#if !IS_ENABLED(CONFIG_TOUCHSCREEN_STM_SUB)
-		return -ENODEV;
+	pdata->not_support_io_ldo = of_property_read_bool(np, "not_support_io_ldo");
+	if (!pdata->not_support_io_ldo) {
+		pdata->dvdd = regulator_get(dev, "tsp_io_ldo");
+		if (IS_ERR_OR_NULL(pdata->dvdd)) {
+			input_err(true, dev, "%s: Failed to get %s regulator.\n",
+					__func__, "tsp_io_ldo");
+			ret = PTR_ERR(pdata->dvdd);
+#if !IS_ENABLED(CONFIG_QGKI)
+			if (gpio_is_valid(pdata->gpio_spi_cs))
+				gpio_free(pdata->gpio_spi_cs);
 #endif
-	}
-#endif
-#if IS_ENABLED(CONFIG_EXYNOS_DPU30)
-	connected = get_lcd_info("connected");
-	if (connected < 0) {
-		input_err(true, dev, "%s: Failed to get lcd info\n", __func__);
-		return -EINVAL;
-	}
-
-	if (!connected) {
-		input_err(true, dev, "%s: lcd is disconnected\n", __func__);
-		return -ENODEV;
-	}
-
-	input_info(true, dev, "%s: lcd is connected\n", __func__);
-
-	lcdtype = get_lcd_info("id");
-	if (lcdtype < 0) {
-		input_err(true, dev, "%s: Failed to get lcd info\n", __func__);
-		return -EINVAL;
-	}
-#endif
-#if IS_ENABLED(CONFIG_SMCDSD_PANEL)
-	if (!lcdtype) {
-		input_err(true, dev, "%s: lcd is disconnected\n", __func__);
-		return -ENODEV;
-	}
-#endif
-
-	input_info(true, dev, "%s: lcdtype 0x%08X\n", __func__, lcdtype);
-
-	pdata->dvdd = regulator_get(dev, "tsp_io_ldo");
-	if (IS_ERR_OR_NULL(pdata->dvdd)) {
-		input_err(true, dev, "%s: Failed to get %s regulator.\n",
-				__func__, "tsp_io_ldo");
-		ret = PTR_ERR(pdata->dvdd);
-		return -EINVAL;
+			return -EINVAL;
+		}
 	}
 
 	pdata->avdd = regulator_get(dev, "tsp_avdd_ldo");
@@ -1042,6 +1163,10 @@ int sec_input_parse_dt(struct device *dev)
 		input_err(true, dev, "%s: Failed to get %s regulator.\n",
 				__func__, "tsp_avdd_ldo");
 		ret = PTR_ERR(pdata->avdd);
+#if !IS_ENABLED(CONFIG_QGKI)
+		if (gpio_is_valid(pdata->gpio_spi_cs))
+			gpio_free(pdata->gpio_spi_cs);
+#endif
 		return -EINVAL;
 	}
 
@@ -1051,14 +1176,30 @@ int sec_input_parse_dt(struct device *dev)
 	pdata->support_fod_lp_mode = of_property_read_bool(np, "support_fod_lp_mode");
 	pdata->enable_settings_aot = of_property_read_bool(np, "enable_settings_aot");
 	pdata->sync_reportrate_120 = of_property_read_bool(np, "sync-reportrate-120");
+	pdata->support_refresh_rate_mode = of_property_read_bool(np, "support_refresh_rate_mode");
 	pdata->support_vrr = of_property_read_bool(np, "support_vrr");
 	pdata->support_ear_detect = of_property_read_bool(np, "support_ear_detect_mode");
 	pdata->support_open_short_test = of_property_read_bool(np, "support_open_short_test");
 	pdata->support_mis_calibration_test = of_property_read_bool(np, "support_mis_calibration_test");
 	pdata->support_wireless_tx = of_property_read_bool(np, "support_wireless_tx");
+	pdata->support_input_monitor = of_property_read_bool(np, "support_input_monitor");
+	pdata->chip_on_board = of_property_read_bool(np, "chip_on_board");
+	pdata->disable_vsync_scan = of_property_read_bool(np, "disable_vsync_scan");
+	pdata->unuse_dvdd_power = of_property_read_bool(np, "sec,unuse_dvdd_power");
+	of_property_read_u32(np, "support_rawdata_map_num", &pdata->support_rawdata_map_num);
 
 	if (of_property_read_u32(np, "sec,support_dual_foldable", &pdata->support_dual_foldable) < 0)
 		pdata->support_dual_foldable = 0;
+	if (of_property_read_u32(np, "sec,support_sensor_hall", &pdata->support_sensor_hall) < 0)
+		pdata->support_sensor_hall = 0;
+	if (of_property_read_u32(np, "sec,dump_ic_ver", &pdata->dump_ic_ver) < 0)
+		pdata->dump_ic_ver = 0;
+	pdata->support_flex_mode = of_property_read_bool(np, "support_flex_mode");
+	pdata->support_lightsensor_detect = of_property_read_bool(np, "support_lightsensor_detect");
+
+	pdata->enable_sysinput_enabled = of_property_read_bool(np, "sec,enable_sysinput_enabled");
+	input_info(true, dev, "%s: Sysinput enabled %s\n",
+				__func__, pdata->enable_sysinput_enabled ? "ON" : "OFF");
 
 	if (of_property_read_u32_array(np, "sec,area-size", px_zone, 3)) {
 		input_info(true, dev, "Failed to get zone's size\n");
@@ -1081,12 +1222,14 @@ int sec_input_parse_dt(struct device *dev)
 	pdata->support_mt_pressure = true;
 #endif
 	input_err(true, dev, "%s: i2c buffer limit: %d, lcd_id:%06X, bringup:%d,"
-			" id:%d,%d, dex:%d, max(%d/%d), FOD:%d, AOT:%d, ED:%d FLM:%d\n",
-			__func__, pdata->i2c_burstmax, lcdtype, pdata->bringup,
+			" id:%d,%d, dex:%d, max(%d/%d), FOD:%d, AOT:%d, ED:%d, FLM:%d,"
+			" COB:%d, disable_vsync_scan:%d, unuse_dvdd_power:%d\n",
+			__func__, pdata->i2c_burstmax, lcd_type, pdata->bringup,
 			pdata->tsp_id, pdata->tsp_icid,
 			pdata->support_dex, pdata->max_x, pdata->max_y,
 			pdata->support_fod, pdata->enable_settings_aot,
-			pdata->support_ear_detect, pdata->support_fod_lp_mode);
+			pdata->support_ear_detect, pdata->support_fod_lp_mode,
+			pdata->chip_on_board, pdata->disable_vsync_scan, pdata->unuse_dvdd_power);
 	return ret;
 }
 EXPORT_SYMBOL(sec_input_parse_dt);
@@ -1159,9 +1302,21 @@ int stui_tsp_exit(void)
 }
 EXPORT_SYMBOL(stui_tsp_exit);
 
+int stui_tsp_type(void)
+{
+	struct sec_ts_plat_data *pdata = NULL;
+	if (ptsp == NULL)
+		return -EINVAL;
 
+	pdata = ptsp->platform_data;
+	if (pdata == NULL)
+		return  -EINVAL;
 
-static int sec_input_enable_device(struct input_dev *dev)
+	return pdata->stui_tsp_type();
+}
+EXPORT_SYMBOL(stui_tsp_type);
+
+int sec_input_enable_device(struct input_dev *dev)
 {
 	int retval;
 
@@ -1176,8 +1331,9 @@ static int sec_input_enable_device(struct input_dev *dev)
 
 	return retval;
 }
+EXPORT_SYMBOL(sec_input_enable_device);
 
-static int sec_input_disable_device(struct input_dev *dev)
+int sec_input_disable_device(struct input_dev *dev)
 {
 	int retval;
 
@@ -1191,8 +1347,9 @@ static int sec_input_disable_device(struct input_dev *dev)
 	mutex_unlock(&dev->mutex);
 	return 0;
 }
+EXPORT_SYMBOL(sec_input_disable_device);
 
-static ssize_t sec_input_enabled_show(struct device *dev,
+__visible_for_testing ssize_t sec_input_enabled_show(struct device *dev,
 					 struct device_attribute *attr,
 					 char *buf)
 {
@@ -1202,9 +1359,9 @@ static ssize_t sec_input_enabled_show(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "%d\n", pdata->enabled);
 }
 
-static ssize_t sec_input_enabled_store(struct device *dev,
-				       struct device_attribute *attr,
-				       const char *buf, size_t size)
+__visible_for_testing ssize_t sec_input_enabled_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t size)
 {
 	int ret;
 	bool enable;
@@ -1246,11 +1403,18 @@ static const struct attribute_group sec_input_attr_group = {
 
 int sec_input_sysfs_create(struct kobject *kobj)
 {
+	struct kernfs_node *enabled_sd = NULL;
 	int retval = 0;
 
-	retval = sysfs_create_group(kobj, &sec_input_attr_group);
-	if (retval < 0) {
-		pr_err("%s %s: Failed to create sysfs attributes\n", SECLOG, __func__);
+	enabled_sd = sysfs_get_dirent(kobj->sd, "enabled");
+	if (IS_ERR_OR_NULL(enabled_sd)) {
+		pr_info("%s %s: make 'enabled' node\n", SECLOG, __func__);
+		retval = sysfs_create_group(kobj, &sec_input_attr_group);
+		if (retval < 0) {
+			pr_err("%s %s: Failed to create sysfs attributes %d\n", SECLOG, __func__, retval);
+		}
+	} else {
+		pr_info("%s %s: 'enabled' is already exist\n", SECLOG, __func__);
 	}
 
 	return retval;

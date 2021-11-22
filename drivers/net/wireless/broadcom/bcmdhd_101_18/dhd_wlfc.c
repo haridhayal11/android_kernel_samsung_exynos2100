@@ -4659,7 +4659,7 @@ int dhd_txpkt_log_and_dump(dhd_pub_t *dhdp, void* pkt, uint16 *pktfate_status)
 	pktdata = pktdata + bdc_len;
 #endif /* BDC */
 	dhd_handle_pktdata(dhdp, ifidx, pkt, pktdata, pktid, pktlen,
-		pktfate_status, NULL, TRUE, FALSE, TRUE);
+		pktfate_status, NULL, NULL, TRUE, FALSE, TRUE);
 	return BCME_OK;
 }
 #endif /* PROP_TXSTATUS */

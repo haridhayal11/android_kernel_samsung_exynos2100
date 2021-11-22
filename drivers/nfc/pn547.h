@@ -54,6 +54,8 @@ enum nfc_err_state {
 
 #define CORE_RESET_NTF_NO_CLOCK		0x00205FD100A0ULL
 #define CORE_RESET_NTF_CLOCK_LOST	0x0000000000A4ULL
+#define CORE_RESET_POWER_RESET_L	0x0000000404200201ULL
+#define CORE_RESET_POWER_RESET_H	0x0000000000000001ULL
 #endif
 
 #if !defined(CONFIG_NFC_FEATURE_SN100U)
@@ -247,7 +249,7 @@ enum ap_vendors {
 void pn547_register_ese_shutdown(void (*func)(void));
 #endif
 
-#if IS_ENABLED(CONFIG_BATTERY_SAMSUNG)
+#if IS_ENABLED(CONFIG_BATTERY_SAMSUNG) && !defined(CONFIG_NFC_PVDD_LATE_ENABLE)
 extern unsigned int lpcharge;
 #endif
 extern int ese_spi_pinctrl(int enable);
@@ -291,6 +293,8 @@ struct pn547_dev {
 	int  clk_req_irq;
 	phys_addr_t clkctrl_addr; /*use NFC block of AP*/
 	bool clk_req_wake;
+	bool clk_req_irq_enabled;
+	bool clk_req_wakelock;
 	bool irq_all_trigger;
 
 	long nfc_service_pid; /*used to signal the nfc the nfc service */

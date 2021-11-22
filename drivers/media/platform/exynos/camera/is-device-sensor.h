@@ -591,7 +591,7 @@ int is_sensor_dma_cancel(struct is_device_sensor *device);
 extern const struct is_queue_ops is_sensor_ops;
 extern const struct is_queue_ops is_sensor_subdev_ops;
 int is_sensor_map_sensor_module(struct is_device_ischain *device, int position,
-	struct is_device_sensor *sensor, int *sensor_id);
+		int *sensor_id);
 void is_sensor_g_max_size(u32 *max_width, u32 *max_height);
 #define CALL_MOPS(s, op, args...) (((s)->ops->op) ? ((s)->ops->op(args)) : 0)
 

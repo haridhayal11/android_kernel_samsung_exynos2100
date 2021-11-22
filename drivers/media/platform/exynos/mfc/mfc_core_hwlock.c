@@ -865,7 +865,8 @@ void mfc_core_hwlock_handler_irq(struct mfc_core *core, struct mfc_ctx *ctx,
 	spin_lock_irqsave(&core->hwlock.lock, flags);
 	__mfc_print_hwlock(core);
 
-	if ((core_ctx->state == MFCINST_RUNNING) && IS_TWO_MODE2(ctx))
+	if (((core_ctx->state == MFCINST_RUNNING) && IS_TWO_MODE2(ctx)) ||
+			(core_ctx->state == MFCINST_RES_CHANGE_INIT && IS_MULTI_MODE(ctx)))
 		need_butler = 1;
 
 	if (core->hwlock.owned_by_irq) {

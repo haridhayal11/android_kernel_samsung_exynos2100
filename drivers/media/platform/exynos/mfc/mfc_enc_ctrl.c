@@ -1229,26 +1229,8 @@ static void __mfc_core_enc_set_buf_ctrls_exception(struct mfc_core *core,
 
 	/* set drop control */
 	if (buf_ctrl->id == V4L2_CID_MPEG_VIDEO_DROP_CONTROL) {
-		if (!ctx->src_ts.ts_last_interval) {
-			p->rc_frame_delta = p->rc_framerate_res / p->rc_framerate;
-			mfc_debug(3, "[DROPCTRL] default delta: %d\n", p->rc_frame_delta);
-		} else {
-			/*
-			 * FRAME_DELTA specifies the amount of
-			 * increment of frame modulo base time.
-			 * - delta unit = framerate resolution / fps
-			 * - fps = 1000000(usec per sec) / timestamp interval
-			 * For the sophistication of calculation, we will divide later.
-			 * Excluding H.263, resolution is fixed to 10000,
-			 * so thie is also divided into pre-calculated 100.
-			 * (Preventing both overflow and calculation duplication)
-			 */
-			if (IS_H263_ENC(ctx))
-				p->rc_frame_delta = ctx->src_ts.ts_last_interval *
-					p->rc_framerate_res / 1000000;
-			else
-				p->rc_frame_delta = ctx->src_ts.ts_last_interval / 100;
-		}
+		p->rc_frame_delta = mfc_enc_get_ts_delta(ctx);
+
 		value = MFC_CORE_READL(MFC_REG_E_RC_FRAME_RATE);
 		value &= ~(0xFFFF);
 		value |= (p->rc_frame_delta & 0xFFFF);

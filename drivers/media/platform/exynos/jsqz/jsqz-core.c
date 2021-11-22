@@ -1985,9 +1985,13 @@ static int jsqz_clk_devm_get_prepare(struct jsqz_dev *jsqz)
 	jsqz->clk_producer = devm_clk_get(dev, clk_producer_name);
 
 	if (IS_ERR(jsqz->clk_producer)) {
-		dev_err(dev, "%s clock is not present\n",
-			clk_producer_name);
-		return PTR_ERR(jsqz->clk_producer);
+		if (PTR_ERR(jsqz->clk_producer) != -ENOENT) {
+			dev_err(dev, "Failed(%ld) to get 'gate' clock\n",
+				PTR_ERR(jsqz->clk_producer));
+			return PTR_ERR(jsqz->clk_producer);
+		}
+		dev_err(dev, "%s clock is not present\n", clk_producer_name);
+		return 0;
 	}
 
 	dev_dbg(jsqz->dev, "%s: preparing the clock\n", __func__);

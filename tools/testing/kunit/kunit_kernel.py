@@ -3,11 +3,11 @@
 import logging
 import subprocess
 import os
-
+import glob
 import kunit_config
 import kunit_parser
 
-KCONFIG_PATH = '.config'
+KCONFIG_PATH = os.path.join(os.environ.get('KBUILD_OUTPUT', ''), '.config')
 
 from collections import namedtuple
 
@@ -61,7 +61,7 @@ class LinuxSourceTreeOperations(object):
 	def linux_bin(self, params, timeout):
 		"""Runs the Linux UML binary. Must be named 'linux'."""
 		process = subprocess.Popen(
-			['./linux'] + params,
+			[os.path.join(os.environ.get('KBUILD_OUTPUT', ''), './linux')] + params,
 			stdin=subprocess.PIPE,
 			stdout=subprocess.PIPE,
 			stderr=subprocess.PIPE)
@@ -108,6 +108,7 @@ class ExtKunitconfigGenerator():
         self.write_config(self.final_config_file, conf)
 
     def read_config(self, fname):
+        assert os.path.exists(fname), 'There is no %s' %fname
         with open(fname, 'r') as fp:
             ret = fp.read()
         return ret
@@ -117,15 +118,12 @@ class ExtKunitconfigGenerator():
             for l in li:
                 fp.write(l)
 
-    def get_sub_config(self, parent):
-        childs = []
-        kuconf_list = os.listdir(self.rootdir)
-        for f in kuconf_list:
-            srch = '.' + parent
-            if srch in f.split('kunitconfig')[1]:
-                #FIXME: matching in the right side
-                childs.append(os.path.join(self.rootdir, f))
-        return childs
+    def get_sub_config(self, parent_cfg):
+        sub_cfgs = []
+        kunitcfg_path = os.path.join(self.rootdir, 'kunitconfig.%s' %parent_cfg)
+        sub_cfgs.append(kunitcfg_path)
+        sub_cfgs.extend(glob.glob(kunitcfg_path + '.*'))
+        return sub_cfgs
 
     def gen_merge_config(self, ex_li):
         ret = []

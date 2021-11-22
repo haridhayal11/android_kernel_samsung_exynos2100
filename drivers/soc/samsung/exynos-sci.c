@@ -82,6 +82,7 @@ static int exynos_sci_parse_dt(struct device_node *np,
 
 	sci_h->irq = irq_of_parse_and_map(np, 0);
 	sci_h->handler = (void *)exynos_sci_handler;
+	strcpy(sci_h->name, "sci_h");
 
 	devm_request_irq(sci_data->dev, sci_h->irq, sci_h->handler,
 #ifdef MULTI_IRQ_SUPPORT_ITMON
@@ -616,6 +617,12 @@ static int exynos_sci_llc_enable(struct exynos_sci_data *data,
 			return 0;
 		}
 
+		if (!sci_data->gov_data->en_cnt && sci_data->llc_on_flag) {
+			sci_data->gov_data->en_cnt = 1;
+			SCI_INFO("%s: cali en_cnt\n", __func__);
+			return 0;
+		}
+
 		if (*enable > 1) {
 			SCI_ERR("%s: Invalid Control Index: %u\n", __func__, *enable);
 			ret = -EINVAL;
@@ -675,11 +682,39 @@ int llc_get_en(void)
 }
 EXPORT_SYMBOL(llc_get_en);
 
+int cam_llc_enable(bool on)
+{
+	int ret;
+	unsigned int enable = on;
+
+	sci_data->llc_on_flag = on;
+
+	if (on) {
+		set_exynos_sci_llc_debug_mode(0);
+		set_llc_gov_en(0);
+	} else {
+		set_llc_gov_en(1);
+	}
+
+	ret = exynos_sci_llc_enable(sci_data, SCI_IPC_SET, &enable);
+	if (ret) {
+		SCI_ERR("%s: Failed llc enable control\n", __func__);
+		return ret;
+	}
+
+
+	return 0;
+}
+EXPORT_SYMBOL(cam_llc_enable);
+
 int llc_off_disable(bool off)
 {
 	unsigned long flags;
 	int enable = !off;
 	int ret;
+
+	if (sci_data->llc_on_flag)
+		return 0;
 
 	set_exynos_sci_llc_debug_mode(off);
 	set_llc_gov_en(!off);
@@ -1684,6 +1719,7 @@ static struct notifier_block exynos_sci_lockup_nb = {
 };
 #endif
 
+#if IS_ENABLED(CONFIG_USE_LLC_LOG)
 static void exynos_sci_llc_dump_config(struct exynos_sci_data *data)
 {
 	data->llc_dump_addr.p_addr = llc_reserved.p_addr;
@@ -1694,6 +1730,7 @@ static void exynos_sci_llc_dump_config(struct exynos_sci_data *data)
 	dbg_snapshot_add_bl_item_info(LLC_DSS_NAME,
 			data->llc_dump_addr.p_addr, data->llc_dump_addr.p_size);
 }
+#endif
 
 static int sci_panic_handler(struct notifier_block *nb, unsigned long l,
 		void *buf)
@@ -1774,6 +1811,11 @@ static int exynos_sci_probe(struct platform_device *pdev)
 		goto err_acpm;
 	}
 #endif
+	data->sci_base = ioremap(SCI_BASE, SZ_4K);
+	if (IS_ERR(data->sci_base)) {
+		SCI_ERR("%s: Failed SCI base remap\n", __func__);
+		goto err_ioremap;
+	}
 
 	/* parsing dts data for SCI */
 	ret = exynos_sci_parse_dt(data->dev->of_node, data);
@@ -1840,19 +1882,17 @@ static int exynos_sci_probe(struct platform_device *pdev)
 		data->gov_data->llc_req_flag = 0;
 	}
 
-
-	data->sci_base = ioremap(SCI_BASE, SZ_4K);
-	if (IS_ERR(data->sci_base)) {
-		SCI_ERR("%s: Failed SCI base remap\n", __func__);
-		goto err_ioremap;
-	}
-
 #ifdef CONFIG_LOCKUP_DETECTOR_OTHER_CPU
 	atomic_notifier_chain_register(&hardlockup_notifier_list,
 			&exynos_sci_lockup_nb);
 #endif
 
+#if IS_ENABLED(CONFIG_USE_LLC_LOG)
 	exynos_sci_llc_dump_config(data);
+#else
+	carveout_reserved_mem(rmem);
+	SCI_INFO("%s: No use llc log mem\n", __func__);
+#endif
 
 	atomic_notifier_chain_register(&panic_notifier_list, &nb_sci_panic);
 	platform_set_drvdata(pdev, data);
@@ -1870,6 +1910,7 @@ static int exynos_sci_probe(struct platform_device *pdev)
 	schedule_delayed_work(&data->gov_data->get_noti_work,
 			msecs_to_jiffies(10000));
 
+	sci_data->llc_on_flag = false;
 	sci_data->gov_data->high_time = 0;
 	sci_data->gov_data->start_time = 0;
 	sci_data->gov_data->last_time = 0;
@@ -1879,7 +1920,6 @@ static int exynos_sci_probe(struct platform_device *pdev)
 
 	return 0;
 
-err_ioremap:
 err_llc_disable:
 err_cpu_min_region:
 err_region_priority:
@@ -1887,6 +1927,7 @@ err_llc_region:
 err_plug_llc_region:
 err_ret_disable:
 err_parse_dt:
+err_ioremap:
 #if defined(CONFIG_EXYNOS_ACPM) || defined(CONFIG_EXYNOS_ACPM_MODULE)
 	acpm_ipc_release_channel(data->dev->of_node, data->ipc_ch_num);
 err_acpm:

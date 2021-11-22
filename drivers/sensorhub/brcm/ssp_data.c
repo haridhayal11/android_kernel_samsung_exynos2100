@@ -440,6 +440,14 @@ static void get_light_seamless_sensordata(char *pchRcvDataFrame, int *iDataIdx,
 	memcpy(sensorsdata, pchRcvDataFrame + *iDataIdx, 4);
 	*iDataIdx += 4;
 }
+#ifdef CONFIG_SENSORS_FLIP_COVER_DETECTOR
+static void get_flip_cover_detector_data(char *pchRcvDataFrame, int *iDataIdx,
+	struct sensor_value *sensorsdata)
+{
+	memcpy(sensorsdata, pchRcvDataFrame + *iDataIdx, 22);
+	*iDataIdx += 22;
+}
+#endif
 
 #ifdef CONFIG_SENSORS_SSP_HIFI_BATCHING // HIFI batch
 
@@ -1010,6 +1018,9 @@ void initialize_function_pointer(struct ssp_data *data)
 	data->get_sensor_data[TAP_TRACKER_SENSOR] = get_tap_tracker_sensordata;
 	data->get_sensor_data[SHAKE_TRACKER_SENSOR] = get_shake_tracker_sensordata;
 	data->get_sensor_data[LIGHT_SEAMLESS_SENSOR] = get_light_seamless_sensordata;
+#ifdef CONFIG_SENSORS_FLIP_COVER_DETECTOR
+	data->get_sensor_data[FLIP_COVER_DETECTOR] = get_flip_cover_detector_data;
+#endif
 	data->get_sensor_data[BULK_SENSOR] = NULL;
 	data->get_sensor_data[GPS_SENSOR] = NULL;
 
@@ -1067,6 +1078,9 @@ void initialize_function_pointer(struct ssp_data *data)
 	data->report_sensor_data[TAP_TRACKER_SENSOR] = report_tap_tracker_data;
 	data->report_sensor_data[SHAKE_TRACKER_SENSOR] = report_shake_tracker_data;
 	data->report_sensor_data[LIGHT_SEAMLESS_SENSOR] = report_light_seamless_data;
+#ifdef CONFIG_SENSORS_FLIP_COVER_DETECTOR
+	data->report_sensor_data[FLIP_COVER_DETECTOR] = report_flip_cover_detector_data;
+#endif
 	data->ssp_big_task[BIG_TYPE_DUMP] = ssp_dump_task;
 	data->ssp_big_task[BIG_TYPE_READ_LIB] = ssp_read_big_library_task;
 #ifdef CONFIG_SENSORS_SSP_HIFI_BATCHING // HIFI batch

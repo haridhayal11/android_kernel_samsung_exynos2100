@@ -949,6 +949,9 @@ static int is_mem_map_vm(struct is_resourcemgr *resourcemgr,
 		warn("heap size is zero");
 		vfree(pages);
 		return 0;
+	} else if (!pages) {
+		probe_err("Failed to vmalloc. pages %d", npages);
+		return -ENOMEM;
 	}
 
 	pb = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, heap_size, NULL, 0);
@@ -971,7 +974,6 @@ static int is_mem_map_vm(struct is_resourcemgr *resourcemgr,
 	}
 	if (map_vm_area(vm, prot, pages)) {
 		probe_err("failed to mapping between virt and phys for binary");
-		vunmap(vm->addr);
 		vfree(pages);
 		CALL_VOID_BUFOP(pb, free, pb);
 		return -ENOMEM;
@@ -1018,7 +1020,6 @@ static int is_lib_mem_map(struct is_resourcemgr *resourcemgr)
 
 	if (map_vm_area(&is_lib_vm, prot, pages)) {
 		probe_err("failed to mapping between virt and phys for binary");
-		vunmap(is_lib_vm.addr);
 		kfree(pages);
 		return -ENOMEM;
 	}
@@ -1080,9 +1081,8 @@ int is_heap_mem_free(struct is_resourcemgr *resourcemgr)
 	struct is_minfo *minfo = &resourcemgr->minfo;
 	int ret = 0;
 
-#if defined(DISABLE_DDK_HEAP_FREE)
-	return 0;
-#endif
+	if (IS_ENABLED(DISABLE_DDK_HEAP_FREE))
+		return 0;
 
 	if (minfo->pb_heap_ddk)
 		CALL_VOID_BUFOP(minfo->pb_heap_ddk, free, minfo->pb_heap_ddk);
@@ -2402,8 +2402,11 @@ int is_resource_put(struct is_resourcemgr *resourcemgr, u32 rsc_type)
 			}
 #endif
 #if defined(SECURE_CAMERA_FACE)
-			ret = is_secure_func(core, NULL, IS_SECURE_CAMERA_FACE,
-				core->scenario, SMC_SECCAM_UNPREPARE);
+			if (is_secure_func(core, NULL,
+						IS_SECURE_CAMERA_FACE,
+						core->scenario,
+						SMC_SECCAM_UNPREPARE))
+				err("Failed to is_secure_func(FACE, UNPREPARE)");
 #endif
 			ret = is_itf_power_down(&core->interface);
 			if (ret)
@@ -2635,8 +2638,11 @@ void is_resource_set_global_param(struct is_resourcemgr *resourcemgr, void *devi
 		minfo("video mode %d\n", ischain, video_mode);
 
 #ifdef ENABLE_DVFS
-		resourcemgr->llc_state = 0;
-		is_hw_configure_llc(true, ischain, &resourcemgr->llc_state);
+		global_param->llc_state = 0;
+		if (ischain->llc_mode == false)
+			set_bit(LLC_DISABLE, &global_param->llc_state);
+
+		is_hw_configure_llc(true, ischain, &global_param->llc_state);
 #endif
 	}
 
@@ -2659,7 +2665,7 @@ void is_resource_clear_global_param(struct is_resourcemgr *resourcemgr, void *de
 		ischain->hardware->video_mode = false;
 
 #ifdef ENABLE_DVFS
-		is_hw_configure_llc(false, ischain, &resourcemgr->llc_state);
+		is_hw_configure_llc(false, ischain, &global_param->llc_state);
 #endif
 	}
 
@@ -2724,4 +2730,167 @@ int is_logsync(struct is_interface *itf, u32 sync_id, u32 msg_test_id)
 	err("is_hw_msg_test(%d)", ret);
 #endif
 	return ret;
+}
+
+struct is_dbuf_q *is_init_dbuf_q(void)
+{
+	void *ret;
+	int i_id, i_list;
+	int num_list = MAX_DBUF_LIST;
+	struct is_dbuf_q *dbuf_q;
+
+	dbuf_q = vzalloc(sizeof(struct is_dbuf_q));
+	if (!dbuf_q) {
+		err("failed to allocate dbuf_q");
+		return ERR_PTR(-ENOMEM);
+	}
+
+	for (i_id = 0; i_id < ID_DBUF_MAX; i_id++) {
+		dbuf_q->dbuf_list[i_id] = vzalloc(sizeof(struct is_dbuf_list) * num_list);
+		if (!dbuf_q->dbuf_list[i_id]) {
+			err("failed to allocate dbuf_list");
+			ret = ERR_PTR(-ENOMEM);
+			goto err_alloc_list;
+		}
+
+		mutex_init(&dbuf_q->lock[i_id]);
+
+		dbuf_q->queu_count[i_id] = 0;
+		INIT_LIST_HEAD(&dbuf_q->queu_list[i_id]);
+
+		dbuf_q->free_count[i_id] = 0;
+		INIT_LIST_HEAD(&dbuf_q->free_list[i_id]);
+	}
+
+	/* set free list */
+	for (i_id = 0; i_id < ID_DBUF_MAX; i_id++) {
+		for (i_list = 0; i_list < num_list; i_list++) {
+			list_add_tail(&dbuf_q->dbuf_list[i_id][i_list].list,
+					&dbuf_q->free_list[i_id]);
+			dbuf_q->free_count[i_id]++;
+		}
+	}
+
+	return dbuf_q;
+
+err_alloc_list:
+	while (i_id-- > 0) {
+		if (dbuf_q->dbuf_list[i_id])
+			vfree(dbuf_q->dbuf_list[i_id]);
+	}
+
+	vfree(dbuf_q);
+
+	return ret;
+}
+
+/* cache maintenance for user buffer */
+void is_deinit_dbuf_q(struct is_dbuf_q *dbuf_q)
+{
+	int i_id;
+
+	for (i_id = 0; i_id < ID_DBUF_MAX; i_id++)
+		vfree(dbuf_q->dbuf_list[i_id]);
+
+	vfree(dbuf_q);
+}
+
+static void is_flush_dma_buf(struct is_dbuf_q *dbuf_q, u32 dma_id, u32 qcnt)
+{
+	struct is_dbuf_list *dbuf_list;
+
+	while (dbuf_q->queu_count[dma_id] > qcnt) {
+		/* get queue list */
+		dbuf_list = list_first_entry(&dbuf_q->queu_list[dma_id],
+					struct is_dbuf_list, list);
+		list_del(&dbuf_list->list);
+		dbuf_q->queu_count[dma_id]--;
+
+		/* put free list */
+		list_add_tail(&dbuf_list->list, &dbuf_q->free_list[dma_id]);
+		dbuf_q->free_count[dma_id]++;
+	}
+}
+
+void is_q_dbuf_q(struct is_dbuf_q *dbuf_q, struct is_sub_dma_buf *sdbuf, u32 qcnt)
+{
+	int dma_id, num_planes, p;
+	struct is_dbuf_list *dbuf_list;
+
+	dma_id = is_get_dma_id(sdbuf->vid);
+	if (dma_id < 0)
+		return;
+
+	mutex_lock(&dbuf_q->lock[dma_id]);
+
+	if (dbuf_q->queu_count[dma_id] > qcnt) {
+		info("[%s] dma_id(%d) dbuf qcnt(%d) > vb2 qcnt(%d)", __func__, dma_id,
+			dbuf_q->queu_count[dma_id], qcnt);
+
+		is_flush_dma_buf(dbuf_q, dma_id, qcnt);
+	}
+
+	if (!dbuf_q->free_count[dma_id] || list_empty(&dbuf_q->free_list[dma_id])) {
+		warn("dma_id(%d) free list is NULL[f(%d)/q(%d)]", dma_id,
+			dbuf_q->free_count[dma_id], dbuf_q->queu_count[dma_id]);
+
+		mutex_unlock(&dbuf_q->lock[dma_id]);
+		return;
+	}
+
+	/* get free list */
+	dbuf_list = list_first_entry(&dbuf_q->free_list[dma_id],
+				struct is_dbuf_list, list);
+	list_del(&dbuf_list->list);
+	dbuf_q->free_count[dma_id]--;
+
+	/* copy */
+	num_planes = sdbuf->num_plane * sdbuf->num_buffer;
+	for (p = 0; p < num_planes; p++)
+		dbuf_list->dbuf[p] = sdbuf->dbuf[p];
+
+	/* put queue list */
+	list_add_tail(&dbuf_list->list, &dbuf_q->queu_list[dma_id]);
+	dbuf_q->queu_count[dma_id]++;
+
+	mutex_unlock(&dbuf_q->lock[dma_id]);
+}
+
+void is_dq_dbuf_q(struct is_dbuf_q *dbuf_q, u32 dma_id, enum dma_data_direction dir)
+{
+	u32 p;
+	struct is_dbuf_list *dbuf_list;
+
+	mutex_lock(&dbuf_q->lock[dma_id]);
+
+	if (!dbuf_q->queu_count[dma_id] || list_empty(&dbuf_q->queu_list[dma_id])) {
+		warn("dma_id(%d) queue list is NULL[f(%d)/q(%d)]", dma_id,
+			dbuf_q->free_count[dma_id], dbuf_q->queu_count[dma_id]);
+		return;
+	}
+
+	/* get queue list */
+	dbuf_list = list_first_entry(&dbuf_q->queu_list[dma_id],
+				struct is_dbuf_list, list);
+	list_del(&dbuf_list->list);
+	dbuf_q->queu_count[dma_id]--;
+
+	/* put free list */
+	list_add_tail(&dbuf_list->list, &dbuf_q->free_list[dma_id]);
+	dbuf_q->free_count[dma_id]++;
+
+	mutex_unlock(&dbuf_q->lock[dma_id]);
+
+	/* cache maintenance */
+	for (p = 0; p < IS_MAX_PLANES && dbuf_list->dbuf[p]; p++) {
+		if (dir == DMA_FROM_DEVICE)	/* cache inv */
+			dma_buf_begin_cpu_access(dbuf_list->dbuf[p], DMA_FROM_DEVICE);
+		else if (dir == DMA_TO_DEVICE)	/* cache clean */
+			dma_buf_end_cpu_access(dbuf_list->dbuf[p], DMA_TO_DEVICE);
+		else
+			warn("invalid direction(%d), type(%d)", dir, dma_id);
+	}
+
+	if (!p)
+		warn("dbuf is NULL. dma_id(%d)", dma_id);
 }

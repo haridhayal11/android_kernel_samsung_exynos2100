@@ -136,6 +136,18 @@ int is_put_sensor_device(struct is_core *core)
 	return 0;
 }
 
+struct is_device_ischain *is_get_ischain_device(u32 instance)
+{
+	struct is_core *core;
+
+	if (instance >= IS_STREAM_COUNT)
+		return NULL;
+
+	core = (struct is_core *)dev_get_drvdata(is_dev);
+
+	return &core->ischain[instance];
+}
+
 #ifdef CONFIG_CPU_THERMAL_IPA
 static int is_mif_throttling_notifier(struct notifier_block *nb,
 		unsigned long val, void *v)
@@ -1641,7 +1653,7 @@ static int is_probe(struct platform_device *pdev)
 		goto p_err3;
 #endif
 
-#if defined(VH_FPSIMD_API)
+#if defined(ENABLE_FPSIMD_FOR_USER) && defined(VH_FPSIMD_API)
 	ret = is_fpsimd_probe();
 	if (ret)
 		goto p_err3;

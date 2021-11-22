@@ -978,13 +978,7 @@ static void wacom_i2c_reply_handler(struct wacom_i2c *wac_i2c, char *data)
 	case ELEC_TEST_PACKET:
 		wac_i2c->check_elec++;
 
-#if 0//!WACOM_SEC_FACTORY
-		// only for canvas on bring up
-		if (wac_i2c->check_elec > 1)
-			panic("elec-test");
-#else
 		input_info(true, &wac_i2c->client->dev, "%s: ELEC TEST PACKET received(%d)\n", __func__, wac_i2c->check_elec);
-#endif
 
 #if !WACOM_SEC_FACTORY && WACOM_PRODUCT_SHIP
 		ret = wacom_start_stop_cmd(wac_i2c, WACOM_STOP_AND_START_CMD);
@@ -1316,13 +1310,13 @@ static void wacom_i2c_coord_handler(struct wacom_i2c *wac_i2c, char *data)
 			return;
 		}
 
+		if (data[0] & 0x40)
+			wac_i2c->tool = BTN_TOOL_RUBBER;
+		else
+			wac_i2c->tool = BTN_TOOL_PEN;
+
 		if (!wac_i2c->pen_prox) {
 			wac_i2c->pen_prox = true;
-
-			if (data[0] & 0x40)
-				wac_i2c->tool = BTN_TOOL_RUBBER;
-			else
-				wac_i2c->tool = BTN_TOOL_PEN;
 
 			epen_location_detect(wac_i2c, location, wac_i2c->x, wac_i2c->y);
 			wac_i2c->hi_x = wac_i2c->x;
@@ -1569,12 +1563,13 @@ static void open_test_work(struct work_struct *work)
 		wacom_reset_hw(wac_i2c);
 	}
 
+#if IS_ENABLED(CONFIG_INPUT_SEC_NOTIFIER)
 	if (wac_i2c->is_tsp_block) {
 		wac_i2c->tsp_scan_mode = sec_input_notify(&wac_i2c->nb, NOTIFIER_TSP_BLOCKING_RELEASE, NULL);
 		wac_i2c->is_tsp_block = false;
 		input_err(true, &wac_i2c->client->dev, "%s : release tsp scan block\n", __func__);
 	}
-
+#endif
 	input_info(true, &wac_i2c->client->dev, "%s : end!\n", __func__);
 #else
 	input_info(true, &wac_i2c->client->dev, "open test skiped!\n");
@@ -1798,6 +1793,8 @@ static int wacom_i2c_get_fw_size(struct wacom_i2c *wac_i2c)
 	if (wac_i2c->pdata->ic_type == MPU_W9020)
 		fw_size = 144 * 1024;
 	else if (wac_i2c->pdata->ic_type == MPU_W9021)
+		fw_size = 256 * 1024;
+	else if (wac_i2c->pdata->ic_type == MPU_WEZ01)
 		fw_size = 256 * 1024;
 	else
 		fw_size = 128 * 1024;
@@ -2926,8 +2923,14 @@ static int wacom_i2c_probe(struct i2c_client *client,
 	/* using 2 slave address. one is normal mode, another is boot mode for
 	 * fw update.
 	 */
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+	wac_i2c->client_boot = i2c_new_dummy_device(client->adapter, pdata->boot_addr);
+#else
 	wac_i2c->client_boot = i2c_new_dummy(client->adapter, pdata->boot_addr);
-	if (!wac_i2c->client_boot) {
+#endif
+
+	if (IS_ERR_OR_NULL(wac_i2c->client_boot)) {
 		input_err(true, &client->dev, "failed to register sub client[0x%x]\n", pdata->boot_addr);
 		return -ENOMEM;
 	}
@@ -3097,7 +3100,6 @@ static int wacom_i2c_probe(struct i2c_client *client,
 
 	wac_i2c->nb_camera.notifier_call = wacom_get_camera_type_notify;
 	is_register_eeprom_notifier(&wac_i2c->nb_camera);
-
 	probe_open_test(wac_i2c);
 
 	g_wac_i2c = wac_i2c;
@@ -3304,13 +3306,6 @@ static int __init wacom_i2c_init(void)
 {
 	int ret = 0;
 
-#ifdef CONFIG_BATTERY_SAMSUNG
-	if (lpcharge) {
-		pr_info("%s: %s: Do not load driver due to : lpm %d\n",
-				SECLOG, __func__, lpcharge);
-		return ret;
-	}
-#endif
 	ret = i2c_add_driver(&wacom_i2c_driver);
 	if (ret)
 		pr_err("%s: %s: failed to add i2c driver\n", SECLOG, __func__);

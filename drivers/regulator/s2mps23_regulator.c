@@ -66,8 +66,8 @@ static struct device_node *acpm_mfd_node;
 
 static struct s2mps23_info *s2mps23_static_info;
 static int s2mps23_buck_ocp_cnt[S2MPS23_BUCK_MAX]; /* BUCK 1~9 OCP count */
-static int s2mps23_buck_oi_cnt[S2MPS23_BUCK_MAX]; /* BUCK 1~9 OI count */
 static int s2mps23_temp_cnt[S2MPS23_TEMP_MAX]; /* 0 : 120 degree , 1 : 140 degree */
+static int s2mps23_buck_oi_cnt[S2MPS23_BUCK_MAX]; /* BUCK 1~9 OI count */
 #if IS_ENABLED(CONFIG_SEC_PM_BIGDATA)
 static int hqm_bocp_cnt[S2MPS23_BUCK_MAX];
 #endif /* CONFIG_SEC_PM_BIGDATA */
@@ -736,6 +736,7 @@ static int s2mps23_pmic_dt_parse_pdata(struct s2mps23_dev *iodev,
 	}
 
 	pdata->regulators = rdata;
+	pdata->num_rdata = 0;
 	for_each_child_of_node(regulators_np, reg_np) {
 		if (iodev->pmic_rev) {
 			for (i = 0; i < ARRAY_SIZE(regulators); i++)
@@ -754,6 +755,7 @@ static int s2mps23_pmic_dt_parse_pdata(struct s2mps23_dev *iodev,
 					&regulators[i]);
 			rdata->reg_node = reg_np;
 			rdata++;
+			pdata->num_rdata++;
 		} else {
 			for (i = 0; i < ARRAY_SIZE(regulators_evt0); i++)
 				if (!of_node_cmp(reg_np->name, regulators_evt0[i].name))
@@ -771,6 +773,7 @@ static int s2mps23_pmic_dt_parse_pdata(struct s2mps23_dev *iodev,
 					&regulators_evt0[i]);
 			rdata->reg_node = reg_np;
 			rdata++;
+			pdata->num_rdata++;
 		}
 	}
 
@@ -1824,7 +1827,7 @@ static int s2mps23_pmic_probe(struct platform_device *pdev)
 	/* changed EVT1.1 LDO1M, LDO8 min step */
 	s2mps23_evt1_1_ldo_wa();
 
-	for (i = 0; i < pdata->num_regulators; i++) {
+	for (i = 0; i < pdata->num_rdata; i++) {
 		int id = pdata->regulators[i].id;
 		config.dev = &pdev->dev;
 		config.init_data = pdata->regulators[i].initdata;
@@ -1847,7 +1850,7 @@ static int s2mps23_pmic_probe(struct platform_device *pdev)
 		}
 	}
 
-	s2mps23->num_regulators = pdata->num_regulators;
+	s2mps23->num_regulators = pdata->num_rdata;
 
 #if IS_ENABLED(CONFIG_SEC_PM_BIGDATA_UEVENT)
 	INIT_DELAYED_WORK(&s2mps23->hqm_pmtp_work, send_hqm_pmtp_work);

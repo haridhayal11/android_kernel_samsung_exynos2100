@@ -53,6 +53,7 @@ typedef enum {
 	TRY_ROLE_SWAP_PR = 1, /* pr_swap */
 	TRY_ROLE_SWAP_DR = 2, /* dr_swap */
 	TRY_ROLE_SWAP_TYPE = 3, /* type */
+	TRY_ROLE_SWAP_VC = 4, /* vconn swap */
 } PDIC_ROLE_SWAP_MODE;
 
 #define TRY_ROLE_SWAP_WAIT_MS 5000
@@ -79,14 +80,20 @@ typedef enum {
 #define DEXPAD_PRODUCT_ID		0xA029
 #define MPA_PRODUCT_ID			0x2122
 #define FRIENDS_PRODUCT_ID		0xB002
+
 /* Samsung UVDM structure */
 #define SEC_UVDM_SHORT_DATA		0x0
 #define SEC_UVDM_LONG_DATA		0x1
 #define SEC_UVDM_ININIATOR		0x0
+#define SEC_UVDM_RESPONDER_INIT	0x0
 #define SEC_UVDM_RESPONDER_ACK	0x1
 #define SEC_UVDM_RESPONDER_NAK	0x2
 #define SEC_UVDM_RESPONDER_BUSY	0x3
+#define SEC_UVDM_RX_HEADER_BUSY	0x2
 #define SEC_UVDM_UNSTRUCTURED_VDM	0x4
+#define SEC_UVDM_RX_HEADER_ACK	0x0
+#define SEC_UVDM_RX_HEADER_NAK	0x1
+
 
 #define SEC_UVDM_ALIGN (4)
 #define SEC_UVDM_MAXDATA_FIRST (12)

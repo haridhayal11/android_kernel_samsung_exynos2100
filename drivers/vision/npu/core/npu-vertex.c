@@ -333,9 +333,11 @@ static int npu_vertex_flush(struct file *file)
 	if (fatal_signal_pending(current) || (current->exit_code != 0)) {
 		mutex_lock(lock);
 		npu_info("Flush caused by forced terminated.\n");
-		ret = __force_streamoff(file);
-		if (ret)
-			npu_err("fail(%d) in flush, __force_streamoff\n", ret);
+		if (!(vctx->state & BIT(NPU_VERTEX_STREAMOFF))) {
+			ret = __force_streamoff(file);
+			if (ret)
+				npu_err("fail(%d) in flush, __force_streamoff\n", ret);
+		}
 
 		ret = npu_session_flush(session);
 		if (ret)
@@ -786,6 +788,13 @@ static int npu_vertex_streamoff(struct file *file)
 
 	if (!(vctx->state & BIT(NPU_VERTEX_STREAMON))) {
 		npu_ierr("invalid state(0x%X)\n", vctx, vctx->state);
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	if (!(vctx->state & BIT(NPU_VERTEX_FORMAT))
+	    || !(vctx->state & BIT(NPU_VERTEX_GRAPH))) {
+		npu_ierr("invalid state(%X)\n", vctx, vctx->state);
 		ret = -EINVAL;
 		goto p_err;
 	}

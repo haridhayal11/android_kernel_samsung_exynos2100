@@ -88,10 +88,12 @@ enum max77705_muic_command_opcode {
 
 #if IS_ENABLED(CONFIG_HV_MUIC_MAX77705_AFC)
 enum max77705_afc_status_type {
-	MAX77705_MUIC_AFC_DISABLE_CHANGE_DURING_WORK		= 0x1,
-	MAX77705_MUIC_AFC_DISABLE_CHANGE_DURING_WORK_END 	= (~0x1),
-	MAX77705_MUIC_AFC_WORK_PROCESS 						= 0x2,
-	MAX77705_MUIC_AFC_WORK_PROCESS_END 					= (~0x2)
+	MAX77705_MUIC_AFC_DISABLE_CHANGE_DURING_WORK		= (0x1 << 0),
+	MAX77705_MUIC_AFC_DISABLE_CHANGE_DURING_WORK_END	= ~(0x1 << 0),
+	MAX77705_MUIC_AFC_SET_VOLTAGE_CHANGE_DURING_WORK	= (0x1 << 1),
+	MAX77705_MUIC_AFC_SET_VOLTAGE_CHANGE_DURING_WORK_END	= ~(0x1 << 1),
+	MAX77705_MUIC_AFC_WORK_PROCESS				= (0x1 << 2),
+	MAX77705_MUIC_AFC_WORK_PROCESS_END			= ~(0x1 << 2)
 };
 #endif /* CONFIG_HV_MUIC_MAX77705_AFC */
 
@@ -170,8 +172,10 @@ struct max77705_muic_data {
 
 	struct delayed_work		afc_work;
 	struct work_struct		afc_handle_work;
+	struct mutex			afc_lock;
 	unsigned char			afc_op_dataout[AFC_OP_OUT_LEN];
 	int				hv_voltage;
+	int				reserve_hv_voltage;
 	int				afc_retry;
 	int				dcdtmo_retry;
 	int				bc1p2_retry_count;
@@ -412,6 +416,7 @@ extern void max77705_muic_handle_detect_dev_afc(struct max77705_muic_data *muic_
 extern void max77705_muic_handle_detect_dev_qc(struct max77705_muic_data *muic_data, unsigned char *data);
 extern void max77705_muic_handle_detect_dev_hv(struct max77705_muic_data *muic_data, unsigned char *data);
 extern void max77705_muic_disable_afc_protocol(struct max77705_muic_data *muic_data);
+extern int __max77705_muic_afc_set_voltage(struct max77705_muic_data *muic_data, int voltage);
 #endif /* CONFIG_HV_MUIC_MAX77705_AFC */
 #if IS_ENABLED(CONFIG_MUIC_MAX77705_PDIC)
 extern void max77705_muic_register_ccic_notifier(struct max77705_muic_data *muic_data);

@@ -37,7 +37,11 @@
 #include "is-resourcemgr.h"
 #include "is-dt.h"
 #include "is-cis-2ld.h"
+#ifdef USE_CAMERA_2LD_4000X3000
+#include "is-cis-2ld-4000x3000-setA.h"
+#else
 #include "is-cis-2ld-setA.h"
+#endif
 #include "is-helper-i2c.h"
 
 #define SENSOR_NAME "S5K2LD"
@@ -90,7 +94,7 @@ static bool sensor_2ld_cis_is_wdr_mode_on(cis_shared_data *cis_data)
 	if (!is_vender_wdr_mode_on(cis_data))
 		return false;
 
-	if (mode < 0 || mode >= SENSOR_2LD_MODE_MAX) {
+	if (mode >= SENSOR_2LD_MODE_MAX) {
 		err("invalid mode(%d)!!", mode);
 		return false;
 	}
@@ -229,6 +233,15 @@ static void sensor_2ld_set_integration_max_margin(u32 mode, cis_shared_data *cis
 	WARN_ON(!cis_data);
 
 	switch (mode) {
+#ifdef USE_CAMERA_2LD_4000X3000
+	case SENSOR_2LD_4000X3000_30FPS:
+	case SENSOR_2LD_4000X3000_60FPS:
+	case SENSOR_2LD_4000X2252_60FPS:
+	case SENSOR_2LD_4000X2252_30FPS:
+	case SENSOR_2LD_4000X3000_24FPS:
+	case SENSOR_2LD_4000X2252_24FPS:
+	case SENSOR_2LD_4000X2252_120FPS:
+#else
 	case SENSOR_2LD_4032X3024_30FPS:
 	case SENSOR_2LD_4032X3024_60FPS:
 	case SENSOR_2LD_4032X2268_60FPS:
@@ -236,13 +249,19 @@ static void sensor_2ld_set_integration_max_margin(u32 mode, cis_shared_data *cis
 	case SENSOR_2LD_4032X3024_24FPS:
 	case SENSOR_2LD_4032X2268_24FPS:
 	case SENSOR_2LD_4032X2268_120FPS:
+#endif
 	case SENSOR_2LD_3328X1872_120FPS:
 	case SENSOR_2LD_2800X2100_30FPS:
 		/* FRS */
 		cis_data->max_margin_coarse_integration_time = SENSOR_2LD_COARSE_INTEGRATION_TIME_MAX_MARGIN;
 		break;
+#ifdef USE_CAMERA_2LD_4000X3000
+	case SENSOR_2LD_2000X1500_30FPS:
+	case SENSOR_2LD_2000X1128_30FPS:
+#else
 	case SENSOR_2LD_2016X1512_30FPS:
 	case SENSOR_2LD_2016X1134_30FPS:
+#endif
 	case SENSOR_2LD_2016X1134_240FPS:
 	case SENSOR_2LD_2016X1134_480FPS:
 	case SENSOR_2LD_1008X756_120FPS_MODE2:
@@ -389,6 +408,7 @@ int sensor_2ld_cis_select_setfile(struct v4l2_subdev *subdev)
 	struct is_module_enum *module;
 	struct is_device_sensor_peri *sensor_peri = NULL;
 	struct sensor_open_extended *ext_info;
+	u8 check = 0;
 
 	WARN_ON(!subdev);
 
@@ -465,6 +485,11 @@ int sensor_2ld_cis_select_setfile(struct v4l2_subdev *subdev)
 		break;
 	}
 
+	I2C_MUTEX_LOCK(cis->i2c_lock);
+	ret |= is_sensor_read8(cis->client, 0x0016, &check);
+	I2C_MUTEX_UNLOCK(cis->i2c_lock);
+	info("2ld sensor revision 0x0016(%#x), %s sample\n", check, check == 0x10 ? "GF" : "SF");
+	
 	return ret;
 }
 
@@ -519,6 +544,7 @@ int sensor_2ld_cis_init(struct v4l2_subdev *subdev)
 	cis->mipi_clock_index_new = CAM_MIPI_NOT_INITIALIZED;
 	cis->cis_data->lte_multi_capture_mode = false;
 	cis->cis_data->sen_frame_id = 0x0;
+	cis->cis_data->cur_pattern_mode = SENSOR_TEST_PATTERN_MODE_OFF;
 
 	sensor_2ld_load_retention = false;
 	sensor_2ld_LTE_1s_flag = false;
@@ -855,6 +881,20 @@ static void sensor_2ld_cis_set_paf_stat_enable(u32 mode, cis_shared_data *cis_da
 	WARN_ON(!cis_data);
 
 	switch (mode) {
+#ifdef USE_CAMERA_2LD_4000X3000
+	case SENSOR_2LD_4000X3000_30FPS:
+	case SENSOR_2LD_4000X3000_60FPS:
+	case SENSOR_2LD_4000X2252_60FPS:
+	case SENSOR_2LD_4000X2252_30FPS:
+	case SENSOR_2LD_2000X1500_30FPS:
+	case SENSOR_2LD_2000X1128_30FPS:
+	case SENSOR_2LD_4000X3000_24FPS:
+	case SENSOR_2LD_4000X2252_24FPS:
+	case SENSOR_2LD_2016X1134_240FPS:
+	case SENSOR_2LD_4000X2252_120FPS:
+	case SENSOR_2LD_3328X1872_120FPS:
+	case SENSOR_2LD_2800X2100_30FPS:
+#else
 	case SENSOR_2LD_4032X3024_30FPS:
 	case SENSOR_2LD_4032X3024_60FPS:
 	case SENSOR_2LD_4032X2268_60FPS:
@@ -867,6 +907,7 @@ static void sensor_2ld_cis_set_paf_stat_enable(u32 mode, cis_shared_data *cis_da
 	case SENSOR_2LD_4032X2268_120FPS:
 	case SENSOR_2LD_3328X1872_120FPS:
 	case SENSOR_2LD_2800X2100_30FPS:
+#endif
 		cis_data->is_data.paf_stat_enable = true;
 		break;
 	default:
@@ -883,10 +924,17 @@ bool sensor_2ld_cis_get_lownoise_supported(cis_shared_data *cis_data)
 		return false;
 
 	switch (cis_data->sens_config_index_cur) {
+#ifdef USE_CAMERA_2LD_4000X3000
+	case SENSOR_2LD_4000X3000_30FPS:
+	case SENSOR_2LD_4000X2252_30FPS:
+	case SENSOR_2LD_4000X3000_24FPS:
+	case SENSOR_2LD_4000X2252_24FPS:
+#else
 	case SENSOR_2LD_4032X3024_30FPS:
 	case SENSOR_2LD_4032X2268_30FPS:
 	case SENSOR_2LD_4032X3024_24FPS:
 	case SENSOR_2LD_4032X2268_24FPS:
+#endif
 		return true;
 	default:
 		break;
@@ -904,8 +952,13 @@ bool sensor_2ld_cis_get_lownoise_autofps_supported(cis_shared_data *cis_data)
 		return false;
 
 	switch (cis_data->sens_config_index_cur) {
+#ifdef USE_CAMERA_2LD_4000X3000
+	case SENSOR_2LD_4000X3000_60FPS:
+	case SENSOR_2LD_4000X2252_60FPS:
+#else
 	case SENSOR_2LD_4032X3024_60FPS:
 	case SENSOR_2LD_4032X2268_60FPS:
+#endif
 		if (cis_data->cur_frame_us_time > 33000 &&
 			cis_data->cur_lownoise_mode != IS_CIS_LN4)
 			return true;
@@ -968,6 +1021,68 @@ int sensor_2ld_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 		sensor_2ld_load_retention = false;
 
 		switch (mode) {
+#ifdef USE_CAMERA_2LD_4000X3000
+		case SENSOR_2LD_4000X3000_30FPS:
+			info("[%s] retention mode: SENSOR_2LD_4000X3000_30FPS\n", __func__);
+			ret = sensor_cis_set_registers(subdev,
+				sensor_2ld_load_sram[SENSOR_2LD_4000x3000_30FPS_LOAD_SRAM],
+				sensor_2ld_load_sram_size[SENSOR_2LD_4000x3000_30FPS_LOAD_SRAM]);
+			if (ret < 0) {
+				err("sensor_2ld_set_registers fail!!");
+				goto p_err_i2c_unlock;
+			}
+			break;
+		case SENSOR_2LD_4000X2252_30FPS:
+			info("[%s] retention mode: SENSOR_2LD_4000X2252_30FPS\n", __func__);
+			ret = sensor_cis_set_registers(subdev,
+				sensor_2ld_load_sram[SENSOR_2LD_4000x2252_30FPS_LOAD_SRAM],
+				sensor_2ld_load_sram_size[SENSOR_2LD_4000x2252_30FPS_LOAD_SRAM]);
+			if (ret < 0) {
+				err("sensor_2ld_set_registers fail!!");
+				goto p_err_i2c_unlock;
+			}
+			break;
+		case SENSOR_2LD_4000X2252_60FPS:
+			info("[%s] retention mode: SENSOR_2LD_4000X2252_60FPS\n", __func__);
+			ret = sensor_cis_set_registers(subdev,
+				sensor_2ld_load_sram[SENSOR_2LD_4000x2252_60FPS_LOAD_SRAM],
+				sensor_2ld_load_sram_size[SENSOR_2LD_4000x2252_60FPS_LOAD_SRAM]);
+			if (ret < 0) {
+				err("sensor_2ld_set_registers fail!!");
+				goto p_err_i2c_unlock;
+			}
+			break;
+		case SENSOR_2LD_1008X756_120FPS_MODE2:
+			info("[%s] retention mode: SENSOR_2LD_1008X756_120FPS_MODE2\n", __func__);
+			ret = sensor_cis_set_registers(subdev,
+				sensor_2ld_load_sram[SENSOR_2LD_1008x756_120FPS_LOAD_SRAM],
+				sensor_2ld_load_sram_size[SENSOR_2LD_1008x756_120FPS_LOAD_SRAM]);
+			if (ret < 0) {
+				err("sensor_2ld_set_registers fail!!");
+				goto p_err_i2c_unlock;
+			}
+			break;
+		case SENSOR_2LD_4000X3000_24FPS:
+			info("[%s] retention mode: SENSOR_2LD_4000X3000_24FPS\n", __func__);
+			ret = sensor_cis_set_registers(subdev,
+				sensor_2ld_load_sram[SENSOR_2LD_4000x3000_24FPS_LOAD_SRAM],
+				sensor_2ld_load_sram_size[SENSOR_2LD_4000x3000_24FPS_LOAD_SRAM]);
+			if (ret < 0) {
+				err("sensor_2ld_set_registers fail!!");
+				goto p_err_i2c_unlock;
+			}
+			break;
+		case SENSOR_2LD_4000X2252_24FPS:
+			info("[%s] retention mode: SENSOR_2LD_4000X2252_24FPS\n", __func__);
+			ret = sensor_cis_set_registers(subdev,
+				sensor_2ld_load_sram[SENSOR_2LD_4000x2252_24FPS_LOAD_SRAM],
+				sensor_2ld_load_sram_size[SENSOR_2LD_4000x2252_24FPS_LOAD_SRAM]);
+			if (ret < 0) {
+				err("sensor_2ld_set_registers fail!!");
+				goto p_err_i2c_unlock;
+			}
+			break;
+#else
 		case SENSOR_2LD_4032X3024_30FPS:
 			info("[%s] retention mode: SENSOR_2LD_4032X3024_30FPS\n", __func__);
 			ret = sensor_cis_set_registers(subdev,
@@ -1028,6 +1143,7 @@ int sensor_2ld_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 				goto p_err_i2c_unlock;
 			}
 			break;
+#endif
 		default:
 			info("[%s] not support retention sensor mode(%d)\n", __func__, mode);
 			ret = sensor_cis_set_registers(subdev, sensor_2ld_setfiles[mode],
@@ -1139,6 +1255,26 @@ int sensor_2ld_cis_set_lownoise_mode_change(struct v4l2_subdev *subdev)
 		ret |= is_sensor_write16(cis->client, 0x0B30, 0x0100);
 #ifdef CAMERA_REAR2
 		switch (mode) {
+#ifdef USE_CAMERA_2LD_4000X3000
+		case SENSOR_2LD_4000X3000_60FPS:
+		case SENSOR_2LD_4000X3000_30FPS:
+			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x2A30);
+			ret |= is_sensor_write16(cis->client, 0x0A7C, 0x0010);
+			break;
+		case SENSOR_2LD_4000X2252_60FPS:
+		case SENSOR_2LD_4000X2252_30FPS:
+			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x2B70);
+			ret |= is_sensor_write16(cis->client, 0x0A7C, 0x0010);
+			break;
+		case SENSOR_2LD_4000X3000_24FPS:
+			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x3606);
+			ret |= is_sensor_write16(cis->client, 0x0A7C, 0x0010);
+			break;
+		case SENSOR_2LD_4000X2252_24FPS:
+			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x3740);
+			ret |= is_sensor_write16(cis->client, 0x0A7C, 0x0010);
+			break;
+#else
 		case SENSOR_2LD_4032X3024_60FPS:
 		case SENSOR_2LD_4032X3024_30FPS:
 			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x2A30);
@@ -1157,6 +1293,7 @@ int sensor_2ld_cis_set_lownoise_mode_change(struct v4l2_subdev *subdev)
 			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x3740);
 			ret |= is_sensor_write16(cis->client, 0x0A7C, 0x0010);
 			break;
+#endif
 		}
 #endif
 		cis->cis_data->max_margin_coarse_integration_time = 0x24; /* 36 */
@@ -1166,6 +1303,34 @@ int sensor_2ld_cis_set_lownoise_mode_change(struct v4l2_subdev *subdev)
 		dbg_sensor(1, "[%s] IS_CIS_LN2\n", __func__);
 #ifdef CAMERA_REAR2
 		switch (mode) {
+#ifdef USE_CAMERA_2LD_4000X3000
+		case SENSOR_2LD_4000X3000_60FPS:
+		case SENSOR_2LD_4000X3000_30FPS:
+			ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
+			ret |= is_sensor_write16(cis->client, 0x0B30, 0x0101);
+			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x0065);
+			ret |= is_sensor_write16(cis->client, 0x0A7C, 0x0010);
+			break;
+		case SENSOR_2LD_4000X2252_60FPS:
+		case SENSOR_2LD_4000X2252_30FPS:
+			ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
+			ret |= is_sensor_write16(cis->client, 0x0B30, 0x0101);
+			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x0060);
+			ret |= is_sensor_write16(cis->client, 0x0A7C, 0x0010);
+			break;
+		case SENSOR_2LD_4000X3000_24FPS:
+			ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
+			ret |= is_sensor_write16(cis->client, 0x0B30, 0x0101);
+			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x0066);
+			ret |= is_sensor_write16(cis->client, 0x0A7C, 0x0010);
+			break;
+		case SENSOR_2LD_4000X2252_24FPS:
+			ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
+			ret |= is_sensor_write16(cis->client, 0x0B30, 0x0101);
+			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x0025);
+			ret |= is_sensor_write16(cis->client, 0x0A7C, 0x0010);
+			break;
+#else
 		case SENSOR_2LD_4032X3024_60FPS:
 		case SENSOR_2LD_4032X3024_30FPS:
 			ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
@@ -1192,6 +1357,7 @@ int sensor_2ld_cis_set_lownoise_mode_change(struct v4l2_subdev *subdev)
 			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x0025);
 			ret |= is_sensor_write16(cis->client, 0x0A7C, 0x0010);
 			break;
+#endif
 		}
 #endif
 		cis->cis_data->max_margin_coarse_integration_time = 0x48; /* 72 */
@@ -1201,6 +1367,35 @@ int sensor_2ld_cis_set_lownoise_mode_change(struct v4l2_subdev *subdev)
 		dbg_sensor(1, "[%s] IS_CIS_LN4\n", __func__);
 #ifdef CAMERA_REAR2
 		switch (mode) {
+#ifdef USE_CAMERA_2LD_4000X3000
+		case SENSOR_2LD_4000X3000_30FPS:
+			ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
+			ret |= is_sensor_write16(cis->client, 0x0B30, 0x0102);
+			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x0265);
+			ret |= is_sensor_write16(cis->client, 0x0A7C, 0x0010);
+			break;
+		case SENSOR_2LD_4000X2252_30FPS:
+			ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
+			ret |= is_sensor_write16(cis->client, 0x0B30, 0x0102);
+			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x01F0);
+			ret |= is_sensor_write16(cis->client, 0x0A7C, 0x0010);
+			break;
+		case SENSOR_2LD_4000X3000_24FPS:
+			ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
+			ret |= is_sensor_write16(cis->client, 0x0B30, 0x0102);
+			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x0240);
+			ret |= is_sensor_write16(cis->client, 0x0A7C, 0x0010);
+			break;
+		case SENSOR_2LD_4000X2252_24FPS:
+			ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
+			ret |= is_sensor_write16(cis->client, 0x0B30, 0x0102);
+			ret |= is_sensor_write16(cis->client, 0x0A7A, 0x01C0);
+			ret |= is_sensor_write16(cis->client, 0x0A7C, 0x0010);
+			break;
+		default:
+			pr_info("[%s] mode(%d) not support LN4\n", __func__, mode);
+			break;
+#else
 		case SENSOR_2LD_4032X3024_30FPS:
 			ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
 			ret |= is_sensor_write16(cis->client, 0x0B30, 0x0102);
@@ -1228,6 +1423,7 @@ int sensor_2ld_cis_set_lownoise_mode_change(struct v4l2_subdev *subdev)
 		default:
 			pr_info("[%s] mode(%d) not support LN4\n", __func__, mode);
 			break;
+#endif
 		}
 #endif
 		cis->cis_data->max_margin_coarse_integration_time = 0x6C; /* 108 */
@@ -1374,6 +1570,9 @@ int sensor_2ld_cis_retention_crc_check(struct v4l2_subdev *subdev)
 
 	if (crc_check == 0x01) {
 		info("[%s] retention SRAM CRC check: pass!\n", __func__);
+
+		/* init pattern */
+		is_sensor_write16(cis->client, 0x0600, 0x0000);
 
 		ret = sensor_2ld_cis_set_global_setting_retention(subdev);
 		if (ret < 0) {
@@ -1699,8 +1898,13 @@ int sensor_2ld_cis_stream_on(struct v4l2_subdev *subdev)
 	dbg_sensor(1, "[%s] sens_config_index_cur=%d\n", __func__, mode);
 
 	switch (mode) {
+#ifdef USE_CAMERA_2LD_4000X3000
+	case SENSOR_2LD_4000X3000_30FPS:
+	case SENSOR_2LD_4000X2252_30FPS:
+#else
 	case SENSOR_2LD_4032X3024_30FPS:
 	case SENSOR_2LD_4032X2268_30FPS:
+#endif
 		cis->cis_data->min_sync_frame_us_time = cis->cis_data->min_frame_us_time = 33333;
 		break;
 	default:
@@ -1867,8 +2071,13 @@ int sensor_2ld_cis_set_exposure_time(struct v4l2_subdev *subdev, struct ae_param
 
 	if (cis->long_term_mode.sen_strm_off_on_enable == false) {
 		switch(cis_data->sens_config_index_cur) {
+#ifdef USE_CAMERA_2LD_4000X3000
+		case SENSOR_2LD_2000X1500_30FPS:
+		case SENSOR_2LD_2000X1128_30FPS:
+#else
 		case SENSOR_2LD_2016X1512_30FPS:
 		case SENSOR_2LD_2016X1134_30FPS:
+#endif
 			if (MAX(target_exposure->long_val, target_exposure->short_val) > 80000) {
 				cit_shifter_idx = MIN(MAX(MAX(target_exposure->long_val, target_exposure->short_val) / 80000, 0), 32);
 				cit_shifter_val = MAX(cit_shifter_array[cit_shifter_idx], cis_data->frame_length_lines_shifter);
@@ -2403,8 +2612,13 @@ int sensor_2ld_cis_set_frame_duration(struct v4l2_subdev *subdev, u32 frame_dura
 
 	if (cis->long_term_mode.sen_strm_off_on_enable == false) {
 		switch(cis_data->sens_config_index_cur) {
+#ifdef USE_CAMERA_2LD_4000X3000
+		case SENSOR_2LD_2000X1500_30FPS:
+		case SENSOR_2LD_2000X1128_30FPS:
+#else
 		case SENSOR_2LD_2016X1512_30FPS:
 		case SENSOR_2LD_2016X1134_30FPS:
+#endif
 			if (frame_duration > 80000) {
 				fll_shifter_idx = MIN(MAX(frame_duration / 80000, 0), 32);
 				frame_length_lines_shifter = fll_shifter_array[fll_shifter_idx];
@@ -3938,6 +4152,7 @@ static struct is_cis_ops cis_ops_2ld = {
 //	.cis_recover_stream_off = sensor_2ld_cis_recover_stream_off,
 	.cis_set_factory_control = sensor_2ld_cis_set_factory_control,
 	.cis_wait_ln_mode_delay = sensor_2ld_cis_wait_ln_mode_delay,
+	.cis_set_test_pattern = sensor_cis_set_test_pattern,
 };
 
 static int cis_2ld_probe(struct i2c_client *client,

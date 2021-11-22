@@ -41,18 +41,18 @@ static unsigned long framerate_table[][2] = {
 };
 
 /*
- * A display framerate table determines framerate by the queued interval.
+ * bufq_framerate table determines framerate by the queued interval.
  * It supports 30fps, 60fps, 120fps as display framerate.
  * Base line of each section is selected from middle value.
- * 25fps(40000us), 40fps(25000us), 70fps(14280us)
+ * 25fps(40000us), 40fps(25000us), 80fps(12500us)
  *
- * interval(us)     |          14280         25000        40000
+ * interval(us)     |          12500         25000        40000
  * disp framerate   |   120fps   |    60fps    |    30fps   |	24fps
  */
-static unsigned long disp_framerate_table[][2] = {
+static unsigned long bufq_framerate_table[][2] = {
 	{  24000, 40000 },
 	{  30000, 25000 },
-	{  60000, 14280 },
+	{  60000, 12500 },
 	{ 120000,     0 },
 };
 
@@ -89,7 +89,7 @@ static int __mfc_qos_get_ts_interval(struct mfc_ctx *ctx, struct mfc_ts_control 
 	if (type == MFC_TS_SRC) {
 		/* apply median filter for selecting ts interval */
 		val = (n <= 2) ? tmp[0] : tmp[n / 2];
-	} else if (type == MFC_TS_DST) {
+	} else if ((type == MFC_TS_DST_Q) || (type == MFC_TS_SRC_Q)) {
 		/* apply average for selecting ts interval except min,max */
 		if (n < 3)
 			return 0;
@@ -101,13 +101,15 @@ static int __mfc_qos_get_ts_interval(struct mfc_ctx *ctx, struct mfc_ts_control 
 	}
 
 	if (ctx->dev->debugfs.debug_ts == 1) {
-		mfc_ctx_info("==============[%s][TS] interval (sort)==============\n",
-				(type == MFC_TS_SRC) ? "SRC" : "DST");
+		mfc_ctx_info("==============[%s%s][TS] interval (sort)==============\n",
+				(type & 0x1) ? "SRC" : "DST", (type & 0x2) ? "_Q" : "");
 		for (i = 0; i < n; i++)
-			mfc_ctx_info("[%s][TS] interval [%d] = %d\n",
-				(type == MFC_TS_SRC) ? "SRC" : "DST", i, tmp[i]);
-		mfc_ctx_info("[%s][TS] get interval %d\n",
-				(type == MFC_TS_SRC) ? "SRC" : "DST", val);
+			mfc_ctx_info("[%s%s][TS] interval [%d] = %d\n",
+					(type & 0x1) ? "SRC" : "DST",
+					(type & 0x2) ? "_Q" : "", i, tmp[i]);
+		mfc_ctx_info("[%s%s][TS] get interval %d\n",
+					(type & 0x1) ? "SRC" : "DST",
+					(type & 0x2) ? "_Q" : "", val);
 	}
 
 	return val;
@@ -126,9 +128,9 @@ static unsigned long __mfc_qos_get_framerate_by_interval(int interval, int type)
 	if (type == MFC_TS_SRC) {
 		table = framerate_table;
 		size = ARRAY_SIZE(framerate_table);
-	} else if (type == MFC_TS_DST) {
-		table = disp_framerate_table;
-		size = ARRAY_SIZE(disp_framerate_table);
+	} else if ((type == MFC_TS_DST_Q) || (type == MFC_TS_SRC_Q)) {
+		table = bufq_framerate_table;
+		size = ARRAY_SIZE(bufq_framerate_table);
 	} else {
 		return 0;
 	}
@@ -284,22 +286,26 @@ static unsigned long __mfc_qos_get_fps_by_timestamp(struct mfc_ctx *ctx,
 
 	if (ctx->dev->debugfs.debug_ts == 1) {
 		/* Debug info */
-		mfc_ctx_info("===================[TS]===================\n");
-		mfc_ctx_info("[%s][TS] New timestamp = %ld.%06ld, count = %d\n",
-			(type == MFC_TS_SRC) ? "SRC" : "DST",
+		mfc_ctx_info("=================[%s%s][TS]===================\n",
+				(type & 0x1) ? "SRC" : "DST", (type & 0x2) ? "_Q" : "");
+		mfc_ctx_info("[%s%s][TS] New timestamp = %ld.%06ld, count = %d\n",
+			(type & 0x1) ? "SRC" : "DST",
+			(type & 0x2) ? "_Q" : "",
 			time->tv_sec, time->tv_usec, ts->ts_count);
 
 		index = 0;
 		list_for_each_entry(temp_ts, &ts->ts_list, list) {
-			mfc_ctx_info("[%s][TS] [%d] timestamp [i:%d]: %ld.%06ld\n",
-					(type == MFC_TS_SRC) ? "SRC" : "DST",
+			mfc_ctx_info("[%s%s][TS] [%d] timestamp [i:%d]: %ld.%06ld\n",
+					(type & 0x1) ? "SRC" : "DST",
+					(type & 0x2) ? "_Q" : "",
 					index, temp_ts->index,
 					temp_ts->timestamp.tv_sec,
 					temp_ts->timestamp.tv_usec);
 			index++;
 		}
-		mfc_ctx_info("[%s][TS] Min interval = %d, It is %ld fps\n",
-				(type == MFC_TS_SRC) ? "SRC" : "DST",
+		mfc_ctx_info("[%s%s][TS] Min interval = %d, It is %ld fps\n",
+				(type & 0x1) ? "SRC" : "DST",
+				(type & 0x2) ? "_Q" : "",
 				min_interval, max_framerate);
 	}
 
@@ -399,7 +405,7 @@ static bool __mfc_qos_update_boost_mode(struct mfc_ctx *ctx)
 	u64 ktime;
 
 	/* 1) check no boosting condition */
-	if (ctx->dst_ts.ts_is_full && !ctx->boosting_time)
+	if (ctx->dst_q_ts.ts_is_full && !ctx->boosting_time)
 		return false;
 
 	ktime = ktime_get_ns();
@@ -416,7 +422,7 @@ static bool __mfc_qos_update_boost_mode(struct mfc_ctx *ctx)
 	}
 
 	/* 3) check boosting condition: seek */
-	if (!ctx->dst_ts.ts_is_full && !ctx->boosting_time) {
+	if (!ctx->dst_q_ts.ts_is_full && !ctx->boosting_time) {
 		ctx->boosting_time = ktime + (MFC_BOOST_TIME * NSEC_PER_SEC);
 		mfc_debug(2, "[BOOST] seeking booster start %ld.%06ld ~ %ld.%06ld\n",
 			(ktime / NSEC_PER_SEC),
@@ -470,9 +476,9 @@ void mfc_qos_update_framerate(struct mfc_ctx *ctx)
 
 		/* 4) check display framerate */
 		if (dev->pdata->display_framerate &&
-			ctx->dst_ts.ts_is_full && (ctx->disp_framerate > framerate)) {
-			mfc_debug(2, "[QoS] display fps %ld\n", ctx->disp_framerate);
-			framerate = ctx->disp_framerate;
+			ctx->dst_q_ts.ts_is_full && (ctx->dst_q_framerate > framerate)) {
+			mfc_debug(2, "[QoS] display fps %ld\n", ctx->dst_q_framerate);
+			framerate = ctx->dst_q_framerate;
 		}
 
 		/* 5) check operating framerate by user */
@@ -487,6 +493,13 @@ void mfc_qos_update_framerate(struct mfc_ctx *ctx)
 				framerate = (framerate > MFC_MAX_FPS) ? framerate : MFC_MAX_FPS;
 				mfc_debug(2, "[QoS] boosting fps %ld\n", framerate);
 			}
+		}
+
+		/* 7) check non-real-time */
+		if ((ctx->rt == MFC_NON_RT) &&
+			(ctx->src_q_ts.ts_is_full) && (ctx->src_q_framerate > framerate)) {
+			mfc_debug(2, "[QoS] src q fps %ld\n", ctx->src_q_framerate);
+			framerate = ctx->src_q_framerate;
 		}
 
 		if (framerate && (framerate != ctx->framerate)) {
@@ -513,7 +526,7 @@ void mfc_qos_update_last_framerate(struct mfc_ctx *ctx, u64 timestamp)
 		ctx->last_framerate = (ctx->qos_ratio * ctx->last_framerate) / 100;
 }
 
-void mfc_qos_update_disp_framerate(struct mfc_ctx *ctx)
+void mfc_qos_update_bufq_framerate(struct mfc_ctx *ctx, int type)
 {
 	struct timeval time;
 	u64 timestamp;
@@ -522,16 +535,23 @@ void mfc_qos_update_disp_framerate(struct mfc_ctx *ctx)
 	time.tv_sec = timestamp / NSEC_PER_SEC;
 	time.tv_usec = (timestamp - (time.tv_sec * NSEC_PER_SEC)) / NSEC_PER_USEC;
 
-	ctx->disp_framerate = __mfc_qos_get_fps_by_timestamp(ctx, &ctx->dst_ts, &time, MFC_TS_DST);
+	if (type == MFC_TS_DST_Q)
+		ctx->dst_q_framerate = __mfc_qos_get_fps_by_timestamp(ctx, &ctx->dst_q_ts, &time,
+				MFC_TS_DST_Q);
+	if (type == MFC_TS_SRC_Q)
+		ctx->src_q_framerate = __mfc_qos_get_fps_by_timestamp(ctx, &ctx->src_q_ts, &time,
+				MFC_TS_SRC_Q);
 }
 
-void mfc_qos_reset_disp_framerate(struct mfc_ctx *ctx)
+void mfc_qos_reset_bufq_framerate(struct mfc_ctx *ctx)
 {
 	if (ctx->boosting_time)
 		mfc_debug(2, "[BOOST] seeking booster terminated\n");
 
 	ctx->boosting_time = 0;
-	ctx->disp_framerate = 0;
+	ctx->dst_q_framerate = 0;
+	ctx->src_q_framerate = 0;
 
-	mfc_qos_reset_ts_list(&ctx->dst_ts);
+	mfc_qos_reset_ts_list(&ctx->dst_q_ts);
+	mfc_qos_reset_ts_list(&ctx->src_q_ts);
 }

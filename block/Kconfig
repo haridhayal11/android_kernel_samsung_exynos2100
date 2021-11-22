@@ -203,6 +203,11 @@ menu "Partition Types"
 
 source "block/partitions/Kconfig"
 
+if SEC_KUNIT
+
+
+endif # SEC_KUNIT
+
 endmenu
 
 endif # BLOCK

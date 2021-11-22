@@ -107,6 +107,7 @@ struct exynos_panel_ops {
 	int (*sleepout)(struct exynos_panel_device *panel);
 	int (*notify)(struct exynos_panel_device *panel, void *data);
 	int (*set_error_cb)(struct exynos_panel_device *panel, void *data);
+	int (*reset_panel)(struct exynos_panel_device *panel);
 #if defined(CONFIG_PANEL_DISPLAY_MODE)
 	int (*get_display_mode)(struct exynos_panel_device *panel, void *data);
 	int (*set_display_mode)(struct exynos_panel_device *panel, void *data);

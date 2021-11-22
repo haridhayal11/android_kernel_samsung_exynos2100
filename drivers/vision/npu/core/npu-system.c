@@ -216,7 +216,7 @@ int npu_memory_alloc_from_heap(struct platform_device *pdev,
 
 	size_t size;
 	size_t map_size;
-	unsigned long iommu_attributes = 0;
+	unsigned int iommu_attributes = 0;
 
 	BUG_ON(!buffer);
 
@@ -497,23 +497,69 @@ static inline void set_max_npu_core(struct npu_system *system, s32 num)
 	system->max_npu_core = num;
 }
 
+static int npu_rsvd_map(struct npu_system *system, struct npu_rmem_data *rmt)
+{
+	int ret = 0;
+	unsigned int num_pages;
+	struct page **pages, **page;
+	phys_addr_t phys;
+
+	/* try to map kvmap */
+	num_pages = (unsigned int)DIV_ROUND_UP(rmt->area_info->size, PAGE_SIZE);
+	pages = kcalloc(num_pages, sizeof(pages[0]), GFP_KERNEL);
+	if (!pages) {
+		ret = -ENOMEM;
+		probe_err("fail to alloc pages for rmem(%s)\n", rmt->name);
+		iommu_unmap(system->domain, rmt->area_info->daddr,
+				(size_t) rmt->rmem->size);
+		goto p_err;
+	}
+
+	phys = rmt->rmem->base;
+	for (page = pages; (page - pages < num_pages); page++) {
+		*page = phys_to_page(phys);
+		phys += PAGE_SIZE;
+	}
+	rmt->area_info->paddr = rmt->rmem->base;
+
+	rmt->area_info->vaddr = vmap(pages, num_pages,
+			VM_MAP, pgprot_writecombine(PAGE_KERNEL));
+	kfree(pages);
+	if (!rmt->area_info->vaddr) {
+		ret = -ENOMEM;
+		probe_err("fail to vmap %u pages for rmem(%s)\n",
+				num_pages, rmt->name);
+		iommu_unmap(system->domain, rmt->area_info->daddr,
+				(size_t) rmt->area_info->size);
+		goto p_err;
+	}
+
+p_err:
+	return ret;
+}
+
 static int npu_init_iomem_area(struct npu_system *system)
 {
 	int ret = 0;
 	int i, k, si, mi;
 	void __iomem *iomem;
 	struct device *dev;
-	int iomem_count, init_count;
+	int iomem_count, init_count, phdl_cnt, rmem_cnt;
 	struct iomem_reg_t *iomem_data;
 	struct iomem_reg_t *iomem_init_data = NULL;
+	struct iommu_domain *domain;
 	const char *iomem_name;
 	const char *heap_name;
 	struct npu_iomem_area *id;
 	struct npu_memory_buffer *bd;
 	struct npu_io_data *it;
 	struct npu_mem_data *mt;
+	struct npu_rmem_data *rmt;
+	struct device_node *mems_node, *mem_node, *phdl_node;
+	struct reserved_mem *rsvd_mem;
 	char tmpname[32];
 	u32 core_num;
+	u32 size;
 
 	BUG_ON(!system);
 	BUG_ON(!system->pdev);
@@ -654,9 +700,100 @@ static int npu_init_iomem_area(struct npu_system *system)
 			si++;
 		}
 	}
+
+	/* reserved memory */
+	rmem_cnt = 0;
+
+	domain = iommu_get_domain_for_dev(dev);
+	if (!domain) {
+		probe_err("fail to get domain for dnc\n");
+		goto err_data;
+	}
+	system->domain = domain;
+
+	mems_node = of_get_child_by_name(dev->of_node, "samsung,npurmem-address");
+	if (!mems_node) {
+		ret = 0;	/* not an error */
+		probe_err("null npurmem-address node\n");
+		goto err_data;
+	}
+
+	for_each_child_of_node(mems_node, mem_node) {
+		rmt = &((system->rmem_area)[rmem_cnt]);
+		rmt->area_info = (struct npu_memory_buffer *)devm_kzalloc(dev, sizeof(struct npu_memory_buffer), GFP_KERNEL);
+
+		rmt->name = kbasename(mem_node->full_name);
+		ret = of_property_read_u32(mem_node,
+				"iova", (u32 *) &rmt->area_info->daddr);
+		if (ret) {
+			probe_err("'iova' is mandatory but not defined\n");
+			goto err_data;
+		}
+
+		phdl_cnt = of_count_phandle_with_args(mem_node,
+				"memory-region", NULL);
+		if (phdl_cnt > 1) {
+			probe_err("only one phandle required. "
+					"phdl_cnt(%d)\n", phdl_cnt);
+			ret = -EINVAL;
+			goto err_data;
+		}
+
+		if (phdl_cnt == 1) {	/* reserved mem case */
+			phdl_node = of_parse_phandle(mem_node,
+					"memory-region", 0);
+			if (!phdl_node) {
+				ret = -EINVAL;
+				probe_err("fail to get memory-region in name(%s)\n", rmt->name);
+				goto err_data;
+			}
+
+			rsvd_mem = of_reserved_mem_lookup(phdl_node);
+			if (!rsvd_mem) {
+				ret = -EINVAL;
+				probe_err("fail to look-up rsvd mem(%s)\n", rmt->name);
+				goto err_data;
+			}
+			rmt->rmem = rsvd_mem;
+		}
+
+		ret = of_property_read_u32(mem_node,
+				"size", &size);
+		if (ret) {
+			probe_err("'size' is mandatory but not defined\n");
+			goto err_data;
+		} else {
+			if (size > rmt->rmem->size) {
+				ret = - EINVAL;
+				probe_err("rmt->size(%x) > rsvd_size(%llx)\n", size, rmt->rmem->size);
+				goto err_data;
+			}
+		}
+		rmt->area_info->size = size;
+
+		/* iommu map */
+		ret = iommu_map(system->domain, rmt->area_info->daddr, rmt->rmem->base,
+				rmt->area_info->size, 0);
+		if (ret) {
+			probe_err("fail to map iova for rmem(%s) ret(%d)\n",
+					rmt->name, ret);
+			goto err_data;
+		}
+
+		ret = npu_rsvd_map(system, rmt);
+		if (ret) {
+			probe_err("fail to map kvmap, rmem(%s)", rmt->name);
+			goto err_data;
+		}
+
+		rmem_cnt++;
+	}
+
 	/* set NULL for last */
 	(system->mem_area)[mi].heapname = NULL;
 	(system->mem_area)[mi].name = NULL;
+	(system->rmem_area)[rmem_cnt].heapname = NULL;
+	(system->rmem_area)[rmem_cnt].name = NULL;
 	(system->io_area)[si].heapname = NULL;
 	(system->io_area)[si].name = NULL;
 
@@ -1492,8 +1629,8 @@ static int npu_firmware_load(struct npu_system *system, int mode)
 		npu_dbg("checking firmware head MAGIC(0x%08x)\n", *(u32 *)fwmem->vaddr);
 	}
 
-	dma_sync_sg_for_device(fwmem->attachment->dev, fwmem->sgt->sgl,
-			fwmem->sgt->orig_nents, DMA_TO_DEVICE);
+	//dma_sync_sg_for_device(fwmem->attachment->dev, fwmem->sgt->sgl,
+	//		fwmem->sgt->orig_nents, DMA_TO_DEVICE);
 
 	npu_info("complete in npu_firmware_load\n");
 	return ret;

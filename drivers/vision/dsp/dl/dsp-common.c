@@ -10,7 +10,7 @@
 #include "dl/dsp-common.h"
 #include "dl/dsp-list.h"
 
-char *dsp_log_buf;
+#define DL_LOG_BUF_MAX		(1024)
 
 struct dsp_dl_mem {
 	const char *msg;
@@ -18,7 +18,8 @@ struct dsp_dl_mem {
 	char data[0];
 };
 
-struct dsp_list_head *dl_mem_list;
+static char *dsp_dl_log_buf;
+static struct dsp_list_head *dl_mem_list;
 
 static void *__dsp_alloc(unsigned int size)
 {
@@ -64,10 +65,44 @@ static void __dsp_dl_mem_print(void)
 				node))->msg);
 }
 
+void dsp_dl_put_log_buf(const char *fmt, ...)
+{
+	struct va_format vaf;
+	va_list args;
+
+	va_start(args, fmt);
+
+	vaf.fmt = fmt;
+	vaf.va = &args;
+
+	snprintf(dsp_dl_log_buf + strlen(dsp_dl_log_buf), DL_LOG_BUF_MAX,
+			"%pV", &vaf);
+	va_end(args);
+}
+
+void dsp_dl_print_log_buf(int level, const char *func)
+{
+	switch (level) {
+	case DL_LOG_ERROR:
+		dsp_err("[%-30s]%s", func, dsp_dl_log_buf);
+		dsp_dl_log_buf[0] = '\0';
+		break;
+	case DL_LOG_INFO:
+		dsp_info("%s", dsp_dl_log_buf);
+		dsp_dl_log_buf[0] = '\0';
+		break;
+	case DL_LOG_DEBUG:
+	default:
+		dsp_dl_dbg("[%-30s]%s", func, dsp_dl_log_buf);
+		dsp_dl_log_buf[0] = '\0';
+		break;
+	}
+}
+
 void dsp_common_init(void)
 {
-	dsp_log_buf = (char *)__dsp_alloc(DL_LOG_BUF_MAX);
-	dsp_log_buf[0] = '\0';
+	dsp_dl_log_buf = (char *)__dsp_alloc(DL_LOG_BUF_MAX);
+	dsp_dl_log_buf[0] = '\0';
 	__dsp_dl_mem_init();
 }
 
@@ -75,7 +110,7 @@ void dsp_common_free(void)
 {
 	__dsp_dl_mem_print();
 	__dsp_dl_mem_free();
-	kfree(dsp_log_buf);
+	kfree(dsp_dl_log_buf);
 }
 
 void *dsp_dl_malloc(size_t size, const char *msg)

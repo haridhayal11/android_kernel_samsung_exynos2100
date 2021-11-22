@@ -12,8 +12,6 @@
 #include <linux/uaccess.h>
 #if IS_ENABLED(CONFIG_DRV_SAMSUNG)
 #include <linux/sec_class.h>
-#else
-struct class *tsp_sec_class;
 #endif
 
 #if !IS_ENABLED(CONFIG_SEC_FACTORY)
@@ -40,7 +38,7 @@ struct class *tsp_sec_class;
 #define SEC_CMD_BUF_SIZE		(4096 - 1)
 #define SEC_CMD_STR_LEN			256
 #define SEC_CMD_RESULT_STR_LEN		(4096 - 1)
-#define SEC_CMD_RESULT_STR_LEN_EXPAND	(SEC_CMD_RESULT_STR_LEN * 4)
+#define SEC_CMD_RESULT_STR_LEN_EXPAND	(SEC_CMD_RESULT_STR_LEN * 6)
 #define SEC_CMD_PARAM_NUM		8
 
 #if IS_ENABLED(CONFIG_TOUCHSCREEN_DUAL_FOLDABLE)

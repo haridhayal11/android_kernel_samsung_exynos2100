@@ -1,9 +1,5 @@
-/*
- * sec vibrator driver for common code
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
+/* SPDX-License-Identifier: GPL-2.0 */
+/* Copyright (C) 2019 Samsung Electronics
  */
 
 #define pr_fmt(fmt) "[VIB] " fmt
@@ -25,23 +21,28 @@
 #include "../../battery/common/sec_charging_common.h"
 #endif
 #endif
-#if defined(CONFIG_SEC_VIBRATOR)
-#if defined(CONFIG_SSP_MOTOR_CALLBACK)
-#include <linux/ssp_motorcallback.h>
-#endif
-#endif
 
 static const int  kMaxBufSize = 7;
 static const int kMaxHapticStepSize = 7;
-const char *str_delimiter = ",";
-const char *str_newline = "\n";
+static const char *str_newline = "\n";
 
 static struct sec_vibrator_drvdata *g_ddata;
 
+char vib_event_cmd[MAX_STR_LEN_EVENT_CMD];
+
+const char sec_vib_event_cmd[EVENT_CMD_MAX][MAX_STR_LEN_EVENT_CMD] = {
+	[EVENT_CMD_NONE]					= "NONE",
+	[EVENT_CMD_FOLDER_CLOSE]				= "FOLDER_CLOSE",
+	[EVENT_CMD_FOLDER_OPEN]					= "FOLDER_OPEN",
+	[EVENT_CMD_ACCESSIBILITY_BOOST_ON]			= "ACCESSIBILITY_BOOST_ON",
+	[EVENT_CMD_ACCESSIBILITY_BOOST_OFF]			= "ACCESSIBILITY_BOOST_OFF",
+	[EVENT_CMD_TENT_CLOSE]					= "FOLDER_TENT_CLOSE",
+	[EVENT_CMD_TENT_OPEN]					= "FOLDER_TENT_OPEN",
+};
+
 #if IS_ENABLED(CONFIG_SEC_VIB_NOTIFIER)
 static struct vib_notifier_context vib_notifier;
-static struct blocking_notifier_head sec_vib_nb_head =
-	BLOCKING_NOTIFIER_INIT(sec_vib_nb_head);
+static struct blocking_notifier_head sec_vib_nb_head = BLOCKING_NOTIFIER_INIT(sec_vib_nb_head);
 
 int sec_vib_notifier_register(struct notifier_block *n)
 {
@@ -78,10 +79,10 @@ static int sec_vib_notifier_notify(int en, struct sec_vibrator_drvdata *ddata)
 	vib_notifier.index = ddata->index;
 	vib_notifier.timeout = ddata->timeout;
 
-	pr_info("%s: %s, idx: %d timeout: %d\n", __func__, en ? "ON" : "OFF", vib_notifier.index, vib_notifier.timeout);
+	pr_info("%s: %s, idx: %d timeout: %d\n", __func__, en ? "ON" : "OFF",
+		vib_notifier.index, vib_notifier.timeout);
 
-	ret = blocking_notifier_call_chain(&sec_vib_nb_head,
-			en, &vib_notifier);
+	ret = blocking_notifier_call_chain(&sec_vib_nb_head, en, &vib_notifier);
 
 	switch (ret) {
 	case NOTIFY_DONE:
@@ -95,7 +96,7 @@ static int sec_vib_notifier_notify(int en, struct sec_vibrator_drvdata *ddata)
 
 	return ret;
 }
-#endif
+#endif /* if IS_ENABLED(CONFIG_SEC_VIB_NOTIFIER) */
 
 #if IS_ENABLED(CONFIG_BATTERY_SAMSUNG)
 static int sec_vibrator_check_temp(struct sec_vibrator_drvdata *ddata)
@@ -171,14 +172,7 @@ static int sec_vibrator_set_enable(struct sec_vibrator_drvdata *ddata, bool en)
 	ret = ddata->vib_ops->enable(ddata->dev, en);
 	if (ret)
 		pr_err("%s error(%d)\n", __func__, ret);
-#if defined(CONFIG_SEC_VIBRATOR)
-#if defined(CONFIG_SSP_MOTOR_CALLBACK)
-	if (en && (ddata->intensity > 0))
-		setSensorCallback(true, ddata->timeout);
-	else
-		setSensorCallback(false, 0);
-#endif
-#endif
+
 #if IS_ENABLED(CONFIG_SEC_VIB_NOTIFIER)
 	sec_vib_notifier_notify(en, ddata);
 #endif
@@ -225,10 +219,6 @@ static void sec_vibrator_haptic_disable(struct sec_vibrator_drvdata *ddata)
 	ddata->f_packet_en = false;
 	ddata->packet_cnt = 0;
 	ddata->packet_size = 0;
-
-	/* clear led trigger variables */
-	ddata->state = 0;
-	ddata->duration = 0;
 
 	sec_vibrator_set_enable(ddata, false);
 	sec_vibrator_set_overdrive(ddata, false);
@@ -372,36 +362,6 @@ static ssize_t intensity_show(struct device *dev, struct device_attribute *attr,
 	return snprintf(buf, VIB_BUFSIZE, "intensity: %u\n", ddata->intensity);
 }
 
-static ssize_t force_touch_intensity_store(struct device *dev, struct device_attribute *devattr, const char *buf, size_t count)
-{
-	struct sec_vibrator_drvdata *ddata = g_ddata;
-	int intensity = 0, ret = 0;
-
-	ret = kstrtoint(buf, 0, &intensity);
-	if (ret) {
-		pr_err("fail to get intensity\n");
-		return -EINVAL;
-	}
-
-	pr_info("%s %d\n", __func__, intensity);
-
-	if ((intensity < 0) || (intensity > MAX_INTENSITY)) {
-		pr_err("[VIB]: %s out of range\n", __func__);
-		return -EINVAL;
-	}
-
-	ddata->force_touch_intensity = intensity;
-
-	return count;
-}
-
-static ssize_t force_touch_intensity_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	struct sec_vibrator_drvdata *ddata = g_ddata;
-
-	return snprintf(buf, VIB_BUFSIZE, "force touch intensity: %u\n", ddata->force_touch_intensity);
-}
-
 static ssize_t multi_freq_store(struct device *dev, struct device_attribute *devattr, const char *buf, size_t count)
 {
 	struct sec_vibrator_drvdata *ddata = g_ddata;
@@ -506,9 +466,9 @@ static ssize_t cp_trigger_index_show(struct device *dev, struct device_attribute
 	if (!ddata->vib_ops->get_cp_trigger_index)
 		return -ENOSYS;
 
-	ret = ddata->vib_ops->get_cp_trigger_index(ddata->dev);
+	ret = ddata->vib_ops->get_cp_trigger_index(ddata->dev, buf);
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", ret);
+	return ret;
 }
 
 static ssize_t cp_trigger_index_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
@@ -524,11 +484,11 @@ static ssize_t cp_trigger_index_store(struct device *dev, struct device_attribut
 	if (ret)
 		return -EINVAL;
 
-	ret = ddata->vib_ops->set_cp_trigger_index(ddata->dev, index);
-	if (ret)
-		pr_err("%s error(%d)\n", __func__, ret);
-
 	ddata->index = index;
+
+	ret = ddata->vib_ops->set_cp_trigger_index(ddata->dev, buf);
+	if (ret < 0)
+		pr_err("%s error(%d)\n", __func__, ret);
 
 	return count;
 }
@@ -557,10 +517,70 @@ static ssize_t cp_trigger_queue_store(struct device *dev, struct device_attribut
 		return -ENOSYS;
 
 	ret = ddata->vib_ops->set_cp_trigger_queue(ddata->dev, buf);
-	if (ret)
+	if (ret < 0)
 		pr_err("%s error(%d)\n", __func__, ret);
 
 	return count;
+}
+
+static ssize_t pwle_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct sec_vibrator_drvdata *ddata = g_ddata;
+	int ret = 0;
+
+	if (!ddata->vib_ops->get_pwle)
+		return -ENOSYS;
+
+	ret = ddata->vib_ops->get_pwle(ddata->dev, buf);
+	if (ret < 0)
+		pr_err("%s error(%d)\n", __func__, ret);
+
+	return ret;
+}
+
+static ssize_t pwle_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct sec_vibrator_drvdata *ddata = g_ddata;
+	int ret = 0;
+
+	if (!ddata->vib_ops->set_pwle)
+		return -ENOSYS;
+
+	ret = ddata->vib_ops->set_pwle(ddata->dev, buf);
+	if (ret < 0)
+		pr_err("%s error(%d)\n", __func__, ret);
+
+	return count;
+}
+
+static ssize_t virtual_composite_indexes_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct sec_vibrator_drvdata *ddata = g_ddata;
+	int ret = 0;
+
+	if (!ddata->vib_ops->get_virtual_composite_indexes)
+		return -ENOSYS;
+
+	ret = ddata->vib_ops->get_virtual_composite_indexes(ddata->dev, buf);
+	if (ret < 0)
+		pr_err("%s error(%d)\n", __func__, ret);
+
+	return ret;
+}
+
+static ssize_t virtual_pwle_indexes_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct sec_vibrator_drvdata *ddata = g_ddata;
+	int ret = 0;
+
+	if (!ddata->vib_ops->get_virtual_pwle_indexes)
+		return -ENOSYS;
+
+	ret = ddata->vib_ops->get_virtual_pwle_indexes(ddata->dev, buf);
+	if (ret < 0)
+		pr_err("%s error(%d)\n", __func__, ret);
+
+	return ret;
 }
 
 static ssize_t enable_show(struct device *dev, struct device_attribute *attr, char *buf)
@@ -571,9 +591,9 @@ static ssize_t enable_show(struct device *dev, struct device_attribute *attr, ch
 
 	if (hrtimer_active(timer)) {
 		ktime_t remain = hrtimer_get_remaining(timer);
-		struct timeval t = ktime_to_timeval(remain);
+		struct timespec64 t = ns_to_timespec64(remain);
 
-		remaining = t.tv_sec * 1000 + t.tv_usec / 1000;
+		remaining = t.tv_sec * 1000 + t.tv_nsec / 1000;
 	}
 	return sprintf(buf, "%d\n", remaining);
 }
@@ -613,9 +633,9 @@ static ssize_t num_waves_show(struct device *dev, struct device_attribute *attr,
 	if (!ddata->vib_ops->get_num_waves)
 		return -ENOSYS;
 
-	ret = ddata->vib_ops->get_num_waves(ddata->dev);
+	ret = ddata->vib_ops->get_num_waves(ddata->dev, buf);
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", ret);
+	return ret;
 }
 
 static ssize_t array2str(char *buf, int *arr_intensity, int size)
@@ -755,18 +775,81 @@ err_arr_alloc:
 	return ret;
 }
 
+static int get_event_index_by_command(char *cur_cmd)
+{
+	int cmd_idx;
+
+	for (cmd_idx = 0; cmd_idx < EVENT_CMD_MAX; cmd_idx++) {
+		if (!strcmp(cur_cmd, sec_vib_event_cmd[cmd_idx]))
+			return cmd_idx;
+	}
+
+	return EVENT_CMD_NONE;
+}
+
+static ssize_t event_cmd_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	pr_info("%s event: %s\n", __func__, vib_event_cmd);
+
+	return snprintf(buf, MAX_STR_LEN_EVENT_CMD, "%s\n", vib_event_cmd);
+}
+
+static ssize_t event_cmd_store(struct device *dev,
+		struct device_attribute *devattr, const char *buf, size_t count)
+{
+	struct sec_vibrator_drvdata *ddata = g_ddata;
+	char *cmd;
+	int ret = 0;
+	int event_idx;
+
+	if (!ddata->vib_ops->set_event_cmd)
+		return -ENOSYS;
+
+	if (count > MAX_STR_LEN_EVENT_CMD) {
+		pr_err("%s: size(%zu) is too long.\n", __func__, count);
+		goto error;
+	}
+
+	cmd = kzalloc(count + 1, GFP_KERNEL);
+	if (!cmd)
+		goto error;
+
+	ret = sscanf(buf, "%s", cmd);
+	if (ret != 1)
+		goto error1;
+
+	event_idx = get_event_index_by_command(cmd);
+
+	pr_info("%s: event: %s(%d)\n", __func__, cmd, event_idx);
+
+	ret = ddata->vib_ops->set_event_cmd(ddata->dev, event_idx);
+	if (ret)
+		pr_err("%s error(%d)\n", __func__, ret);
+
+	sscanf(cmd, "%s", vib_event_cmd);
+
+error1:
+	kfree(cmd);
+error:
+	return count;
+}
+
 static DEVICE_ATTR_RW(haptic_engine);
 static DEVICE_ATTR_RW(multi_freq);
 static DEVICE_ATTR_RW(intensity);
-static DEVICE_ATTR_RW(force_touch_intensity);
 static DEVICE_ATTR_RW(cp_trigger_index);
 static DEVICE_ATTR_RW(cp_trigger_queue);
+static DEVICE_ATTR_RW(pwle);
+static DEVICE_ATTR_RO(virtual_composite_indexes);
+static DEVICE_ATTR_RO(virtual_pwle_indexes);
 static DEVICE_ATTR_RW(enable);
 static DEVICE_ATTR_RO(motor_type);
 static DEVICE_ATTR_RO(num_waves);
 static DEVICE_ATTR_RO(intensities);
 static DEVICE_ATTR_RO(haptic_intensities);
 static DEVICE_ATTR_RO(haptic_durations);
+static DEVICE_ATTR_RW(event_cmd);
 
 static struct attribute *sec_vibrator_attributes[] = {
 	&dev_attr_enable.attr,
@@ -800,87 +883,15 @@ static struct attribute_group cp_trigger_attr_group = {
 	.attrs = cp_trigger_attributes,
 };
 
-static ssize_t state_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	struct sec_vibrator_drvdata *ddata = g_ddata;
-
-	return sprintf(buf, "%d\n", ddata->state);
-}
-
-static ssize_t state_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t size)
-{
-	struct sec_vibrator_drvdata *ddata = g_ddata;
-	int value;
-	int ret;
-
-	ret = kstrtoint(buf, 0, &value);
-	if (ret != 0)
-		return -EINVAL;
-
-	ddata->state = value;
-	return size;
-}
-
-static ssize_t duration_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	struct sec_vibrator_drvdata *ddata = g_ddata;
-
-	return sprintf(buf, "%d\n", ddata->duration);
-}
-
-static ssize_t duration_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t size)
-{
-	struct sec_vibrator_drvdata *ddata = g_ddata;
-	int value;
-	int ret;
-
-	ret = kstrtoint(buf, 0, &value);
-	if (ret != 0)
-		return -EINVAL;
-
-	ddata->duration = value;
-	return size;
-}
-
-static ssize_t activate_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	struct sec_vibrator_drvdata *ddata = g_ddata;
-
-	return sprintf(buf, "%d\n", ddata->state);
-}
-
-static ssize_t activate_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t size)
-{
-	struct sec_vibrator_drvdata *ddata = g_ddata;
-	int value;
-	int ret;
-
-	ret = kstrtoint(buf, 0, &value);
-	if (ret != 0)
-		return -EINVAL;
-
-	if ((value > 0) && (ddata->state > 0))
-		timed_output_enable(ddata, ddata->duration);
-	else
-		timed_output_enable(ddata, 0);
-
-	return size;
-}
-
-static DEVICE_ATTR_RW(state);
-static DEVICE_ATTR_RW(duration);
-static DEVICE_ATTR_RW(activate);
-
-static struct attribute *led_vibrator_attributes[] = {
-	&dev_attr_state.attr,
-	&dev_attr_duration.attr,
-	&dev_attr_activate.attr,
-	&dev_attr_motor_type.attr,
+static struct attribute *pwle_attributes[] = {
+	&dev_attr_pwle.attr,
+	&dev_attr_virtual_composite_indexes.attr,
+	&dev_attr_virtual_pwle_indexes.attr,
 	NULL,
 };
 
-static struct attribute_group led_vibrator_attr_group = {
-	.attrs = led_vibrator_attributes,
+static struct attribute_group pwle_attr_group = {
+	.attrs = pwle_attributes,
 };
 
 int sec_vibrator_register(struct sec_vibrator_drvdata *ddata)
@@ -908,22 +919,7 @@ int sec_vibrator_register(struct sec_vibrator_drvdata *ddata)
 	kthread_init_work(&ddata->kwork, sec_vibrator_work);
 	hrtimer_init(&ddata->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	ddata->timer.function = haptic_timer_func;
-#if defined(CONFIG_SEC_VIBRATOR)
-	/* create /sys/class/leds/vibrator */
-	ddata->cdev.name = "vibrator";
-	ret = devm_led_classdev_register(ddata->dev, &ddata->cdev);
-	if (ret < 0) {
-		pr_err("led class register fail\n");
-		goto err_led_class;
-	}
 
-	ret = sysfs_create_group(&ddata->cdev.dev->kobj, &led_vibrator_attr_group);
-	if (ret) {
-		ret = -ENODEV;
-		pr_err("Failed to create led sysfs1 %d\n", ret);
-		goto err_led_sysfs;
-	}
-#endif
 	/* create /sys/class/timed_output/vibrator */
 	ddata->to_class = class_create(THIS_MODULE, "timed_output");
 	if (IS_ERR(ddata->to_class)) {
@@ -950,50 +946,18 @@ int sec_vibrator_register(struct sec_vibrator_drvdata *ddata)
 			pr_err("Failed to create sysfs2 %d\n", ret);
 			goto err_sysfs2;
 		}
-#if defined(CONFIG_SEC_VIBRATOR)
-		ret = sysfs_create_file(&ddata->cdev.dev->kobj, &dev_attr_intensity.attr);
-		if (ret) {
-			ret = -ENODEV;
-			pr_err("Failed to create led sysfs2 %d\n", ret);
-			goto err_sysfs2;
-		}
-#endif
-		ddata->intensity = MAX_INTENSITY;
-	}
 
-	if (ddata->vib_ops->set_force_touch_intensity) {
-		ret = sysfs_create_file(&ddata->to_dev->kobj, &dev_attr_force_touch_intensity.attr);
-		if (ret) {
-			ret = -ENODEV;
-			pr_err("Failed to create sysfs3 %d\n", ret);
-			goto err_sysfs3;
-		}
-#if defined(CONFIG_SEC_VIBRATOR)
-		ret = sysfs_create_file(&ddata->cdev.dev->kobj, &dev_attr_force_touch_intensity.attr);
-		if (ret) {
-			ret = -ENODEV;
-			pr_err("Failed to create led sysfs3 %d\n", ret);
-			goto err_sysfs3;
-		}
-#endif
-		ddata->force_touch_intensity = MAX_INTENSITY;
+		ddata->intensity = MAX_INTENSITY;
 	}
 
 	if (ddata->vib_ops->set_frequency) {
 		ret = sysfs_create_group(&ddata->to_dev->kobj, &multi_freq_attr_group);
 		if (ret) {
 			ret = -ENODEV;
-			pr_err("Failed to create sysfs4 %d\n", ret);
-			goto err_sysfs4;
+			pr_err("Failed to create sysfs3 %d\n", ret);
+			goto err_sysfs3;
 		}
-#if defined(CONFIG_SEC_VIBRATOR)
-		ret = sysfs_create_group(&ddata->cdev.dev->kobj, &multi_freq_attr_group);
-		if (ret) {
-			ret = -ENODEV;
-			pr_err("Failed to create sysfs4 %d\n", ret);
-			goto err_sysfs4;
-		}
-#endif
+
 		ddata->frequency = FREQ_ALERT;
 	}
 
@@ -1001,17 +965,33 @@ int sec_vibrator_register(struct sec_vibrator_drvdata *ddata)
 		ret = sysfs_create_group(&ddata->to_dev->kobj, &cp_trigger_attr_group);
 		if (ret) {
 			ret = -ENODEV;
-			pr_err("Failed to create sysfs5 %d\n", ret);
-			goto err_sysfs5;
+			pr_err("Failed to create sysfs4 %d\n", ret);
+			goto err_sysfs4;
 		}
-#if defined(CONFIG_SEC_VIBRATOR)
-		ret = sysfs_create_group(&ddata->cdev.dev->kobj, &cp_trigger_attr_group);
+
+	}
+
+	if (ddata->vib_ops->set_pwle) {
+		ret = sysfs_create_group(&ddata->to_dev->kobj, &pwle_attr_group);
 		if (ret) {
 			ret = -ENODEV;
 			pr_err("Failed to create sysfs5 %d\n", ret);
 			goto err_sysfs5;
 		}
-#endif
+
+	}
+
+	if (ddata->vib_ops->set_event_cmd) {
+		/* initialize event_cmd string for HAL init */
+		sscanf(ddata->event_cmd, "%s", vib_event_cmd);
+		pr_info("%s: vib_event_cmd: %s\n", __func__, vib_event_cmd);
+
+		ret = sysfs_create_file(&ddata->to_dev->kobj, &dev_attr_event_cmd.attr);
+		if (ret) {
+			ret = -ENODEV;
+			pr_err("Failed to create sysfs6 %d\n", ret);
+			goto err_sysfs6;
+		}
 	}
 
 	if (ddata->vib_ops->get_calibration && ddata->vib_ops->get_calibration(ddata->dev)) {
@@ -1022,14 +1002,6 @@ int sec_vibrator_register(struct sec_vibrator_drvdata *ddata)
 				pr_err("Failed to create intensities %d\n", ret);
 				goto err_cal1;
 			}
-#if defined(CONFIG_SEC_VIBRATOR)
-			ret = sysfs_create_file(&ddata->cdev.dev->kobj, &dev_attr_intensities.attr);
-			if (ret) {
-				ret = -ENODEV;
-				pr_err("Failed to create led intensities %d\n", ret);
-				goto err_cal1;
-			}
-#endif
 		}
 
 		if (ddata->vib_ops->get_haptic_intensities) {
@@ -1039,14 +1011,6 @@ int sec_vibrator_register(struct sec_vibrator_drvdata *ddata)
 				pr_err("Failed to create haptic_intensities %d\n", ret);
 				goto err_cal2;
 			}
-#if defined(CONFIG_SEC_VIBRATOR)
-			ret = sysfs_create_file(&ddata->cdev.dev->kobj, &dev_attr_haptic_intensities.attr);
-			if (ret) {
-				ret = -ENODEV;
-				pr_err("Failed to create led haptic_intensities %d\n", ret);
-				goto err_cal2;
-			}
-#endif
 		}
 
 		if (ddata->vib_ops->get_haptic_durations) {
@@ -1056,67 +1020,40 @@ int sec_vibrator_register(struct sec_vibrator_drvdata *ddata)
 				pr_err("Failed to create haptic_intensities %d\n", ret);
 				goto err_cal3;
 			}
-#if defined(CONFIG_SEC_VIBRATOR)
-			ret = sysfs_create_file(&ddata->cdev.dev->kobj, &dev_attr_haptic_durations.attr);
-			if (ret) {
-				ret = -ENODEV;
-				pr_err("Failed to create led haptic_intensities %d\n", ret);
-				goto err_cal3;
-			}
-#endif
 		}
 	}
 
 	pr_info("%s done\n", __func__);
 
+	ddata->is_registered = true;
+
 	return ret;
 
 err_cal3:
 	if (ddata->vib_ops->get_calibration && ddata->vib_ops->get_calibration(ddata->dev)) {
-		if (ddata->vib_ops->get_haptic_intensities) {
+		if (ddata->vib_ops->get_haptic_intensities)
 			sysfs_remove_file(&ddata->to_dev->kobj, &dev_attr_haptic_intensities.attr);
-#if defined(CONFIG_SEC_VIBRATOR)
-			sysfs_remove_file(&ddata->cdev.dev->kobj, &dev_attr_haptic_intensities.attr);
-#endif
-		}
 	}
 err_cal2:
 	if (ddata->vib_ops->get_calibration && ddata->vib_ops->get_calibration(ddata->dev)) {
-		if (ddata->vib_ops->get_intensities) {
-			sysfs_remove_file(&ddata->cdev.dev->kobj, &dev_attr_intensities.attr);
-#if defined(CONFIG_SEC_VIBRATOR)
+		if (ddata->vib_ops->get_intensities)
 			sysfs_remove_file(&ddata->to_dev->kobj, &dev_attr_intensities.attr);
-#endif
-		}
 	}
 err_cal1:
-	if (ddata->vib_ops->set_cp_trigger_index) {
-		sysfs_remove_group(&ddata->to_dev->kobj, &cp_trigger_attr_group);
-#if defined(CONFIG_SEC_VIBRATOR)
-		sysfs_remove_group(&ddata->cdev.dev->kobj, &cp_trigger_attr_group);
-#endif
-	}
+	if (ddata->vib_ops->set_event_cmd)
+		sysfs_remove_file(&ddata->to_dev->kobj, &dev_attr_event_cmd.attr);
+err_sysfs6:
+	if (ddata->vib_ops->set_pwle)
+		sysfs_remove_group(&ddata->to_dev->kobj, &pwle_attr_group);
 err_sysfs5:
-	if (ddata->vib_ops->set_frequency) {
-		sysfs_remove_group(&ddata->to_dev->kobj, &multi_freq_attr_group);
-#if defined(CONFIG_SEC_VIBRATOR)
-		sysfs_remove_group(&ddata->cdev.dev->kobj, &multi_freq_attr_group);
-#endif
-	}
+	if (ddata->vib_ops->set_cp_trigger_index)
+		sysfs_remove_group(&ddata->to_dev->kobj, &cp_trigger_attr_group);
 err_sysfs4:
-	if (ddata->vib_ops->set_force_touch_intensity) {
-		sysfs_remove_file(&ddata->to_dev->kobj, &dev_attr_force_touch_intensity.attr);
-#if defined(CONFIG_SEC_VIBRATOR)
-		sysfs_remove_file(&ddata->cdev.dev->kobj, &dev_attr_force_touch_intensity.attr);
-#endif
-	}
+	if (ddata->vib_ops->set_frequency)
+		sysfs_remove_group(&ddata->to_dev->kobj, &multi_freq_attr_group);
 err_sysfs3:
-	if (ddata->vib_ops->set_intensity) {
+	if (ddata->vib_ops->set_intensity)
 		sysfs_remove_file(&ddata->to_dev->kobj, &dev_attr_intensity.attr);
-#if defined(CONFIG_SEC_VIBRATOR)
-		sysfs_remove_file(&ddata->cdev.dev->kobj, &dev_attr_intensity.attr);
-#endif
-	}
 err_sysfs2:
 	sysfs_remove_group(&ddata->to_dev->kobj, &sec_vibrator_attr_group);
 err_sysfs1:
@@ -1124,12 +1061,6 @@ err_sysfs1:
 err_device_create:
 	class_destroy(ddata->to_class);
 err_class_create:
-	sysfs_remove_group(&ddata->cdev.dev->kobj, &led_vibrator_attr_group);
-#if defined(CONFIG_SEC_VIBRATOR)
-err_led_sysfs:
-	devm_led_classdev_unregister(ddata->dev, &ddata->cdev);
-err_led_class:
-#endif
 err_kthread:
 	mutex_destroy(&ddata->vib_mutex);
 	return ret;
@@ -1138,33 +1069,35 @@ EXPORT_SYMBOL_GPL(sec_vibrator_register);
 
 int sec_vibrator_unregister(struct sec_vibrator_drvdata *ddata)
 {
+	if (!ddata->is_registered) {
+		pr_info("%s: sec_vibrator not registered, just return\n", __func__);
+		return 0;
+	}
+
 	sec_vibrator_haptic_disable(ddata);
 	g_ddata = NULL;
-	if (ddata->vib_ops->set_frequency) {
+
+	if (ddata->vib_ops->get_calibration && ddata->vib_ops->get_calibration(ddata->dev)) {
+		if (ddata->vib_ops->get_haptic_intensities)
+			sysfs_remove_file(&ddata->to_dev->kobj, &dev_attr_haptic_intensities.attr);
+		if (ddata->vib_ops->get_intensities)
+			sysfs_remove_file(&ddata->to_dev->kobj, &dev_attr_intensities.attr);
+	}
+	if (ddata->vib_ops->set_event_cmd)
+		sysfs_remove_file(&ddata->to_dev->kobj, &dev_attr_event_cmd.attr);
+	if (ddata->vib_ops->set_pwle)
+		sysfs_remove_group(&ddata->to_dev->kobj, &pwle_attr_group);
+	if (ddata->vib_ops->set_cp_trigger_index)
+		sysfs_remove_group(&ddata->to_dev->kobj, &cp_trigger_attr_group);
+	if (ddata->vib_ops->set_frequency)
 		sysfs_remove_group(&ddata->to_dev->kobj, &multi_freq_attr_group);
-#if defined(CONFIG_SEC_VIBRATOR)
-		sysfs_remove_group(&ddata->cdev.dev->kobj, &multi_freq_attr_group);
-#endif
-	}
-	if (ddata->vib_ops->set_force_touch_intensity) {
-		sysfs_remove_file(&ddata->to_dev->kobj, &dev_attr_force_touch_intensity.attr);
-#if defined(CONFIG_SEC_VIBRATOR)
-		sysfs_remove_file(&ddata->cdev.dev->kobj, &dev_attr_force_touch_intensity.attr);
-#endif
-	}
-	if (ddata->vib_ops->set_intensity) {
+	if (ddata->vib_ops->set_intensity)
 		sysfs_remove_file(&ddata->to_dev->kobj, &dev_attr_intensity.attr);
-#if defined(CONFIG_SEC_VIBRATOR)
-		sysfs_remove_file(&ddata->cdev.dev->kobj, &dev_attr_intensity.attr);
-#endif
-	}
+
 	sysfs_remove_group(&ddata->to_dev->kobj, &sec_vibrator_attr_group);
+
 	device_destroy(ddata->to_class, MKDEV(0, 0));
 	class_destroy(ddata->to_class);
-#if defined(CONFIG_SEC_VIBRATOR)
-	sysfs_remove_group(&ddata->cdev.dev->kobj, &led_vibrator_attr_group);
-	devm_led_classdev_unregister(ddata->dev, &ddata->cdev);
-#endif
 	mutex_destroy(&ddata->vib_mutex);
 	return 0;
 }

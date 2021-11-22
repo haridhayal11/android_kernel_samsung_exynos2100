@@ -1328,7 +1328,15 @@
 	};
 };
 
+
+&mipi_phy_csis5_m0s4s4s4s4s4s2 {
+	vdd_0p85-supply = <&l13_reg>;
+	vdd_1p8-supply = <&l19_reg>;
+};
+
 &exynos_is {
+	memlog_size = <0x0 0x0>;	/* IS_MEMLOG_PRINTF_DRV_SIZE, IS_MEMLOG_PRINTF_DDK_SIZE */
+
 	vender {
 		rear_sensor_id = <52>;	/* 2LD */
 		front_sensor_id = <38>; /* 3J1 */

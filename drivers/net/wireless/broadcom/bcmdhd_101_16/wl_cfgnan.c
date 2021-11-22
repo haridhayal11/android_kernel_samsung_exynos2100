@@ -2960,7 +2960,7 @@ wl_cfgnan_start_handler(struct net_device *ndev, struct bcm_cfg80211 *cfg,
 	ret = wl_cfgnan_execute_ioctl(ndev, cfg, nan_buf, nan_buf_size,
 			&(cmd_data->status), (void*)resp_buf, NAN_IOCTL_BUF_SIZE);
 	if (unlikely(ret) || unlikely(cmd_data->status)) {
-		WL_ERR((" nan start handler, enable failed, ret = %d status = %d \n",
+		WL_ERR(("nan start handler, enable failed, ret = %d status = %d \n",
 				ret, cmd_data->status));
 		goto fail;
 	}
@@ -3011,7 +3011,7 @@ wl_cfgnan_start_handler(struct net_device *ndev, struct bcm_cfg80211 *cfg,
 			}
 		}
 	} else {
-		WL_ERR(("wl_cfgnan_get_capablities_handler failed, ret = %d\n", ret));
+		WL_ERR(("wl_cfgnan_get_capabilities_handler failed, ret = %d\n", ret));
 		goto fail;
 	}
 
@@ -3048,7 +3048,7 @@ wl_cfgnan_start_handler(struct net_device *ndev, struct bcm_cfg80211 *cfg,
 				0, WL_NAN_CMD_CFG_NAN_CONFIG2,
 				&(cmd_data->status), false);
 		if (unlikely(ret) || unlikely(cmd_data->status)) {
-			WL_ERR((" nan ctrl2 config flags resetting failed, ret = %d status = %d \n",
+			WL_ERR(("nan ctrl2 config flags resetting failed, ret = %d status = %d \n",
 					ret, cmd_data->status));
 			goto fail;
 		}
@@ -3060,7 +3060,7 @@ wl_cfgnan_start_handler(struct net_device *ndev, struct bcm_cfg80211 *cfg,
 			0, WL_NAN_CMD_CFG_NAN_CONFIG2,
 			&(cmd_data->status), true);
 	if (unlikely(ret) || unlikely(cmd_data->status)) {
-		WL_ERR((" nan ctrl2 config flags setting failed, ret = %d status = %d \n",
+		WL_ERR(("nan ctrl2 config flags setting failed, ret = %d status = %d \n",
 				ret, cmd_data->status));
 		goto fail;
 	}
@@ -3093,7 +3093,6 @@ fail:
 	/* reset conditon variable */
 	nancfg->nan_event_recvd = false;
 	if (unlikely(ret) || unlikely(cmd_data->status)) {
-		nancfg->nan_enable = false;
 		mutex_lock(&cfg->if_sync);
 		ret = wl_cfg80211_delete_iface(cfg, WL_IF_TYPE_NAN);
 		if (ret != BCME_OK) {
@@ -3109,6 +3108,10 @@ fail:
 			MFREE(cfg->osh, nancfg->ndi,
 					nancfg->max_ndi_supported * sizeof(*nancfg->ndi));
 			nancfg->ndi = NULL;
+		}
+		ret = wl_cfgnan_stop_handler(ndev, cfg);
+		if (ret != BCME_OK) {
+			WL_ERR(("failed to stop nan[%d]\n", ret));
 		}
 	}
 	if (nan_buf) {
@@ -3268,9 +3271,8 @@ wl_cfgnan_delayed_disable(struct work_struct *work)
 	} else {
 		WL_INFORM_MEM(("nan is in disabled state\n"));
 	}
-	rtnl_unlock();
-
 	DHD_NAN_WAKE_UNLOCK(cfg->pub);
+	rtnl_unlock();
 
 	return;
 }
@@ -3290,12 +3292,6 @@ wl_cfgnan_stop_handler(struct net_device *ndev,
 
 	NAN_DBG_ENTER();
 	NAN_MUTEX_LOCK();
-
-	if (!nancfg->nan_enable) {
-		WL_INFORM(("Nan is not enabled\n"));
-		ret = BCME_OK;
-		goto fail;
-	}
 
 	if (dhdp->up != DHD_BUS_DOWN) {
 		/*
@@ -3560,7 +3556,8 @@ wl_cfgnan_config_handler(struct net_device *ndev, struct bcm_cfg80211 *cfg,
 				goto fail;
 			}
 
-			WL_INFORM_MEM(("Cluster merge : %s\n", merge_enable ? "Enabled" : "Disabled"));
+			WL_INFORM_MEM(("Cluster merge : %s\n", merge_enable ?
+					"Enabled" : "Disabled"));
 
 			lwt_mode_enable = !!(cmd_data->nmi_rand_intvl &
 					NAN_NMI_RAND_AUTODAM_LWT_MODE_ENAB);
@@ -3580,7 +3577,8 @@ wl_cfgnan_config_handler(struct net_device *ndev, struct bcm_cfg80211 *cfg,
 				goto fail;
 			}
 
-			WL_INFORM_MEM(("LWT mode : %s\n", lwt_mode_enable ? "Enabled" : "Disabled"));
+			WL_INFORM_MEM(("LWT mode : %s\n", lwt_mode_enable ?
+					"Enabled" : "Disabled"));
 
 			/* reset pvt merge enable bits */
 			cmd_data->nmi_rand_intvl &= ~(NAN_NMI_RAND_PVT_CMD_VENDOR |
@@ -6214,10 +6212,13 @@ wl_cfgnan_get_capablities_handler(struct net_device *ndev,
 
 	NAN_DBG_ENTER();
 
+	RETURN_EIO_IF_NOT_UP(cfg);
+
 	/* Do not query fw about nan if feature is not supported */
 	if (!FW_SUPPORTED(dhdp, nan)) {
 		WL_DBG(("NAN is not supported\n"));
-		return ret;
+		ret = BCME_NOTUP;
+		goto fail;
 	}
 
 	if (cfg->nancfg->nan_init_state) {
@@ -6240,7 +6241,6 @@ wl_cfgnan_get_capablities_handler(struct net_device *ndev,
 		if (ret != BCME_OK) {
 			WL_ERR(("NAN init state: %d, failed to get capability from FW[%d]\n",
 					cfg->nancfg->nan_init_state, ret));
-			goto exit;
 		}
 		WL_ERR(("De-Initializing NAN\n"));
 		ret = wl_cfgnan_deinit(cfg, dhdp->up);
@@ -6283,6 +6283,8 @@ bool wl_cfgnan_is_enabled(struct bcm_cfg80211 *cfg)
 	if (nancfg) {
 		if (nancfg->nan_init_state && nancfg->nan_enable) {
 			return TRUE;
+		} else if (nancfg->nan_init_state && !nancfg->nan_enable) {
+			WL_ERR(("Not expected state: init state is set but enable is not set\n"));
 		}
 	}
 
@@ -8560,6 +8562,9 @@ wl_cfgnan_notify_nan_status(struct bcm_cfg80211 *cfg,
 				WL_INFORM_MEM(("WL_NAN_EVENT_DISC_CACHE_TIMEOUT peer: " MACDBG
 					" l_id:%d r_id:%d\n", MAC2STRDBG(&cache_entry->r_nmi_addr),
 					cache_entry->l_sub_id, cache_entry->r_pub_id));
+				hal_event_id = GOOGLE_NAN_EVENT_MATCH_EXPIRY;
+				nan_event_data->sub_id = cache_entry->l_sub_id;
+				nan_event_data->pub_id = cache_entry->r_pub_id;
 #ifdef RTT_SUPPORT
 				wl_cfgnan_ranging_clear_publish(cfg, &cache_entry->r_nmi_addr,
 					cache_entry->l_sub_id);

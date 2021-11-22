@@ -48,6 +48,32 @@ module_param(reset_reason, int, 0440);
 long __read_mostly pwrsrc_rs;
 module_param(pwrsrc_rs, long, 0440);
 
+static void _secdbg_rere_write_buf(struct outbuf *obuf, int len, const char *fmt, ...)
+{
+	va_list list;
+	char *base;
+	int rem, ret;
+
+	base = obuf->buf;
+	base += obuf->index;
+
+	rem = sizeof(obuf->buf);
+	rem -= obuf->index;
+
+	if (rem <= 0)
+		return;
+
+	if ((len > 0) && (len < rem))
+		rem = len;
+
+	va_start(list, fmt);
+	ret = vsnprintf(base, rem, fmt, list);
+	if (ret)
+		obuf->index += ret;
+
+	va_end(list);
+}
+
 static int secdbg_reset_reason_proc_show(struct seq_file *m, void *v)
 {
 	pr_info("%s: reset_reason: %d\n", __func__, reset_reason);
@@ -133,37 +159,37 @@ static void parse_pwrsrc_rs(struct outbuf *buf)
 	int i;
 	unsigned long tmp;
 
-	secdbg_base_write_buf(buf, 0, "OFFSRC::");
+	_secdbg_rere_write_buf(buf, 0, "OFFSRC::");
 	tmp = pwrsrc_rs & 0xff0000000000;
 	tmp >>= 40;
 	if (!tmp)
-		secdbg_base_write_buf(buf, 0, " -");
+		_secdbg_rere_write_buf(buf, 0, " -");
 	else
 		for (i = 0; i < 8; i++)
 			if (tmp & (1 << i))
-				secdbg_base_write_buf(buf, 0, " %s", regs_bit[0][i]);
-	secdbg_base_write_buf(buf, 0, " /");
+				_secdbg_rere_write_buf(buf, 0, " %s", regs_bit[0][i]);
+	_secdbg_rere_write_buf(buf, 0, " /");
 
-	secdbg_base_write_buf(buf, 0, " ONSRC::");
+	_secdbg_rere_write_buf(buf, 0, " ONSRC::");
 	tmp = pwrsrc_rs & 0x00ff00000000;
 	tmp >>= 32;
 	if (!tmp)
-		secdbg_base_write_buf(buf, 0, " -");
+		_secdbg_rere_write_buf(buf, 0, " -");
 	else
 		for (i = 0; i < 8; i++)
 			if (tmp & (1 << i))
-				secdbg_base_write_buf(buf, 0, " %s", regs_bit[1][i]);
+				_secdbg_rere_write_buf(buf, 0, " %s", regs_bit[1][i]);
 
-	secdbg_base_write_buf(buf, 0, " /");
+	_secdbg_rere_write_buf(buf, 0, " /");
 
-	secdbg_base_write_buf(buf, 0, " RSTSTAT::");
+	_secdbg_rere_write_buf(buf, 0, " RSTSTAT::");
 	tmp = pwrsrc_rs & 0x0000ffffffff;
 	if (!tmp)
-		secdbg_base_write_buf(buf, 0, " -");
+		_secdbg_rere_write_buf(buf, 0, " -");
 	else
 		for (i = 0; i < 32; i++)
 			if (tmp & (1 << i))
-				secdbg_base_write_buf(buf, 0, " %s", dword_regs_bit[0][i]);
+				_secdbg_rere_write_buf(buf, 0, " %s", dword_regs_bit[0][i]);
 
 	buf->already = 1;
 }
@@ -193,16 +219,16 @@ static int secdbg_reset_reason_pwrsrc_show(struct seq_file *m, void *v)
 		tmp = 0;
 	}
 
-	secdbg_base_write_buf(&pwrsrc_buf, 0, "OFFSRC:");
+	_secdbg_rere_write_buf(&pwrsrc_buf, 0, "OFFSRC:");
 	if (!tmp) {
-		secdbg_base_write_buf(&pwrsrc_buf, 0, " -");
+		_secdbg_rere_write_buf(&pwrsrc_buf, 0, " -");
 		check_tmp++;
 	} else
 		for (i = 0; i < 8; i++)
 			if (tmp & (1 << i))
-				secdbg_base_write_buf(&pwrsrc_buf, 0, " %s", regs_bit[0][i]);
+				_secdbg_rere_write_buf(&pwrsrc_buf, 0, " %s", regs_bit[0][i]);
 
-	secdbg_base_write_buf(&pwrsrc_buf, 0, " /");
+	_secdbg_rere_write_buf(&pwrsrc_buf, 0, " /");
 
 	memset(val, 0, 32);
 	get_bk_item_val_as_string("PWR", val);
@@ -211,16 +237,16 @@ static int secdbg_reset_reason_pwrsrc_show(struct seq_file *m, void *v)
 		tmp = 0;
 	}
 
-	secdbg_base_write_buf(&pwrsrc_buf, 0, " ONSRC:");
+	_secdbg_rere_write_buf(&pwrsrc_buf, 0, " ONSRC:");
 	if (!tmp) {
-		secdbg_base_write_buf(&pwrsrc_buf, 0, " -");
+		_secdbg_rere_write_buf(&pwrsrc_buf, 0, " -");
 		check_tmp++;
 	} else
 		for (i = 0; i < 8; i++)
 			if (tmp & (1 << i))
-				secdbg_base_write_buf(&pwrsrc_buf, 0, " %s", regs_bit[1][i]);
+				_secdbg_rere_write_buf(&pwrsrc_buf, 0, " %s", regs_bit[1][i]);
 
-	secdbg_base_write_buf(&pwrsrc_buf, 0, " /");
+	_secdbg_rere_write_buf(&pwrsrc_buf, 0, " /");
 
 	memset(val, 0, 32);
 	get_bk_item_val_as_string("RST", val);
@@ -229,14 +255,14 @@ static int secdbg_reset_reason_pwrsrc_show(struct seq_file *m, void *v)
 		tmp = 0;
 	}
 
-	secdbg_base_write_buf(&pwrsrc_buf, 0, " RSTSTAT:");
+	_secdbg_rere_write_buf(&pwrsrc_buf, 0, " RSTSTAT:");
 	if (!tmp) {
-		secdbg_base_write_buf(&pwrsrc_buf, 0, " -");
+		_secdbg_rere_write_buf(&pwrsrc_buf, 0, " -");
 		check_tmp++;
 	} else
 		for (i = 0; i < 32; i++)
 			if (tmp & (1 << i))
-				secdbg_base_write_buf(&pwrsrc_buf, 0, " %s", dword_regs_bit[0][i]);
+				_secdbg_rere_write_buf(&pwrsrc_buf, 0, " %s", dword_regs_bit[0][i]);
 
 	if (check_tmp == 3) {
 		memset(&pwrsrc_buf, 0, sizeof(pwrsrc_buf));
@@ -359,48 +385,48 @@ static int secdbg_reset_reason_extra_show(struct seq_file *m, void *v)
 	pnc = get_bk_item_val("PANIC");
 	smu = get_bk_item_val("SMU");
 
-	secdbg_base_write_buf(&extra_buf, 0, "RCNT:");
+	_secdbg_rere_write_buf(&extra_buf, 0, "RCNT:");
 	if (rstcnt && strnlen(rstcnt, MAX_ITEM_VAL_LEN))
-		secdbg_base_write_buf(&extra_buf, 0, " %s /", rstcnt);
+		_secdbg_rere_write_buf(&extra_buf, 0, " %s /", rstcnt);
 	else
-		secdbg_base_write_buf(&extra_buf, 0, " - /");
+		_secdbg_rere_write_buf(&extra_buf, 0, " - /");
 
-	secdbg_base_write_buf(&extra_buf, 0, " PC:");
+	_secdbg_rere_write_buf(&extra_buf, 0, " PC:");
 	if (pc && strnlen(pc, MAX_ITEM_VAL_LEN))
-		secdbg_base_write_buf(&extra_buf, 0, " %s", pc);
+		_secdbg_rere_write_buf(&extra_buf, 0, " %s", pc);
 	else
-		secdbg_base_write_buf(&extra_buf, 0, " -");
+		_secdbg_rere_write_buf(&extra_buf, 0, " -");
 
-	secdbg_base_write_buf(&extra_buf, 0, " LR:");
+	_secdbg_rere_write_buf(&extra_buf, 0, " LR:");
 	if (lr && strnlen(lr, MAX_ITEM_VAL_LEN))
-		secdbg_base_write_buf(&extra_buf, 0, " %s", lr);
+		_secdbg_rere_write_buf(&extra_buf, 0, " %s", lr);
 	else
-		secdbg_base_write_buf(&extra_buf, 0, " -");
+		_secdbg_rere_write_buf(&extra_buf, 0, " -");
 
 	/* BUG */
 	if (bug && strnlen(bug, MAX_ITEM_VAL_LEN)) {
 		handle_bug_string(buf_bug, bug);
 
-		secdbg_base_write_buf(&extra_buf, 0, " BUG: %s", buf_bug);
+		_secdbg_rere_write_buf(&extra_buf, 0, " BUG: %s", buf_bug);
 	}
 
 	/* BUS */
 	if (bus && strnlen(bus, MAX_ITEM_VAL_LEN)) {
 		handle_bus_string(buf_bus, bus);
 
-		secdbg_base_write_buf(&extra_buf, 0, " BUS: %s", buf_bus);
+		_secdbg_rere_write_buf(&extra_buf, 0, " BUS: %s", buf_bus);
 	}
 
 	/* PANIC */
 	ret = handle_panic_string(pnc);
 	if (ret == PNC_STR_UNRECV) {
 		if (smu && strnlen(smu, MAX_ITEM_VAL_LEN))
-			secdbg_base_write_buf(&extra_buf, BBP_STR_LEN, " SMU: %s", smu);
+			_secdbg_rere_write_buf(&extra_buf, BBP_STR_LEN, " SMU: %s", smu);
 		else
-			secdbg_base_write_buf(&extra_buf, BBP_STR_LEN, " PANIC: %s", pnc);
+			_secdbg_rere_write_buf(&extra_buf, BBP_STR_LEN, " PANIC: %s", pnc);
 	} else if (ret == PNC_STR_REST) {
 		if (strnlen(pnc, MAX_ITEM_VAL_LEN))
-			secdbg_base_write_buf(&extra_buf, BBP_STR_LEN, " PANIC: %s", pnc);
+			_secdbg_rere_write_buf(&extra_buf, BBP_STR_LEN, " PANIC: %s", pnc);
 	}
 
 	extra_buf.already = 1;

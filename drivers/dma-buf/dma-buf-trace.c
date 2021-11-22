@@ -193,7 +193,7 @@ static int dmabuf_oom_notifier_fn(struct notifier_block *nb,
 			if (dma_buf_get_flags(ref->buffer->dmabuf, &flags))
 				flags = 0;
 
-			pr_cont("%8zu(%2d,%2d,%#8x,%2d,%d)", ref->buffer->dmabuf->size / 1024,
+			pr_cont("%8zu(%2lu,%2lu,%#8llx,%2d,%d)", ref->buffer->dmabuf->size / 1024,
 				ION_HEAP_MASK(flags >> ION_HEAP_PROTID_SHIFT),
 				ION_HEAP_MASK(flags >> ION_HEAP_SHIFT),
 				ION_BUFFER_MASK(flags), ref->buffer->shared_count, ref->refcount);

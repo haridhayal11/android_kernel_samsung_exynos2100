@@ -82,8 +82,8 @@ EXPORT_SYMBOL_GPL(is_get_common_mcu_info);
 
 static int ois_mcu_clk_get(struct ois_mcu_dev *mcu)
 {
-	mcu->clk = devm_clk_get(mcu->dev, "user_mux");
-	mcu->spi_clk = devm_clk_get(mcu->dev, "ipclk_spi");
+	mcu->clk = clk_get(mcu->dev, "user_mux");
+	mcu->spi_clk = clk_get(mcu->dev, "ipclk_spi");
 	if (!IS_ERR(mcu->clk) && !IS_ERR(mcu->spi_clk))
 		return 0;
 	else
@@ -413,8 +413,8 @@ int ois_mcu_dump(struct ois_mcu_dev *mcu, int type)
 void ois_mcu_parsing_raw_data(uint8_t *buf, long efs_size, long *raw_data_x, long *raw_data_y)
 {
 	int i = 0, j = 0;
-	char efs_data_pre[MAX_GYRO_EFS_DATA_LENGTH] = { 0 };
-	char efs_data_post[MAX_GYRO_EFS_DATA_LENGTH] = { 0 };
+	char efs_data_pre[MAX_GYRO_EFS_DATA_LENGTH + 1];
+	char efs_data_post[MAX_GYRO_EFS_DATA_LENGTH+ 1];
 	bool detect_point = false;
 	int sign = 1;
 	long raw_pre = 0, raw_post = 0;
@@ -443,7 +443,7 @@ void ois_mcu_parsing_raw_data(uint8_t *buf, long efs_size, long *raw_data_x, lon
 			j++;
 		}
 
-		if (i++ > MAX_GYRO_EFS_DATA_LENGTH) {
+		if (++i > MAX_GYRO_EFS_DATA_LENGTH) {
 			err_mcu("wrong EFS data.");
 			break;
 		}
@@ -480,7 +480,7 @@ void ois_mcu_parsing_raw_data(uint8_t *buf, long efs_size, long *raw_data_x, lon
 			j++;
 		}
 
-		if (i++ > MAX_GYRO_EFS_DATA_LENGTH) {
+		if (++i > MAX_GYRO_EFS_DATA_LENGTH) {
 			err_mcu("wrong EFS data.");
 			break;
 		}
@@ -3086,6 +3086,62 @@ bool ois_mcu_gyro_cal(struct is_core *core, long *x_value, long *y_value)
 
 	return result;
 }
+bool ois_mcu_read_gyro_noise(struct is_core *core, long *x_value, long *y_value)
+{
+	u8 val = 0, x = 0, y = 0;
+	int retries = 30;
+	int scale_factor = OIS_GYRO_SCALE_FACTOR_LSM6DSO;
+	int x_sum = 0, y_sum = 0;
+	bool result = true;
+	struct ois_mcu_dev *mcu = NULL;
+
+	mcu = core->mcu;
+
+	info_mcu("%s : E\n", __func__);
+
+	msleep(500);
+
+	is_mcu_set_reg(mcu->regs[OM_REG_CORE], R_OIS_CMD_START, 0x00);
+	usleep_range(1000, 1100);
+
+	/* check ois status */
+	do {
+		val = (u8)is_mcu_get_reg(mcu->regs[OM_REG_CORE], R_OIS_CMD_STATUS);
+		msleep(20);
+		if (--retries < 0) {
+			err_mcu("%s Read status failed!!!!, data = 0x%04x\n", __func__, val);
+			result = false;
+			break;
+		}
+	} while (val != 0x01);
+
+	is_mcu_set_reg(mcu->regs[OM_REG_CORE], R_OIS_CMD_SET_GYRO_NOISE, 0x01);
+
+	msleep(1000);
+
+	val = (u8)is_mcu_get_reg(mcu->regs[OM_REG_CORE], R_OIS_CMD_READ_GYRO_NOISE_X1);
+	x = val;
+	val = (u8)is_mcu_get_reg(mcu->regs[OM_REG_CORE], R_OIS_CMD_READ_GYRO_NOISE_X2);
+	x_sum = (val << 8) | x;
+	if (x_sum > 0x7FFF) {
+		x_sum = -((x_sum ^ 0xFFFF) + 1);
+	}
+
+	val = (u8)is_mcu_get_reg(mcu->regs[OM_REG_CORE], R_OIS_CMD_READ_GYRO_NOISE_Y1);
+	y = val;
+	val = (u8)is_mcu_get_reg(mcu->regs[OM_REG_CORE], R_OIS_CMD_READ_GYRO_NOISE_Y2);
+	y_sum = (val << 8) | y;
+	if (y_sum > 0x7FFF) {
+		y_sum = -((y_sum ^ 0xFFFF) + 1);
+	}
+
+	*x_value = x_sum * 1000 / scale_factor;
+	*y_value = y_sum * 1000 / scale_factor;
+
+	info_mcu("%s X (x = %ld/y = %ld) : result = %d\n", __func__, *x_value, *y_value, result);
+
+	return result;
+}
 
 long ois_mcu_open_fw(struct is_core *core)
 {
@@ -3350,6 +3406,7 @@ static struct is_ois_ops ois_ops_mcu = {
 	.ois_set_center = ois_mcu_set_centering,
 	.ois_read_mode = ois_mcu_read_mode,
 	.ois_calibration_test = ois_mcu_gyro_cal,
+	.ois_read_gyro_noise = ois_mcu_read_gyro_noise,
 	.ois_set_af_active = ois_mcu_af_set_active,
 	.ois_get_hall_pos = ois_mcu_get_hall_position,
 	.ois_check_cross_talk = ois_mcu_check_cross_talk,

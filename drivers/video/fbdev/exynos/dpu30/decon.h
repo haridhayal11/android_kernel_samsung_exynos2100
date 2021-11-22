@@ -485,6 +485,11 @@ struct decon_dma_buf_data {
 	dma_addr_t			dma_addr;
 	struct dma_fence		*fence;
 	int				dpp_ch;
+#if defined(CONFIG_EXYNOS_DECON_BUFFER_SANITY_CHECK)
+	void *vaddr;
+	int acq_fence;
+	u64 checksum64;
+#endif
 };
 
 struct decon_win_rect {
@@ -672,6 +677,10 @@ struct decon_reg_data {
 	u32 hwfc_idx;
 #endif
 	bool lib_requested;
+
+#ifdef CONFIG_SUPPORT_MASK_LAYER
+	bool mask_layer;
+#endif
 };
 
 #if IS_ENABLED(CONFIG_MCD_PANEL)
@@ -1272,7 +1281,6 @@ struct decon_bts {
 	u32 delay_scaler;
 	u32 inner_width;
 	u32 bus_width;
-	u32 bus_util;
 	u32 rot_util;
 	u32 bw_weight;
 	u32 dfs_lv_cnt;
@@ -1282,7 +1290,7 @@ struct decon_bts {
 	struct decon_bts_bw bw[BTS_DPP_MAX];
 
 	/* each decon must know other decon's BW to get overall BW */
-	u32 ch_bw[3][BTS_DPU_MAX];
+	u32 ch_bw[MAX_DECON_CNT][BTS_DPU_MAX];
 	int bw_idx;
 	u32 scen_idx[DPU_BS_MAX];
 	struct bts_decon_info bts_info;
@@ -1447,6 +1455,12 @@ struct decon_device {
 #endif
 #if defined(CONFIG_EXYNOS_DECON_DQE)
 	bool dqe_cgc_idx;
+#endif
+
+#ifdef CONFIG_SUPPORT_MASK_LAYER
+	bool cur_mask_layer;
+	u32 wait_mask_layer_trigger;
+	wait_queue_head_t wait_mask_layer_trigger_queue;
 #endif
 };
 

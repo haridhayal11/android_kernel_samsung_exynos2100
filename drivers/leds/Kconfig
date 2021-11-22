@@ -825,7 +825,7 @@ config LEDS_LM36274
 
 config LEDS_S2MPB02
 	tristate "LED support for the S2MPB02"
-	depends on LEDS_CLASS
+	depends on LEDS_CLASS && MFD_S2MPB02
 	help
 	  This option enables support for the LEDs on the S2MPB02.
 

@@ -40,6 +40,10 @@
 #include <bcmiov.h>
 #endif /* DHD_SDTC_ETB_DUMP */
 
+#if !defined(DHD_SDTC_ETB_DUMP) && defined(IGMP_OFFLOAD_SUPPORT)
+#include <bcmiov.h>
+#endif /* !DHD_SDTC_ETB_DUMP && IGMP_OFFLOAD_SUPPORT */
+
 #ifdef PCIE_FULL_DONGLE
 #include <bcmmsgbuf.h>
 #endif /* PCIE_FULL_DONGLE */
@@ -5379,6 +5383,68 @@ dhd_arp_get_arp_hostip_table(dhd_pub_t *dhd, void *buf, int buflen, int idx)
 }
 #endif /* ARP_OFFLOAD_SUPPORT  */
 
+/* ========================== */
+/* ==== IGMP OFFLOAD SUPPORT = */
+/* ========================== */
+#ifdef IGMP_OFFLOAD_SUPPORT
+void
+dhd_igmp_offload_enable(dhd_pub_t *dhd, uint8 igmp_enable)
+{
+	int ret = BCME_OK;
+	uint16 iovlen = 0;
+	bcm_iov_buf_t *iov_req = NULL;
+	bcm_xtlv_t *pxtlv = NULL;
+	uint16 xtlv_buflen_start;
+	uint16 xtlv_buflen;
+
+	DHD_ERROR(("%s:%d igmp_enable:%d\n", __FUNCTION__, __LINE__, igmp_enable));
+
+	iov_req = (bcm_iov_buf_t *)MALLOCZ(dhd->osh, WLC_IOCTL_MEDLEN);
+	if (iov_req == NULL) {
+		ret = -ENOMEM;
+		DHD_ERROR(("iov buf memory alloc exited\n"));
+		goto exit;
+	}
+
+	/* fill header */
+	iov_req->version = WL_IGMPOE_IOV_VERSION;
+	iov_req->id = WL_IGMPOE_CMD_ENABLE;
+
+	pxtlv = (bcm_xtlv_t *)&iov_req->data[0];
+	xtlv_buflen = xtlv_buflen_start = WLC_IOCTL_MEDLEN - sizeof(bcm_iov_buf_t);
+
+	ret = bcm_pack_xtlv_entry((uint8**)&pxtlv, &xtlv_buflen, WL_IGMPOE_XTLV_ENABLE,
+		sizeof(igmp_enable), &igmp_enable, BCM_XTLV_OPTION_ALIGN32);
+	if (ret != BCME_OK) {
+		ret = -EINVAL;
+		DHD_ERROR(("%s failed to pack igmp enable, err: %s\n",
+			__FUNCTION__, bcmerrorstr(ret)));
+		goto exit;
+	}
+	iov_req->len = xtlv_buflen_start - xtlv_buflen;
+	iovlen = sizeof(bcm_iov_buf_t) + iov_req->len;
+
+	ret = dhd_iovar(dhd, 0, "igmpoe", (char *)iov_req, iovlen, NULL, 0, TRUE);
+	if (ret) {
+		DHD_ERROR(("%s: failed to enabe IGMP offload to %d, ret = %d\n",
+			__FUNCTION__, igmp_enable, ret));
+	} else {
+#ifdef DHD_LOG_DUMP
+		DHD_LOG_MEM(("%s: successfully enabed IGMP offload to %d\n",
+			__FUNCTION__, igmp_enable));
+#else
+		DHD_TRACE(("%s: successfully enabed IGMP offload to %d\n",
+			__FUNCTION__, igmp_enable));
+#endif /* DHD_LOG_DUMP */
+	}
+
+exit:
+	if (iov_req) {
+		MFREE(dhd->osh, iov_req, WLC_IOCTL_MEDLEN);
+	}
+}
+#endif /* IGMP_OFFLOAD_SUPPORT */
+
 /*
  * Neighbor Discovery Offload: enable NDO feature
  * Called  by ipv6 event handler when interface comes up/goes down
@@ -9463,6 +9529,9 @@ dhd_convert_memdump_type_to_str(uint32 type, char *buf, size_t buf_len, int subs
 			break;
 		case DUMP_TYPE_P2P_DISC_BUSY:
 			type_str = "P2P_DISC_BUSY";
+			break;
+		case DUMP_TYPE_CONT_EXCESS_PM_AWAKE:
+			type_str = "CONT_EXCESS_PM_AWAKE";
 			break;
 		default:
 			type_str = "Unknown_type";

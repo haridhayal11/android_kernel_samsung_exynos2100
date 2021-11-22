@@ -22,6 +22,7 @@
 #include <linux/device.h>
 #include <linux/miscdevice.h>
 #include <linux/vmalloc.h>
+#include <linux/compat.h>
 #include <linux/usb/typec/common/pdic_core.h>
 
 #define MAX_BUF 255
@@ -94,6 +95,7 @@ void set_msg_header(void *data, int msg_type, int obj_num)
 	msg_hdr->num_data_objs = obj_num;
 	msg_hdr->port_data_role = USBPD_DFP;
 }
+EXPORT_SYMBOL(set_msg_header);
 
 void set_uvdm_header(void *data, int vid, int vdm_type)
 {
@@ -106,6 +108,7 @@ void set_uvdm_header(void *data, int vid, int vdm_type)
 	uvdm_hdr->vendor_defined = SEC_UVDM_UNSTRUCTURED_VDM;
 	uvdm_hdr->BITS.VDM_command = 4; /* from s2mm005 concept */
 }
+EXPORT_SYMBOL(set_uvdm_header);
 
 void set_sec_uvdm_header(void *data, int pid, bool data_type, int cmd_type,
 		bool dir, int total_set_num, uint8_t received_data)
@@ -126,6 +129,7 @@ void set_sec_uvdm_header(void *data, int pid, bool data_type, int cmd_type,
 		SEC_UVDM_HEADER->pid, SEC_UVDM_HEADER->data_type,
 		SEC_UVDM_HEADER->cmd_type, SEC_UVDM_HEADER->direction);
 }
+EXPORT_SYMBOL(set_sec_uvdm_header);
 
 int get_data_size(int first_set, int remained_data_size)
 {
@@ -156,6 +160,7 @@ void set_sec_uvdm_tx_header(void *data,
 	SEC_TX_HAEDER->total_size = total_size;
 	SEC_TX_HAEDER->order_cur_set = cur_set;
 }
+EXPORT_SYMBOL(set_sec_uvdm_tx_header);
 
 void set_sec_uvdm_tx_tailer(void *data)
 {
@@ -166,6 +171,7 @@ void set_sec_uvdm_tx_tailer(void *data)
 	SEC_TX_TAILER->checksum =
 		get_checksum(SendMSG, 4, SEC_UVDM_CHECKSUM_COUNT);
 }
+EXPORT_SYMBOL(set_sec_uvdm_tx_tailer);
 
 void set_sec_uvdm_rx_header(void *data, int cur_num, int cur_set, int ack)
 {
@@ -177,6 +183,7 @@ void set_sec_uvdm_rx_header(void *data, int cur_num, int cur_set, int ack)
 	SEC_RX_HEADER->rcv_data_size = cur_set;
 	SEC_RX_HEADER->result_value = ack;
 }
+EXPORT_SYMBOL(set_sec_uvdm_rx_header);
 
 struct pdic_misc_dev *get_pdic_misc_dev(void)
 {
@@ -232,7 +239,8 @@ static int pdic_misc_open(struct inode *inode, struct file *file)
 	}
 
 	/* check if there is some connection */
-	if (!p_m_core->c_dev.uvdm_ready()) {
+	if (!p_m_core->c_dev.uvdm_ready ||
+			!p_m_core->c_dev.uvdm_ready()) {
 		_unlock(&p_m_core->c_dev.open_excl);
 		pr_err("%s - error : uvdm is not ready\n", __func__);
 		ret = -EBUSY;

@@ -602,11 +602,13 @@ static int max77705_vdm_dp_select_pin(void *data, int multi)
 		else
 			msg_maxim("wrong pin assignment value");
 	}
-#if IS_ENABLED(CONFIG_ARCH_QCOM) && !defined(CONFIG_USB_ARCH_EXYNOS)
+#if IS_ENABLED(CONFIG_ARCH_QCOM) && !IS_ENABLED(CONFIG_ARCH_EXYNOS)
 	if (pin_sel == PDIC_NOTIFY_DP_PIN_C ||
 			pin_sel == PDIC_NOTIFY_DP_PIN_E ||
 			pin_sel == PDIC_NOTIFY_DP_PIN_A)
-		dwc3_restart_usb_host_mode_hs();
+		dwc3_restart_usb_host_mode(4);
+	else
+		dwc3_restart_usb_host_mode(2);
 #endif
 
 	return pin_sel;

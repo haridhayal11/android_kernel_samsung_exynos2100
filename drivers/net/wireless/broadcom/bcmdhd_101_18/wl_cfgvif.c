@@ -1324,14 +1324,14 @@ wl_get_nl80211_band(u32 wl_band)
 			return IEEE80211_BAND_2GHZ;
 		case WL_CHANSPEC_BAND_5G:
 			return IEEE80211_BAND_5GHZ;
-#ifdef WL_BAND_6G
+#ifdef WL_6G_BAND
 		case WL_CHANSPEC_BAND_6G:
 			/* current kernels doesn't support seperate
 			 * band for 6GHz. so till patch is available
 			 * map it under 5GHz
 			 */
 			return IEEE80211_BAND_5GHZ;
-#endif /* WL_BAND_6G */
+#endif /* WL_6G_BAND */
 		default:
 			WL_ERR(("unsupported Band. %d\n", wl_band));
 	}
@@ -1403,7 +1403,10 @@ wl_cfg80211_set_channel(struct wiphy *wiphy, struct net_device *dev,
 			/* Do not try SCC in 5GHz if channel is not CH149 */
 			chspec = (
 #ifdef WL_6G_BAND
-				CHSPEC_IS6G(*sta_chanspec) ||
+				(CHSPEC_IS6G(*sta_chanspec) &&
+				 (!CHSPEC_IS_6G_PSC(*sta_chanspec) ||
+				  (wf_chspec_primary20_chspec(*sta_chanspec) !=
+				   wf_chspec_primary20_chspec(chspec)))) ||
 #endif /* WL_6G_BAND */
 				(CHSPEC_IS5G(*sta_chanspec) &&
 				wf_chspec_primary20_chan(*sta_chanspec) !=
@@ -3320,16 +3323,16 @@ wl_cfg80211_start_ap(
 		goto fail;
 	}
 
-		/* Disable packet filter */
-		if (dhd->early_suspended) {
-			WL_ERR(("Disable pkt_filter\n"));
+	/* Disable packet filter */
+	if (dhd->early_suspended) {
+		WL_ERR(("Disable pkt_filter\n"));
 #ifdef PKT_FILTER_SUPPORT
-			dhd_enable_packet_filter(0, dhd);
+		dhd_enable_packet_filter(0, dhd);
 #endif /* PKT_FILTER_SUPPORT */
 #ifdef APF
-			dhd_dev_apf_disable_filter(dhd_linux_get_primary_netdev(dhd));
+		dhd_dev_apf_disable_filter(dhd_linux_get_primary_netdev(dhd));
 #endif /* APF */
-		}
+	}
 
 	/* disable TDLS */
 #ifdef WLTDLS
@@ -3443,16 +3446,16 @@ fail:
 			wl_cfg80211_set_frameburst(cfg, TRUE);
 #endif /* DISABLE_WL_FRAMEBURST_SOFTAP */
 		}
-			/* Enable packet filter */
-			if (dhd->early_suspended) {
-				WL_ERR(("Enable pkt_filter\n"));
+		/* Enable packet filter */
+		if (dhd->early_suspended) {
+			WL_ERR(("Enable pkt_filter\n"));
 #ifdef PKT_FILTER_SUPPORT
-				dhd_enable_packet_filter(1, dhd);
+			dhd_enable_packet_filter(1, dhd);
 #endif /* PKT_FILTER_SUPPORT */
 #ifdef APF
-				dhd_dev_apf_enable_filter(dhd_linux_get_primary_netdev(dhd));
+			dhd_dev_apf_enable_filter(dhd_linux_get_primary_netdev(dhd));
 #endif /* APF */
-			}
+		}
 
 #ifdef WLTDLS
 		if (bssidx == 0) {
@@ -6368,3 +6371,93 @@ wl_restore_ap_bw(struct bcm_cfg80211 *cfg)
 	}
 }
 #endif /* SUPPORT_AP_BWCTRL */
+
+#ifdef CUSTOM_SOFTAP_SET_ANT
+int
+wl_set_softap_antenna(struct net_device *dev, char *ifname, int set_chain)
+{
+	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
+	struct net_device *ifdev = NULL;
+	char iobuf[WLC_IOCTL_SMLEN];
+	int err = BCME_OK;
+	int iftype = 0;
+	s32 val = 1;
+
+	memset(iobuf, 0, WLC_IOCTL_SMLEN);
+
+	/* Check the interface type */
+	ifdev = wl_get_netdev_by_name(cfg, ifname);
+	if (ifdev == NULL) {
+		WL_ERR(("%s: Could not find net_device for ifname:%s\n",
+			__FUNCTION__, ifname));
+		err = BCME_BADARG;
+		goto fail;
+	}
+
+	iftype = ifdev->ieee80211_ptr->iftype;
+	if (iftype == NL80211_IFTYPE_AP) {
+		err = wldev_ioctl_set(dev, WLC_DOWN, &val, sizeof(s32));
+		if (err) {
+			WL_ERR(("WLC_DOWN error %d\n", err));
+			goto fail;
+		} else {
+			err = wldev_iovar_setint(ifdev, "txchain", set_chain);
+			if (unlikely(err)) {
+				WL_ERR(("%s: Failed to set txchain[%d], err=%d\n",
+					__FUNCTION__, set_chain, err));
+			}
+			err = wldev_iovar_setint(ifdev, "rxchain", set_chain);
+			if (unlikely(err)) {
+				WL_ERR(("%s: Failed to set rxchain[%d], err=%d\n",
+					__FUNCTION__, set_chain, err));
+			}
+			err = wldev_ioctl_set(dev, WLC_UP, &val, sizeof(s32));
+			if (err < 0) {
+				WL_ERR(("WLC_UP error %d\n", err));
+			}
+		}
+	} else {
+		WL_ERR(("%s: Chain set should control in SoftAP mode only\n",
+			__FUNCTION__));
+		err = BCME_BADARG;
+	}
+fail:
+	return err;
+}
+
+int
+wl_get_softap_antenna(struct net_device *dev, char *ifname, void *param)
+{
+	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
+	uint32 *cur_rxchain = (uint32*)param;
+	struct net_device *ifdev = NULL;
+	char iobuf[WLC_IOCTL_SMLEN];
+	int err = BCME_OK;
+	int iftype = 0;
+
+	memset(iobuf, 0, WLC_IOCTL_SMLEN);
+
+	/* Check the interface type */
+	ifdev = wl_get_netdev_by_name(cfg, ifname);
+	if (ifdev == NULL) {
+		WL_ERR(("%s: Could not find net_device for ifname:%s\n", __FUNCTION__, ifname));
+		err = BCME_BADARG;
+		goto fail;
+	}
+
+	iftype = ifdev->ieee80211_ptr->iftype;
+	if (iftype == NL80211_IFTYPE_AP) {
+		err = wldev_iovar_getint(ifdev, "rxchain", cur_rxchain);
+		if (unlikely(err)) {
+			WL_ERR(("%s: Failed to get rxchain, err=%d\n",
+				__FUNCTION__, err));
+		}
+	} else {
+		WL_ERR(("%s: rxchain should control in SoftAP mode only\n",
+			__FUNCTION__));
+		err = BCME_BADARG;
+	}
+fail:
+	return err;
+}
+#endif /* CUSTOM_SOFTAP_SET_ANT */

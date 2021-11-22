@@ -627,9 +627,6 @@ static struct maptbl unbound2_a3_s0_maptbl[MAX_MAPTBL] = {
 	[AOR_FQ_LOW_MAPTBL] = DEFINE_3D_MAPTBL(unbound2_a3_s0_aor_fq_low_table, init_common_table, getidx_vrr_aor_fq_brt_table, copy_common_maptbl),
 	[AOR_FQ_HIGH_MAPTBL] = DEFINE_3D_MAPTBL(unbound2_a3_s0_aor_fq_high_table, init_common_table, getidx_vrr_aor_fq_brt_table, copy_common_maptbl),
 	[TE_FRAME_SEL_MAPTBL] = DEFINE_2D_MAPTBL(unbound2_a3_s0_te_frame_sel_table, init_common_table, getidx_vrr_table, copy_common_maptbl),
-#ifdef CONFIG_SUPPORT_GRAYSPOT_TEST
-	[GRAYSPOT_CAL_MAPTBL] = DEFINE_0D_MAPTBL(unbound2_a3_s0_grayspot_cal_table, init_common_table, NULL, copy_grayspot_cal_maptbl),
-#endif
 #ifdef CONFIG_SUPPORT_GRAM_CHECKSUM
 	[VDDM_MAPTBL] = DEFINE_2D_MAPTBL(unbound2_a3_s0_vddm_table, init_common_table, s6e3fab_getidx_vddm_table, copy_common_maptbl),
 	[GRAM_IMG_MAPTBL] = DEFINE_2D_MAPTBL(unbound2_a3_s0_gram_img_pattern_table, init_common_table, s6e3fab_getidx_gram_img_pattern_table, copy_common_maptbl),
@@ -1060,7 +1057,7 @@ static DEFINE_STATIC_PACKET(unbound2_a3_s0_grayspot_on_04, DSI_PKT_TYPE_WR, UNBO
 
 static DEFINE_STATIC_PACKET(unbound2_a3_s0_grayspot_off_01, DSI_PKT_TYPE_WR, UNBOUND2_A3_S0_GRAYSPOT_OFF_01, 0x13);
 static DEFINE_STATIC_PACKET(unbound2_a3_s0_grayspot_off_02, DSI_PKT_TYPE_WR, UNBOUND2_A3_S0_GRAYSPOT_OFF_02, 0);
-static DEFINE_PKTUI(unbound2_a3_s0_grayspot_off_03, &unbound2_a3_s0_maptbl[GRAYSPOT_CAL_MAPTBL], 1);
+static DEFINE_PKTUI(unbound2_a3_s0_grayspot_off_03, &unbound2_a3_s0_maptbl[TSET_MAPTBL], 1);
 static DEFINE_VARIABLE_PACKET(unbound2_a3_s0_grayspot_off_03, DSI_PKT_TYPE_WR, UNBOUND2_A3_S0_GRAYSPOT_OFF_03, 0x2D);
 static DECLARE_PKTUI(unbound2_a3_s0_grayspot_off_04) = {
 	{ .offset = 6, .maptbl = &unbound2_a3_s0_maptbl[ELVSS_MAPTBL] },
@@ -1580,9 +1577,6 @@ static void *unbound2_a3_s0_res_init_cmdtbl[] = {
 	&s6e3fab_restbl[RES_DATE],
 	&s6e3fab_restbl[RES_OCTA_ID],
 	&s6e3fab_restbl[RES_ELVSS_CAL_OFFSET],
-#ifdef CONFIG_SUPPORT_GRAYSPOT_TEST
-	&s6e3fab_restbl[RES_GRAYSPOT_CAL],
-#endif
 #ifdef CONFIG_DISPLAY_USE_INFO
 	&s6e3fab_restbl[RES_CHIP_ID],
 	&s6e3fab_restbl[RES_SELF_DIAG],

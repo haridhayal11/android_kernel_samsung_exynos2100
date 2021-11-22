@@ -32,10 +32,7 @@
 #include <linux/muic/common/muic.h>
 #include <linux/muic/common/muic_sysfs.h>
 #include <linux/sec_class.h>
-
-#include <linux/sec_batt.h>
-#include "../../battery/common/sec_charging_common.h"
-
+#include <linux/battery/sec_battery_common.h>
 #if IS_BUILTIN(CONFIG_MUIC_NOTIFIER)
 #if defined(CONFIG_ARCH_QCOM)
 #include <linux/sec_param.h>
@@ -501,13 +498,13 @@ static ssize_t muic_sysfs_set_afc_disable(struct device *dev,
 	param_val = pdata->afc_disable ? '1' : '0';
 
 #if IS_BUILTIN(CONFIG_MUIC_NOTIFIER)
-#if defined(CONFIG_ARCH_QCOM)
+#if defined(CONFIG_USB_DWC3_MSM)
 	ret = sec_set_param(param_index_afc_disable, &param_val);
 #else
 	ret = sec_set_param(CM_OFFSET + 1, (char)param_val);
 #endif
-	if ((!IS_ENABLED(CONFIG_ARCH_QCOM) && ret < 0) ||
-			(IS_ENABLED(CONFIG_ARCH_QCOM) && ret == false)) {
+	if ((!IS_ENABLED(CONFIG_USB_DWC3_MSM) && ret < 0) ||
+			(IS_ENABLED(CONFIG_USB_DWC3_MSM) && ret == false)) {
 		pr_err("%s:set_param failed - %02x:%02x(%d)\n", __func__,
 			param_val, curr_val, ret);
 

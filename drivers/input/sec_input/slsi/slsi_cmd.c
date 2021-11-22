@@ -12,6 +12,10 @@
 #include "slsi_dev.h"
 #include "slsi_reg.h"
 
+#if !IS_ENABLED(CONFIG_SEC_KUNIT)
+#define __visible_for_testing static
+#endif
+
 static ssize_t scrub_position_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -501,7 +505,10 @@ static ssize_t read_support_feature(struct device *dev,
 	if (ts->plat_data->support_wireless_tx)
 		feature |= INPUT_FEATURE_SUPPORT_WIRELESS_TX;
 
-	input_info(true, &ts->client->dev, "%s: %d%s%s%s%s%s%s%s\n",
+	if (ts->plat_data->support_input_monitor)
+		feature |= INPUT_FEATURE_SUPPORT_INPUT_MONITOR;
+
+	input_info(true, &ts->client->dev, "%s: %d%s%s%s%s%s%s%s%s\n",
 			__func__, feature,
 			feature & INPUT_FEATURE_ENABLE_SETTINGS_AOT ? " aot" : "",
 			feature & INPUT_FEATURE_ENABLE_PRESSURE ? " pressure" : "",
@@ -509,7 +516,8 @@ static ssize_t read_support_feature(struct device *dev,
 			feature & INPUT_FEATURE_ENABLE_VRR ? " vrr" : "",
 			feature & INPUT_FEATURE_SUPPORT_OPEN_SHORT_TEST ? " openshort" : "",
 			feature & INPUT_FEATURE_SUPPORT_MIS_CALIBRATION_TEST ? " miscal" : "",
-			feature & INPUT_FEATURE_SUPPORT_WIRELESS_TX ? " wirelesstx" : "");
+			feature & INPUT_FEATURE_SUPPORT_WIRELESS_TX ? " wirelesstx" : "",
+			feature & INPUT_FEATURE_SUPPORT_INPUT_MONITOR ? " inputmonitor" : "");
 
 	return snprintf(buf, SEC_CMD_BUF_SIZE, "%d", feature);
 }
@@ -1218,7 +1226,7 @@ static void fw_update(void *device_data)
 	mutex_unlock(&ts->modechange);
 }
 
-static void get_fw_ver_bin(void *device_data)
+__visible_for_testing void get_fw_ver_bin(void *device_data)
 {
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
 	struct slsi_ts_data *ts = container_of(sec, struct slsi_ts_data, sec);
@@ -1237,7 +1245,7 @@ static void get_fw_ver_bin(void *device_data)
 	input_info(true, &ts->client->dev, "%s: %s\n", __func__, buff);
 }
 
-static void get_fw_ver_ic(void *device_data)
+__visible_for_testing void get_fw_ver_ic(void *device_data)
 {
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
 	struct slsi_ts_data *ts = container_of(sec, struct slsi_ts_data, sec);
@@ -4767,7 +4775,7 @@ NG:
 	return;
 }
 
-static void spay_enable(void *device_data)
+__visible_for_testing void spay_enable(void *device_data)
 {
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
 	struct slsi_ts_data *ts = container_of(sec, struct slsi_ts_data, sec);
@@ -4870,7 +4878,7 @@ NG:
 	sec_cmd_set_cmd_exit(sec);
 }
 
-static void aod_enable(void *device_data)
+__visible_for_testing void aod_enable(void *device_data)
 {
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
 	struct slsi_ts_data *ts = container_of(sec, struct slsi_ts_data, sec);
@@ -4903,7 +4911,7 @@ static void aod_enable(void *device_data)
 	return;
 }
 
-static void aot_enable(void *device_data)
+__visible_for_testing void aot_enable(void *device_data)
 {
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
 	struct slsi_ts_data *ts = container_of(sec, struct slsi_ts_data, sec);
@@ -4983,7 +4991,7 @@ NG:
 	sec_cmd_set_cmd_exit(sec);
 }
 
-static void fod_enable(void *device_data)
+__visible_for_testing void fod_enable(void *device_data)
 {
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
 	struct slsi_ts_data *ts = container_of(sec, struct slsi_ts_data, sec);
@@ -5124,7 +5132,7 @@ out:
 	return;
 }
 
-static void singletap_enable(void *device_data)
+__visible_for_testing void singletap_enable(void *device_data)
 {
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
 	struct slsi_ts_data *ts = container_of(sec, struct slsi_ts_data, sec);

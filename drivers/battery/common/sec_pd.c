@@ -144,6 +144,22 @@ void sec_pd_get_vid_pid(unsigned short *vid, unsigned short *pid, unsigned int *
 }
 EXPORT_SYMBOL(sec_pd_get_vid_pid);
 
+void sec_pd_manual_ccopen_req(int is_on)
+{
+	if (!g_psink_status) {
+		pr_err("%s: g_psink_status is NULL\n", __func__);
+		return;
+	}
+
+	if (!g_psink_status->fp_sec_pd_manual_ccopen_req) {
+		pr_err("%s: not exist\n", __func__);
+		return;
+	}
+
+	g_psink_status->fp_sec_pd_manual_ccopen_req(is_on);
+}
+EXPORT_SYMBOL(sec_pd_manual_ccopen_req);
+
 static int __init sec_pd_init(void)
 {
 	pr_info("%s: \n", __func__);

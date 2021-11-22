@@ -324,6 +324,8 @@ enum {
 #define MSG2SSP_AP_SET_FACTORY_BINARY_FLAG	0x59
 #define MSG2SSP_AP_PROX_LED_TEST_START		0x61
 #define MSG2SSP_AP_PROX_LED_TEST_DONE		0x61
+#define MSG2SSP_AP_SET_FCD_COVER_STATUS		0x63
+#define MSG2SSP_AP_SET_FCD_AXIS_THRES		0x64
 
 #define MSG2SSP_AP_REGISTER_DUMP		0x4A
 #define MSG2SSP_AP_REGISTER_SETTING		  0x4B
@@ -354,6 +356,7 @@ enum {
 #define GYROSCOPE_DPS_FACTORY	0x8B
 #define MCU_FACTORY		0x8C
 #define MCU_SLEEP_FACTORY		0x8D
+#define FCD_FACTORY			0x8E
 
 /* Factory data length */
 #define ACCEL_FACTORY_DATA_LENGTH		1
@@ -540,7 +543,15 @@ struct sensor_value {
 			u32 lux_raw;
 			u16 roi;
 		} __attribute__((__packed__)) light_cct_t;
-
+		struct {
+			u8 value;
+			s32 magX;
+			s32 stable_min_max;
+			s32 uncal_mag_x;
+			s32 uncal_mag_y;
+			s32 uncal_mag_z;
+			u8 saturation;
+		} __attribute__((__packed__));
 #ifdef CONFIG_SENSORS_SSP_IRDATA_FOR_CAMERA
 		struct {
 			u32 irdata;
@@ -791,6 +802,9 @@ struct ssp_data {
 	struct device *grip_device;
 	struct device *light_device;
 	struct device *ges_device;
+#ifdef CONFIG_SENSORS_FLIP_COVER_DETECTOR
+	struct device *fcd_device;
+#endif
 #ifdef SENSORS_SSP_IRLED
 	struct device *irled_device;
 #endif
@@ -1040,6 +1054,14 @@ struct ssp_data {
 		u8 ret;
 		short adc[4];
 	} __attribute__((__packed__)) prox_led_test;
+#ifdef CONFIG_SENSORS_FLIP_COVER_DETECTOR
+	struct flip_cover_detector_data_t {
+		int factory_cover_status;
+		int nfc_cover_status;
+		uint8_t axis_update;
+		int32_t threshold_update;
+	} fcd_data;
+#endif
 };
 
 //#if defined (CONFIG_SENSORS_SSP_VLTE)
@@ -1083,6 +1105,9 @@ void initialize_pressure_factorytest(struct ssp_data *data);
 void initialize_thermistor_factorytest(struct ssp_data *data);
 void initialize_magnetic_factorytest(struct ssp_data *data);
 void initialize_gesture_factorytest(struct ssp_data *data);
+#ifdef CONFIG_SENSORS_FLIP_COVER_DETECTOR
+void initialize_fcd_factorytest(struct ssp_data *data);
+#endif
 #ifdef CONFIG_SENSORS_SSP_IRLED
 void initialize_irled_factorytest(struct ssp_data *data);
 #endif
@@ -1097,6 +1122,9 @@ void remove_pressure_factorytest(struct ssp_data *data);
 void remove_thremistor_factorytest(struct ssp_data *data);
 void remove_magnetic_factorytest(struct ssp_data *data);
 void remove_gesture_factorytest(struct ssp_data *data);
+#ifdef CONFIG_SENSORS_FLIP_COVER_DETECTOR
+void remove_fcd_factorytest(struct ssp_data *data);
+#endif
 #ifdef CONFIG_SENSORS_SSP_IRLED
 void remove_irled_factorytest(struct ssp_data *data);
 #endif
@@ -1146,6 +1174,10 @@ int initialize_magnetic_sensor(struct ssp_data *data);
 int initialize_light_sensor(struct ssp_data *data);
 int initialize_thermistor_table(struct ssp_data *data);
 int set_ap_information(struct ssp_data *data);
+#ifdef CONFIG_SENSORS_FLIP_COVER_DETECTOR
+int set_flip_cover_detector_status(struct ssp_data *data);
+void check_cover_detection_factory(struct ssp_data *data, struct sensor_value *flip_cover_detector_data);
+#endif
 int set_sensor_position(struct ssp_data *data);
 #ifdef CONFIG_SENSORS_MULTIPLE_GLASS_TYPE
 int set_glass_type(struct ssp_data *data);
@@ -1225,6 +1257,9 @@ void report_tap_tracker_data(struct ssp_data *data, int sensor_type, struct sens
 void report_shake_tracker_data(struct ssp_data *data, int sensor_type, struct sensor_value *shake_tracker_data);
 void report_light_seamless_data(struct ssp_data *data, int sensor_type, struct sensor_value *light_seamless_data);
 
+#ifdef CONFIG_SENSORS_FLIP_COVER_DETECTOR
+void report_flip_cover_detector_data(struct ssp_data *data, int sensor_type, struct sensor_value *flip_cover_detector_data);
+#endif
 unsigned int get_module_rev(struct ssp_data *data);
 void reset_mcu(struct ssp_data *data);
 int sensors_register(struct device *dev, void *drvdata,

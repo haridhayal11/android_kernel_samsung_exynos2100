@@ -23,6 +23,10 @@
 #include "../panel_debug.h"
 #include "../dpui.h"
 
+#if IS_ENABLED(CONFIG_SEC_ABC)
+#include <linux/sti/abc_common.h>
+#endif
+
 #ifdef PANEL_PR_TAG
 #undef PANEL_PR_TAG
 #define PANEL_PR_TAG	"ddi"
@@ -2288,6 +2292,10 @@ static void show_dsi_err(struct dumpinfo *info)
 	panel_info("====================================================\n");
 
 	inc_dpui_u32_field(DPUI_KEY_PNDSIE, dsi_err[0]);
+#if IS_ENABLED(CONFIG_SEC_ABC)
+	if (dsi_err[0] > 0)
+		sec_abc_send_event("MODULE=display@ERROR=act_section_panel_main_dsi_error");
+#endif
 }
 
 static void show_self_diag(struct dumpinfo *info)

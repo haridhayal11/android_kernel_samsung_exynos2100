@@ -84,6 +84,7 @@ typedef enum {
 	PDIC_NOTIFY_PIN_STATUS_PDIC_ERROR		= 5,
 	PDIC_NOTIFY_PIN_STATUS_DISABLED			= 6,
 	PDIC_NOTIFY_PIN_STATUS_RFU				= 7,
+	PDIC_NOTIFY_PIN_STATUS_NOCC_USB_ACTIVE	= 8,
 } pdic_notifier_pin_status_t;
 
 typedef enum {

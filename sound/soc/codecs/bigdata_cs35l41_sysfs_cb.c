@@ -210,6 +210,33 @@ static int get_cirrus_amp_curr_temperature(enum amp_id id)
 	return value;
 }
 
+static int set_cirrus_amp_surface_temperature(enum amp_id id, int temperature)
+{
+	struct snd_soc_component *component = cirrus_amp_component;
+	int value = 0;
+
+	if (!component) {
+		pr_err("%s: component NULL\n", __func__);
+		return -EPERM;
+	}
+
+	dev_dbg(component->dev, "%s: %d\n", __func__, id);
+
+	if (id >= AMP_ID_MAX) {
+		dev_err(component->dev, "%s: invalid id\n", __func__);
+		return -EINVAL;
+	}
+
+	value = cs35l41_set_surface_temp(cirrus_amp_suffix[id], temperature);
+	if (value < 0) {
+		dev_err(component->dev, "%s: Amp%d is not enabled\n",
+				__func__, id);
+		return -EINVAL;
+	}
+
+	return value;
+}
+
 void register_cirrus_bigdata_cb(struct snd_soc_component *component)
 {
 	cirrus_amp_component = component;
@@ -222,5 +249,6 @@ void register_cirrus_bigdata_cb(struct snd_soc_component *component)
 	audio_register_excursion_max_cb(get_cirrus_amp_excursion_max);
 	audio_register_excursion_overcount_cb(get_cirrus_amp_excursion_overcount);
 	audio_register_curr_temperature_cb(get_cirrus_amp_curr_temperature);
+	audio_register_surface_temperature_cb(set_cirrus_amp_surface_temperature);
 }
 EXPORT_SYMBOL_GPL(register_cirrus_bigdata_cb);

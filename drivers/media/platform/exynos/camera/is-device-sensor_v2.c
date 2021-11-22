@@ -1348,10 +1348,6 @@ static int is_sensor_notify_by_fend(struct is_device_sensor *device, void *arg,
 #endif
 	group = &device->group_sensor;
 
-	/* if OTF case, skip buffer done for sensor leader's frame */
-	if (test_bit(IS_SENSOR_OTF_OUTPUT, &device->state))
-		goto p_err;
-
 	framemgr = GET_SUBDEV_FRAMEMGR(&group->head->leader);
 	FIMC_BUG(!framemgr);
 
@@ -1359,6 +1355,20 @@ static int is_sensor_notify_by_fend(struct is_device_sensor *device, void *arg,
 
 	framemgr_e_barrier_irqs(framemgr, 0, flags);
 	frame = peek_frame(framemgr, FS_PROCESS);
+	if (frame) {
+		status = *(u32 *)arg;
+		if (status) {
+			mgrinfo("[ERR] NDONE(%d, E%d)\n", group, group, frame, frame->index, status);
+			done_state = VB2_BUF_STATE_ERROR;
+			frame->result = status;
+		} else {
+			mgrdbgs(1, " DONE(%d)\n", group, group, frame, frame->index);
+		}
+	}
+
+	/* if OTF case, skip buffer done for sensor leader's frame */
+	if (test_bit(IS_SENSOR_OTF_OUTPUT, &device->state))
+		goto p_err;
 
 	/*
 	 * This processing frame's fcount should be equals to sensor device's fcount.
@@ -1380,23 +1390,15 @@ static int is_sensor_notify_by_fend(struct is_device_sensor *device, void *arg,
 #endif
 		TIME_SHOT(TMS_SDONE);
 #endif
-		status = *(u32 *)arg;
-		if (status) {
-			mgrinfo("[ERR] NDONE(%d, E%X)\n", group, group, frame, frame->index, status);
-			done_state = VB2_BUF_STATE_ERROR;
-		} else {
-			mgrdbgs(1, " DONE(%d)\n", group, group, frame, frame->index);
-		}
-
 		clear_bit(group->leader.id, &frame->out_flag);
 		is_group_done(device->groupmgr, group, frame, done_state);
 		trans_frame(framemgr, frame, FS_COMPLETE);
 		CALL_VOPS(vctx, done, frame->index, done_state);
 	}
 
+p_err:
 	framemgr_x_barrier_irqr(framemgr, 0, flags);
 
-p_err:
 	return ret;
 }
 
@@ -2202,7 +2204,7 @@ static int is_sensor_i2c_dummy_module_set(struct is_device_sensor *device, struc
 }
 
 int is_sensor_map_sensor_module(struct is_device_ischain *device, int position,
-		struct is_device_sensor *sensor, int *sensor_id)
+		int *sensor_id)
 {
 	int ret = 0;
 	struct is_core *core = (struct is_core *)dev_get_drvdata(is_dev);
@@ -2855,7 +2857,7 @@ int is_sensor_s_framerate(struct is_device_sensor *device,
 	subdev_csi = device->subdev_csi;
 
 	if (framerate == 0) {
-		mwarn("frame rate 0 request is ignored", device);
+		minfo("[%s] frame rate 0 request is ignored", device, __func__);
 		goto p_err;
 	}
 
@@ -3684,7 +3686,7 @@ static int is_sensor_back_stop(void *qdevice,
 	group = &device->group_sensor;
 
 	if (!test_bit(IS_SENSOR_BACK_START, &device->state)) {
-		mwarn("already back stop", device);
+		minfo("[%s] already back stop", device, __func__);
 		goto p_err;
 	}
 
@@ -3895,7 +3897,7 @@ int is_sensor_front_stop(struct is_device_sensor *device, bool fstop)
 	}
 
 	if (!test_bit(IS_SENSOR_FRONT_START, &device->state)) {
-		mwarn("already front stop", device);
+		minfo("[%s] already front stop", device, __func__);
 		goto already_stopped;
 	}
 

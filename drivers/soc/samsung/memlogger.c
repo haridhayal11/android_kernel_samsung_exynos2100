@@ -124,6 +124,7 @@ struct memlog_obj_prv {
 
 	char obj_name[64];
 	int obj_minor;
+	bool eob;
 	struct memlog_obj obj;
 };
 
@@ -468,6 +469,7 @@ int memlog_write(struct memlog_obj *obj, int log_level,
 		dest = obj->vaddr;
 		curr_ptr = prvobj->curr_ptr;
 		prvobj->curr_ptr = obj->vaddr + size;
+		prvobj->eob = true;
 
 		memset(curr_ptr, 0x0,
 			((u64)(obj->vaddr) + obj->size) - (u64)(curr_ptr));
@@ -552,8 +554,10 @@ int memlog_write_array(struct memlog_obj *obj, int log_level, void *src)
 	idx = prvobj->log_idx++;
 
 	if (!prvobj->support_file) {
-		if (prvobj->log_idx >= prvobj->max_idx)
+		if (prvobj->log_idx >= prvobj->max_idx) {
 			prvobj->log_idx = 0;
+			prvobj->eob = true;
+		}
 		raw_spin_unlock_irqrestore(&prvobj->log_lock, flags);
 	}
 
@@ -598,6 +602,7 @@ int memlog_write_array(struct memlog_obj *obj, int log_level, void *src)
 			}
 			prvobj->read_log_idx = 0;
 			prvobj->log_idx = 0;
+			prvobj->eob = true;
 		} else if (atomic_read(&file_prvobj->open_cnt) &&
 							!prvobj->is_full) {
 			if (((prvobj->log_idx - prvobj->read_log_idx) *
@@ -731,6 +736,7 @@ int memlog_write_vsprintf(struct memlog_obj *obj, int log_level,
 		dest = obj->vaddr;
 		curr_ptr = prvobj->curr_ptr;
 		prvobj->curr_ptr = obj->vaddr + log_len;
+		prvobj->eob = true;
 
 		memset(curr_ptr, 0x0,
 			((u64)(obj->vaddr) + obj->size) - (u64)(curr_ptr));
@@ -2994,100 +3000,88 @@ static void *memlog_dumpstate_find_eob(void *vaddr, size_t size)
 	return (void *)&buf[idx];
 }
 
-static size_t memlog_dumpstate_copy_data(struct memlog_obj_prv *prvobj,
-						void *buf, size_t max)
+static size_t get_range_size_of_circular_buf(size_t buf, size_t size, size_t start, size_t end)
+{
+	return (end + size - start) % size;
+}
+
+static size_t memlog_dumpstate_copy_data(struct memlog_obj_prv *prvobj, void *buf, size_t max)
 {
 	void *eob;
+	void *data_buf;
 	unsigned long flags;
+	size_t curr_ptr_before_memcpy;
+	size_t curr_ptr_after_memcpy;
 	size_t copy_size;
+	size_t overwritten_data_size = 0;
+	size_t total_copy_size = 0;
 	struct memlog *desc = prvobj->obj.parent;
 	size_t n = 0;
 
-	n += scnprintf(buf + n, max - n, "%s, %s start\n", desc->dev_name,
-							prvobj->obj_name);
-	raw_spin_lock_irqsave(&prvobj->log_lock, flags);
+	data_buf = vzalloc(prvobj->obj.size);
+	if (!data_buf)
+		return scnprintf(buf, max, "%s, %s fail(fail to vzalloc)\n",
+							desc->dev_name, prvobj->obj_name);
 
-	eob = memlog_dumpstate_find_eob(prvobj->obj.vaddr, prvobj->obj.size);
-	if ((size_t)eob > (size_t)prvobj->curr_ptr) {
-		copy_size = (size_t)eob - (size_t)prvobj->curr_ptr + 1;
-		if (copy_size <= (max - n)) {
-			memcpy(buf + n, prvobj->curr_ptr, copy_size);
-			n += copy_size;
-		}
+	n += scnprintf(buf + n, max - n, "%s, %s start\n", desc->dev_name, prvobj->obj_name);
+
+	raw_spin_lock_irqsave(&prvobj->log_lock, flags);
+	if (prvobj->eob)
+		eob = memlog_dumpstate_find_eob(prvobj->obj.vaddr, prvobj->obj.size);
+	else
+		eob = NULL;
+	curr_ptr_before_memcpy = (size_t)prvobj->curr_ptr;
+	raw_spin_unlock_irqrestore(&prvobj->log_lock, flags);
+
+	if ((size_t)eob > curr_ptr_before_memcpy) {
+		copy_size = (size_t)eob - curr_ptr_before_memcpy + 1;
+		memcpy(data_buf, (void *)curr_ptr_before_memcpy, copy_size);
+		total_copy_size = copy_size;
 	}
 
-	copy_size = (size_t)prvobj->curr_ptr - (size_t)prvobj->obj.vaddr;
-	if (copy_size <= (max - n)) {
-		memcpy(buf + n, prvobj->obj.vaddr, copy_size);
+	copy_size = (size_t)curr_ptr_before_memcpy - (size_t)prvobj->obj.vaddr;
+	memcpy(data_buf + total_copy_size, prvobj->obj.vaddr, copy_size);
+	total_copy_size += copy_size;
+
+	raw_spin_lock_irqsave(&prvobj->log_lock, flags);
+	curr_ptr_after_memcpy = (size_t)prvobj->curr_ptr;
+	raw_spin_unlock_irqrestore(&prvobj->log_lock, flags);
+
+	overwritten_data_size = get_range_size_of_circular_buf((size_t)prvobj->obj.vaddr,
+								prvobj->obj.size,
+								curr_ptr_before_memcpy,
+								curr_ptr_after_memcpy);
+	copy_size = total_copy_size - overwritten_data_size;
+	if ((max - n) >= copy_size) {
+		memcpy(buf + n, data_buf + overwritten_data_size, copy_size);
 		n += copy_size;
 	}
+	vfree(data_buf);
+	n += scnprintf(buf + n, max - n, "%s, %s end\n\n", desc->dev_name, prvobj->obj_name);
 
-	raw_spin_unlock_irqrestore(&prvobj->log_lock, flags);
-	n += scnprintf(buf + n, max - n, "%s, %s end\n\n", desc->dev_name,
-							prvobj->obj_name);
 	return n;
 }
 
-static size_t memlog_dumpstate_copy_parsed_data(struct memlog_obj_prv *prvobj,
-							void *buf, size_t max)
+static size_t _memlog_dumpstate_copy_parsed_data(struct memlog_obj_prv *prvobj,
+								void *buf, size_t max,
+								void *src, size_t src_size)
 {
-	void *eob;
-	unsigned long flags;
 	size_t remained;
-	size_t copy_size;
-	size_t parsed_data_size;
-	void *curr_ptr;
 	void *copy_ptr;
-	struct memlog *desc = prvobj->obj.parent;
 	int expired_cnt;
 	size_t n = 0;
 
-	n += scnprintf(buf + n, max - n, "%s, %s start\n", desc->dev_name,
-							prvobj->obj_name);
-	raw_spin_lock_irqsave(&prvobj->log_lock, flags);
+	copy_ptr = src;
+	remained = src_size;
+	expired_cnt = 10000;
+	while (remained && (expired_cnt > 0) && (n < max)) {
+		size_t parsed_data_size;
+		size_t copy_size = 0;
 
-	if (prvobj->obj.log_type == MEMLOG_TYPE_DEFAULT)
-		curr_ptr = prvobj->curr_ptr;
-	else
-		curr_ptr = prvobj->obj.vaddr +
-				((size_t)prvobj->log_idx *
-				prvobj->array_unit_size);
-	copy_ptr = curr_ptr;
-
-	eob = memlog_dumpstate_find_eob(prvobj->obj.vaddr, prvobj->obj.size);
-	if ((size_t)eob > (size_t)copy_ptr) {
-		remained = ((size_t)prvobj->obj.vaddr + prvobj->obj.size) -
-							(size_t)copy_ptr;
-		expired_cnt = 10000;
-		while (remained && (expired_cnt > 0) && (n < max)) {
-			copy_size = 0;
-			parsed_data_size = prvobj->to_string(copy_ptr,
+		parsed_data_size = prvobj->to_string(copy_ptr,
 							remained, buf + n,
 							max - n,
 							(loff_t *)&copy_size);
-			if (parsed_data_size > remained)
-				parsed_data_size = remained;
-			remained -= parsed_data_size;
-			copy_ptr += parsed_data_size;
-
-			if (max <= (n + copy_size)) {
-				n = max;
-				break;
-			}
-			n += copy_size;
-			expired_cnt--;
-		}
-	}
-
-	copy_ptr = prvobj->obj.vaddr;
-	remained = (size_t)curr_ptr - (size_t)copy_ptr;
-	expired_cnt = 10000;
-	while (remained && (expired_cnt > 0) && (n < max)) {
-		copy_size = 0;
-		parsed_data_size = prvobj->to_string(copy_ptr,
-						remained, buf + n,
-						max - n,
-						(loff_t *)&copy_size);
 		if (parsed_data_size > remained)
 			parsed_data_size = remained;
 		remained -= parsed_data_size;
@@ -3101,9 +3095,77 @@ static size_t memlog_dumpstate_copy_parsed_data(struct memlog_obj_prv *prvobj,
 		expired_cnt--;
 	}
 
+	return n;
+}
+
+static size_t memlog_dumpstate_copy_parsed_data(struct memlog_obj_prv *prvobj,
+							void *buf, size_t max)
+{
+	void *eob;
+	void *data_buf;
+	unsigned long flags;
+	size_t curr_ptr_before_memcpy;
+	size_t curr_ptr_after_memcpy;
+	size_t copy_size;
+	size_t total_copy_size = 0;
+	size_t overwritten_data_size = 0;
+	struct memlog *desc = prvobj->obj.parent;
+	size_t n = 0;
+
+	data_buf = vzalloc(prvobj->obj.size);
+	if (!data_buf)
+		return scnprintf(buf, max, "%s, %s fail(fail to vzalloc)\n",
+							desc->dev_name, prvobj->obj_name);
+
+	n += scnprintf(buf + n, max - n, "%s, %s start\n", desc->dev_name, prvobj->obj_name);
+
+	raw_spin_lock_irqsave(&prvobj->log_lock, flags);
+	if (prvobj->obj.log_type == MEMLOG_TYPE_DEFAULT) {
+		if (prvobj->eob)
+			eob = memlog_dumpstate_find_eob(prvobj->obj.vaddr, prvobj->obj.size);
+		else
+			eob = NULL;
+		curr_ptr_before_memcpy = (size_t)prvobj->curr_ptr;
+	} else {
+		if (prvobj->eob)
+			eob = prvobj->obj.vaddr + prvobj->obj.size - 1;
+		else
+			eob = NULL;
+		curr_ptr_before_memcpy = (size_t)prvobj->obj.vaddr +
+						((size_t)prvobj->log_idx *
+						prvobj->array_unit_size);
+	}
 	raw_spin_unlock_irqrestore(&prvobj->log_lock, flags);
-	n += scnprintf(buf + n, max - n, "%s, %s end\n\n", desc->dev_name,
-							prvobj->obj_name);
+
+	if ((size_t)eob > curr_ptr_before_memcpy) {
+		copy_size = (size_t)eob - curr_ptr_before_memcpy + 1;
+		memcpy(data_buf, (void *)curr_ptr_before_memcpy, copy_size);
+		total_copy_size = copy_size;
+	}
+
+	copy_size = (size_t)curr_ptr_before_memcpy - (size_t)prvobj->obj.vaddr;
+	memcpy(data_buf + total_copy_size, prvobj->obj.vaddr, copy_size);
+	total_copy_size += copy_size;
+
+	raw_spin_lock_irqsave(&prvobj->log_lock, flags);
+	if (prvobj->obj.log_type == MEMLOG_TYPE_DEFAULT)
+		curr_ptr_after_memcpy = (size_t)prvobj->curr_ptr;
+	else
+		curr_ptr_after_memcpy = (size_t)prvobj->obj.vaddr +
+						((size_t)prvobj->log_idx *
+						prvobj->array_unit_size);
+	raw_spin_unlock_irqrestore(&prvobj->log_lock, flags);
+
+	overwritten_data_size = get_range_size_of_circular_buf((size_t)prvobj->obj.vaddr,
+								prvobj->obj.size,
+								curr_ptr_before_memcpy,
+								curr_ptr_after_memcpy);
+
+	copy_size = total_copy_size - overwritten_data_size;
+	n += _memlog_dumpstate_copy_parsed_data(prvobj, buf + n, max - n,
+						data_buf + overwritten_data_size, copy_size);
+	vfree(data_buf);
+	n += scnprintf(buf + n, max - n, "%s, %s end\n\n", desc->dev_name, prvobj->obj_name);
 
 	return n;
 }
@@ -3347,8 +3409,10 @@ out:
 
 static void memlog_bl_init(struct device *dev)
 {
-	memlog_register("AP_MLG", dev, &memlog_desc);
-	if (memlog_desc) {
+	int ret;
+
+	ret = memlog_register("AP_MLG", dev, &memlog_desc);
+	if (!ret && !!memlog_desc) {
 		memlog_bl_obj = memlog_alloc_direct(memlog_desc,
 						sizeof(*main_desc.mlg_bl),
 						NULL, "etc-tbl");
@@ -3359,12 +3423,10 @@ static void memlog_bl_init(struct device *dev)
 			dev_info(dev, "%s: success alloc memlg bl\n", __func__);
 		} else {
 			main_desc.mlg_bl = NULL;
-			dev_info(dev, "%s: fail to alloc memlog_bl obj\n",
-								__func__);
+			dev_info(dev, "%s: fail to alloc memlog_bl obj\n", __func__);
 		}
 	} else {
-		dev_info(dev, "%s: fail to register memlogger desc\n",
-								__func__);
+		dev_info(dev, "%s: fail to register memlogger desc(%d)\n", __func__, ret);
 	}
 }
 

@@ -268,10 +268,8 @@ static int ssp_remove_sensor(struct ssp_data *data,
 		}
 	} else if (uChangedSensor == GYROSCOPE_SENSOR) {
 		data->cameraGyroSyncMode = false;
-		if (data->IsVDIS_Enabled) {
-			data->IsVDIS_Enabled = false;
-			send_vdis_flag(data, data->IsVDIS_Enabled);
-		}
+		data->IsVDIS_Enabled = false;
+		send_vdis_flag(data, data->IsVDIS_Enabled);
 	}
 
 	if (!data->bSspShutdown)
@@ -1371,9 +1369,9 @@ static ssize_t ssp_data_injection_write(struct file *file, const char __user *bu
 
 // sensorhub sensor type is enum, HAL layer sensor type is 1 << sensor_type. So it needs to change to enum format.
 	for (sensor_type = 0; sensor_type < SENSOR_MAX; sensor_type++) {
-		if (send_buffer[0] == (1 << sensor_type)) {
+		if (send_buffer[0] == (1ULL << sensor_type)) {
 			send_buffer[0] = sensor_type; // sensor type change to enum format.
-			pr_info("[SSP] %s sensor_type = %d %d\n", __func__, sensor_type, (1 << sensor_type));
+			pr_info("[SSP] %s sensor_type = %d %d\n", __func__, sensor_type, (1ULL << sensor_type));
 			break;
 		}
 		if (sensor_type == SENSOR_MAX - 1)
@@ -1481,6 +1479,9 @@ int initialize_sysfs(struct ssp_data *data)
 	initialize_pressure_factorytest(data);
 	initialize_magnetic_factorytest(data);
 	initialize_mcu_factorytest(data);
+#ifdef CONFIG_SENSORS_FLIP_COVER_DETECTOR
+	initialize_fcd_factorytest(data);
+#endif
 #ifdef CONFIG_SENSORS_SSP_TMG399x
 	initialize_gesture_factorytest(data);
 #endif
@@ -1516,6 +1517,9 @@ void remove_sysfs(struct ssp_data *data)
 
 	remove_accel_factorytest(data);
 	remove_gyro_factorytest(data);
+#ifdef CONFIG_SENSORS_FLIP_COVER_DETECTOR
+	remove_fcd_factorytest(data);
+#endif
 #ifndef CONFIG_SENSORS_SSP_CM3323
 	remove_prox_factorytest(data);
 #endif

@@ -20,8 +20,6 @@
 #ifndef __SEC_BATTERY_SYSFS_H
 #define __SEC_BATTERY_SYSFS_H __FILE__
 
-extern int factory_mode;
-
 ssize_t sec_bat_show_attrs(struct device *dev,
 				struct device_attribute *attr, char *buf);
 
@@ -61,6 +59,7 @@ enum sec_bat_attrs {
 	BATT_CHG_TEMP,
 	BATT_CHG_TEMP_ADC,
 	SUB_BAT_TEMP,
+	SUB_BAT_TEMP_RAW,
 	SUB_BAT_TEMP_ADC,
 	SUB_CHG_TEMP,
 	SUB_CHG_TEMP_ADC,
@@ -239,12 +238,14 @@ enum sec_bat_attrs {
 	SAFETY_TIMER_SET,
 	BATT_SWELLING_CONTROL,
 	BATT_BATTERY_ID,
+#if IS_ENABLED(CONFIG_DUAL_BATTERY)
+	BATT_SUB_BATTERY_ID,
+#endif
 	BATT_TEMP_CONTROL_TEST,
 	SAFETY_TIMER_INFO,
 	BATT_SHIPMODE_TEST,
-#if defined(CONFIG_ENG_BATTERY_CONCEPT)
+	BATT_MISC_TEST,
 	BATT_TEMP_TEST,
-#endif
 	BATT_CURRENT_EVENT,
 	BATT_JIG_GPIO,
 	CC_INFO,
@@ -252,7 +253,7 @@ enum sec_bat_attrs {
 	WC_AUTH_ADT_SENT,
 #endif
 	WC_DUO_RX_POWER,
-#if defined(CONFIG_DUAL_BATTERY)
+#if IS_ENABLED(CONFIG_DUAL_BATTERY)
 	BATT_MAIN_VOLTAGE,
 	BATT_SUB_VOLTAGE,
 	BATT_MAIN_CURRENT_MA,
@@ -260,6 +261,7 @@ enum sec_bat_attrs {
 	BATT_MAIN_CON_DET,
 	BATT_SUB_CON_DET,
 	BATT_MAIN_ENB,
+	BATT_MAIN_ENB2,
 	BATT_SUB_ENB,
 #endif
 	EXT_EVENT,
@@ -290,6 +292,7 @@ enum sec_bat_attrs {
 	WC_PARAM_INFO,
 #endif
 	CHG_INFO,
+	BATT_FULL_CAPACITY,
 };
 
 enum sec_pogo_attrs {
@@ -305,6 +308,22 @@ int sec_pogo_create_attrs(struct device *dev);
 {									\
 	.attr = {.name = #_name, .mode = 0444},	\
 	.show = sec_pogo_show_attrs,				\
+	.store = NULL,				\
+}
+
+enum sec_otg_attrs {
+	OTG_SEC_TYPE = 0,
+};
+
+ssize_t sec_otg_show_attrs(struct device *dev,
+				struct device_attribute *attr, char *buf);
+
+int sec_otg_create_attrs(struct device *dev);
+
+#define SEC_OTG_ATTR(_name)					\
+{									\
+	.attr = {.name = #_name, .mode = 0444},	\
+	.show = sec_otg_show_attrs,				\
 	.store = NULL,				\
 }
 

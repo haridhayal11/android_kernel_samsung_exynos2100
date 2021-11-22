@@ -66,6 +66,8 @@ static struct device_attribute pdic_attributes[] = {
 	PDIC_SYSFS_ATTR(water_check),
 	PDIC_SYSFS_ATTR(15mode_watertest_type),
 	PDIC_SYSFS_ATTR(vbus_adc),
+	PDIC_SYSFS_ATTR(usb_boot_mode),
+	PDIC_SYSFS_ATTR(dp_sbu_sw_sel),
 };
 
 static ssize_t pdic_sysfs_show_property(struct device *dev,

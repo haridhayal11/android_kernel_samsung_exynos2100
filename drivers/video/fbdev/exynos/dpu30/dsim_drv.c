@@ -81,12 +81,46 @@ struct dsim_device *dsim_drvdata[MAX_DSIM_CNT];
 EXPORT_SYMBOL(dsim_drvdata);
 
 #if IS_ENABLED(CONFIG_EXYNOS_MIGOV)
+#define MIGOV_PERIOD_NSEC	100000000UL
+#define FPS_UNIT_NSEC		1000000000UL	/* 1sec */
 extern u64 frame_vsync_cnt;
 extern ktime_t frame_vsync_cnt_time;
 void get_frame_vsync_cnt(u64 *cnt, ktime_t *time)
 {
-	*cnt = frame_vsync_cnt;
-	*time = frame_vsync_cnt_time;
+	struct decon_device *decon = get_decon_drvdata(0);
+	u64 lcd_fps;
+	u64 vsync_period_nsec;
+	static u64 vsync_cnt;
+	static ktime_t prev_ktime;
+	ktime_t vsync_time;
+	ktime_t cur_ktime = ktime_get();
+	ktime_t ktime_diff;
+
+	if (!IS_ERR_OR_NULL(decon->lcd_info)) {
+		lcd_fps = decon->lcd_info->fps;
+		vsync_period_nsec = FPS_UNIT_NSEC / lcd_fps;
+
+		if (vsync_cnt) {
+			if (prev_ktime) {
+				ktime_diff = cur_ktime - prev_ktime;
+				vsync_cnt += DIV_ROUND_CLOSEST(lcd_fps * ktime_diff, FPS_UNIT_NSEC);
+			} else
+				vsync_cnt += lcd_fps * MIGOV_PERIOD_NSEC / FPS_UNIT_NSEC;
+		} else
+			vsync_cnt = frame_vsync_cnt;
+
+		if ((cur_ktime - frame_vsync_cnt_time) > vsync_period_nsec)
+			vsync_time = frame_vsync_cnt_time + vsync_period_nsec;
+		else
+			vsync_time = frame_vsync_cnt_time;
+	} else {
+		vsync_cnt = frame_vsync_cnt;
+		vsync_time = frame_vsync_cnt_time;
+	}
+
+	*cnt = vsync_cnt;
+	*time = vsync_time;
+	prev_ktime = cur_ktime;
 }
 #endif
 
@@ -1056,6 +1090,10 @@ static int dsim_alloc_fcmd_memory(u32 id)
 	}
 
 	dsim->fcmd_buf_vaddr = dma_buf_vmap(dsim->fcmd_buf);
+	if (IS_ERR_OR_NULL(dsim->fcmd_buf_vaddr)) {
+		dev_err(dsim->dev, "dma_buf_vmap() failed\n");
+		goto err_map;
+	}
 
 	ret = dsim_map_ion_handle(dsim->dev, &dsim->fcmd_buf_data, dsim->fcmd_buf);
 	if (!ret)

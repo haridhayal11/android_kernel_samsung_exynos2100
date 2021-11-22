@@ -11,7 +11,9 @@
 
 #include <linux/clk-provider.h>
 #include <media/v4l2-subdev.h>
+#if !defined(CONFIG_UML)
 #include <soc/samsung/cal-if.h>
+#endif
 
 #include "videodev2_exynos_media.h"
 #include "decon.h"

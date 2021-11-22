@@ -417,38 +417,43 @@ void dbg_snapshot_ecc_dump(void)
 				dev_emerg(dss_desc.dev,
 						"Error Address : [0x%lx]\n",
 						(unsigned long)erxaddr_el1.reg);
-				if (IS_ENABLED(CONFIG_SEC_DEBUG_AUTO_COMMENT))
-					pos += scnprintf(summ_buf + pos, buf_max - pos,
-							 "[Addr:0x%lx]",
-							 (unsigned long)erxaddr_el1.reg);
+#if IS_ENABLED(CONFIG_SEC_DEBUG_AUTO_COMMENT)
+				pos += scnprintf(summ_buf + pos, buf_max - pos,
+						 "[Addr:0x%lx]",
+						 (unsigned long)erxaddr_el1.reg);
+#endif
 			}
 			if (erxstatus_el1.field.OF) {
 				dev_emerg(dss_desc.dev,
 					"There was more than one error has occurred."
 					"the other error have been discarded.\n");
-				if (IS_ENABLED(CONFIG_SEC_DEBUG_AUTO_COMMENT))
-					pos += scnprintf(summ_buf + pos, buf_max - pos,
-							 "[Overflow]");
+#if IS_ENABLED(CONFIG_SEC_DEBUG_AUTO_COMMENT)
+				pos += scnprintf(summ_buf + pos, buf_max - pos,
+						 "[Overflow]");
+#endif
 			}
 			if (erxstatus_el1.field.ER) {
 				dev_emerg(dss_desc.dev,
 					"Error Reported by external abort\n");
-				if (IS_ENABLED(CONFIG_SEC_DEBUG_AUTO_COMMENT))
-					pos += scnprintf(summ_buf + pos, buf_max - pos,
-							 "[External]");
+#if IS_ENABLED(CONFIG_SEC_DEBUG_AUTO_COMMENT)
+				pos += scnprintf(summ_buf + pos, buf_max - pos,
+						 "[External]");
+#endif
 			}
 			if (erxstatus_el1.field.UE) {
 				dev_emerg(dss_desc.dev,
 					"Uncorrected Error (Not defferred)\n");
-				if (IS_ENABLED(CONFIG_SEC_DEBUG_AUTO_COMMENT))
-					pos += scnprintf(summ_buf + pos, buf_max - pos,
-							 "[Uncorrected]");
+#if IS_ENABLED(CONFIG_SEC_DEBUG_AUTO_COMMENT)
+				pos += scnprintf(summ_buf + pos, buf_max - pos,
+						 "[Uncorrected]");
+#endif
 			}
 			if (erxstatus_el1.field.DE) {
 				dev_emerg(dss_desc.dev,	"Deffered Error\n");
-				if (IS_ENABLED(CONFIG_SEC_DEBUG_AUTO_COMMENT))
-					pos += scnprintf(summ_buf + pos, buf_max - pos,
-							 "[Deferred]");
+#if IS_ENABLED(CONFIG_SEC_DEBUG_AUTO_COMMENT)
+				pos += scnprintf(summ_buf + pos, buf_max - pos,
+						 "[Deferred]");
+#endif
 			}
 			if (erxstatus_el1.field.MV) {
 				erxmisc0_el1.reg = read_ERXMISC0_EL1();
@@ -461,19 +466,21 @@ void dbg_snapshot_ecc_dump(void)
 					(unsigned long)erxmisc1_el1.reg,
 					(unsigned long)erxstatus_el1.field.IERR,
 					(unsigned long)erxstatus_el1.field.SERR);
-				if (IS_ENABLED(CONFIG_SEC_DEBUG_AUTO_COMMENT))
-					pos += scnprintf(summ_buf + pos, buf_max - pos,
-							 "[MISC0:0x%lx][MISC1:0x%lx][IERR:0x%lx][SERR:0x%lx]",
-							 (unsigned long)erxmisc0_el1.reg,
-							 (unsigned long)erxmisc1_el1.reg,
-							 (unsigned long)erxstatus_el1.field.IERR,
-							 (unsigned long)erxstatus_el1.field.SERR);
+#if IS_ENABLED(CONFIG_SEC_DEBUG_AUTO_COMMENT)
+				pos += scnprintf(summ_buf + pos, buf_max - pos,
+						 "[MISC0:0x%lx][MISC1:0x%lx][IERR:0x%lx][SERR:0x%lx]",
+						 (unsigned long)erxmisc0_el1.reg,
+						 (unsigned long)erxmisc1_el1.reg,
+						 (unsigned long)erxstatus_el1.field.IERR,
+						 (unsigned long)erxstatus_el1.field.SERR);
+#endif
 			}
 
-			if (IS_ENABLED(CONFIG_SEC_DEBUG_AUTO_COMMENT))
-				pr_auto(ASL6, "ECC cpu:%u sel:%d status:0x%lx %s\n",
-						raw_smp_processor_id(), i,
-						erxstatus_el1.reg, summ_buf);
+#if IS_ENABLED(CONFIG_SEC_DEBUG_AUTO_COMMENT)
+			pr_auto(ASL6, "ECC cpu:%u sel:%d status:0x%lx %s\n",
+					raw_smp_processor_id(), i,
+					erxstatus_el1.reg, summ_buf);
+#endif
 		}
 		break;
 	default:

@@ -383,7 +383,9 @@ static int npu_imgloader_memcpy(struct imgloader_desc *imgloader, const u8 *meta
 
 	fwmem = npu_get_mem_area(system, "fwmemory");
 	memcpy(fwmem->vaddr, metadata, size);
-	npu_info("checking firmware head MAGIC(0x%08x)\n", *(u32 *)fwmem->vaddr);
+	//npu_info("checking firmware head MAGIC(0x%08x)\n", *(u32 *)fwmem->vaddr);
+	npu_info("checking firmware phys(%#llx), bin_size(%#zx), daddr(%#x++%#zx)\n",
+			fwmem->paddr, size, fwmem->daddr, fwmem->size);
 
 	*fw_phys_base = fwmem->paddr;
 	*fw_bin_size = size;

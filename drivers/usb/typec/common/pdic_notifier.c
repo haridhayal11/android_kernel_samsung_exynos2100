@@ -186,6 +186,8 @@ const char *pdic_ccpinstatus_string(pdic_notifier_pin_status_t ccpinstatus)
 		return "DISABLED";
 	case PDIC_NOTIFY_PIN_STATUS_RFU:
 		return "RFU";
+	case PDIC_NOTIFY_PIN_STATUS_NOCC_USB_ACTIVE:
+		return "NOCC_USB_ACTIVE";
 	default:
 		return "NO_DETERMINATION";
 	}

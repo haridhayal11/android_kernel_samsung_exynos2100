@@ -125,6 +125,18 @@ BWL_PRE_PACKED_STRUCT struct ipv4_hdr {
 	uint8	dst_ip[IPV4_ADDR_LEN];	/* Destination IP Address */
 } BWL_POST_PACKED_STRUCT;
 
+#define IPOPTION_RA		148u	/* router alert */
+#define IPOPTION_RA_LEN		4u	/* router alert length */
+
+/*
+ * Router Alert option structure.
+ */
+BWL_PRE_PACKED_STRUCT struct ip_router_alert {
+	uint8  ipra_code;		/* IPOPT_RA */
+	uint8  ipra_len;		/* size of structure (variable) */
+	uint16 ipra_data;		/* index of current entry */
+} BWL_POST_PACKED_STRUCT;
+
 /* IPV6 field offsets */
 #define IPV6_PAYLOAD_LEN_OFFSET	4	/* payload length offset */
 #define IPV6_NEXT_HDR_OFFSET	6	/* next header/protocol offset */

@@ -27,18 +27,25 @@
 #include <linux/version.h>
 #include <linux/pm_wakeup.h>
 
-#if IS_ENABLED(CONFIG_KEYBOARD_STM32_POGO)
+#if IS_ENABLED(CONFIG_KEYBOARD_STM32_POGO) || IS_ENABLED(CONFIG_KEYBOARD_STM32_POGO_V2)
 #define POGO_NOTIFIER_ENABLED
 #endif
+
 #ifdef POGO_NOTIFIER_ENABLED
 #include <linux/input/pogo_i2c_notifier.h>
+#include "../../sec_input/stm32/stm32_pogo_i2c.h"
 #endif
 
 /*
  * Switch events
  */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
+#define SW_FLIP                 0x10  /* set = flip cover open, close*/
+#define SW_HALL_LOGICAL         0x0a  /* set = logical hall ic attach/detach */
+#else
 #define SW_FLIP                 0x15  /* set = flip cover open, close*/
 #define SW_HALL_LOGICAL         0x1f  /* set = logical hall ic attach/detach */
+#endif
 
 enum LID_POSITION {
 	E_LID_0 = 1,
@@ -63,7 +70,7 @@ struct hall_drvdata {
 #endif
 };
 
-static int hall_logical_status = 1;
+static int hall_logical_status = 0;
 
 #if IS_ENABLED(CONFIG_DRV_SAMSUNG)
 static ssize_t hall_logical_detect_show(struct device *dev,
@@ -84,7 +91,7 @@ static DEVICE_ATTR_RO(hall_logical_detect);
 static int hall_logical_open(struct input_dev *input)
 {
 	/* Report current state of buttons that are connected to GPIOs */
-	input_report_switch(input, SW_FLIP, 0);
+	input_report_switch(input, SW_FLIP, hall_logical_status);
 	input_sync(input);
 
 	return 0;
@@ -291,20 +298,20 @@ static struct platform_driver hall_device_driver = {
 	}
 };
 
-static int __init hall_logical_init(void)
+int hall_logical_init(void)
 {
 	pr_info("%s start\n", __func__);
 	return platform_driver_register(&hall_device_driver);
 }
+EXPORT_SYMBOL(hall_logical_init);
 
-static void __exit hall_logical_exit(void)
+
+void hall_logical_exit(void)
 {
 	pr_info("%s start\n", __func__);
 	platform_driver_unregister(&hall_device_driver);
 }
+EXPORT_SYMBOL(hall_logical_exit);
 
-late_initcall(hall_logical_init);
-module_exit(hall_logical_exit);
-
-MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Samsung");
 MODULE_DESCRIPTION("Hall IC logical driver for GPIOs");

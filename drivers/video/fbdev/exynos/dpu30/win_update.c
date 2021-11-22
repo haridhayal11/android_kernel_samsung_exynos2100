@@ -112,6 +112,8 @@ static void win_update_check_limitation(struct decon_device *decon,
 	int sz_align = 1;
 	int adj_src_x = 0, adj_src_y = 0;
 
+	memset(&ch_res, 0, sizeof(struct dpp_ch_restriction));
+
 	/*
 	 * 'readback/fence/tui + window update' is not a HW limitation,
 	 * the update region is changed to full

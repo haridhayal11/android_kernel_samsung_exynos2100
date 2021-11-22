@@ -15,7 +15,7 @@
 #include "dl/dsp-xml-parser.h"
 
 static const char *dl_lib_path;
-struct dsp_hash_tab *dsp_lib_hash;
+static struct dsp_hash_tab *dsp_lib_hash;
 
 void dsp_lib_init(struct dsp_lib *lib, struct dsp_dl_lib_info *info)
 {
@@ -403,6 +403,27 @@ static int __dsp_lib_manager_load_bss_sec(struct dsp_lib *lib,
 		unsigned long end = (unsigned long)(dest + mem_hdr->sh_size);
 		unsigned int *addr;
 
+		if (sec.offset >
+				sec.offset + lib->link_info->sec[ndx] +
+				mem_hdr->sh_size) {
+			DL_ERROR("Overflow happened.\n");
+			return -1;
+		}
+
+		if (lib->link_info->sec[ndx] >
+				sec.offset + lib->link_info->sec[ndx] +
+				mem_hdr->sh_size) {
+			DL_ERROR("Overflow happened.\n");
+			return -1;
+		}
+
+		if (mem_hdr->sh_size >
+				sec.offset + lib->link_info->sec[ndx] +
+				mem_hdr->sh_size) {
+			DL_ERROR("Overflow happened.\n");
+			return -1;
+		}
+
 		if (sec.offset + lib->link_info->sec[ndx] + mem_hdr->sh_size >
 				lib->dl_out_data_size) {
 			DL_ERROR("invalid dest range(%u/%lu/%u/%zu)\n",
@@ -450,6 +471,27 @@ static int __dsp_lib_manager_load_sec(struct dsp_lib *lib,
 			DL_ERROR("invalid data range(%u/%u)\n",
 					mem_hdr->sh_offset,
 					mem_hdr->sh_size);
+			return -1;
+		}
+
+		if (sec.offset >
+				sec.offset + lib->link_info->sec[ndx] +
+				mem_hdr->sh_size) {
+			DL_ERROR("Overflow happened.\n");
+			return -1;
+		}
+
+		if (lib->link_info->sec[ndx] >
+				sec.offset + lib->link_info->sec[ndx] +
+				mem_hdr->sh_size) {
+			DL_ERROR("Overflow happened.\n");
+			return -1;
+		}
+
+		if (mem_hdr->sh_size >
+				sec.offset + lib->link_info->sec[ndx] +
+				mem_hdr->sh_size) {
+			DL_ERROR("Overflow happened.\n");
 			return -1;
 		}
 
@@ -523,11 +565,11 @@ int dsp_lib_manager_load_libs(struct dsp_lib **libs, size_t libs_size)
 {
 	int ret;
 	unsigned int idx;
+	struct dsp_dl_out *dl_out = NULL;
 
 	DL_DEBUG(DL_BORDER);
 	DL_DEBUG("DL lib_manager load libs\n");
 	for (idx = 0; idx < libs_size; idx++) {
-		struct dsp_dl_out *dl_out;
 
 		if (libs[idx]->loaded)
 			continue;
@@ -561,7 +603,7 @@ int dsp_lib_manager_load_libs(struct dsp_lib **libs, size_t libs_size)
 			__dsp_lib_manager_load_gpt(libs[idx]);
 		}
 
-		if (libs[idx]->dl_out && libs[idx]->dl_out_mem) {
+		if (dl_out && libs[idx]->dl_out_mem) {
 			DL_DEBUG("Load DM\n");
 			ret = __dsp_lib_manager_load_mem(libs[idx],
 					&libs[idx]->elf->DMb,

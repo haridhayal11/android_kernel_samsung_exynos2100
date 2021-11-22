@@ -12,6 +12,13 @@
 #include "slsi_dev.h"
 #include "slsi_reg.h"
 
+#if IS_ENABLED(CONFIG_SEC_KUNIT)
+__visible_for_testing struct slsi_ts_data *ts_data;
+EXPORT_SYMBOL(ts_data);
+
+kunit_notifier_chain_init(slsi_cmd_test_module);
+#endif
+
 #if IS_ENABLED(CONFIG_INPUT_SEC_SECURE_TOUCH)
 irqreturn_t secure_filter_interrupt(struct slsi_ts_data *ts)
 {
@@ -277,6 +284,11 @@ int slsi_stui_tsp_exit(void)
 
 	return ret;
 }
+
+int slsi_stui_tsp_type(void)
+{
+	return STUI_TSP_TYPE_SLSI;
+}
 #endif
 
 #if IS_ENABLED(CONFIG_INPUT_SEC_NOTIFIER)
@@ -380,14 +392,12 @@ int slsi_ts_i2c_write(struct slsi_ts_data *ts, u8 reg, u8 *data, int len)
 		usleep_range(1 * 1000, 1 * 1000);
 
 		if (retry > 1) {
+			char result[32];
 			input_err(true, &ts->client->dev, "%s: I2C retry %d, ret:%d\n", __func__, retry + 1, ret);
 			ts->plat_data->hw_param.comm_err_count++;
-			if (ts->debug_flag & SEC_TS_DEBUG_SEND_UEVENT) {
-				char result[32];
 
-				snprintf(result, sizeof(result), "RESULT=I2C");
-				sec_cmd_send_event_to_user(&ts->sec, NULL, result);
-			}
+			snprintf(result, sizeof(result), "RESULT=I2C");
+			sec_cmd_send_event_to_user(&ts->sec, NULL, result);
 		}
 	}
 
@@ -400,7 +410,7 @@ int slsi_ts_i2c_write(struct slsi_ts_data *ts, u8 reg, u8 *data, int len)
 			schedule_delayed_work(&ts->reset_work, msecs_to_jiffies(TOUCH_RESET_DWORK_TIME));
 	}
 
-	if (ts->debug_flag & SEC_TS_DEBUG_PRINT_I2C_WRITE_CMD) {
+	if (ts->debug_flag & SEC_TS_DEBUG_PRINT_WRITE_CMD) {
 		pr_info("sec_input:i2c_cmd: W: %02X | ", reg);
 		for (i = 0; i < len; i++)
 			pr_cont("%02X ", data[i]);
@@ -486,15 +496,13 @@ int slsi_ts_i2c_read(struct slsi_ts_data *ts, u8 reg, u8 *data, int len)
 			}
 
 			if (retry > 1) {
+				char result[32];
 				input_err(true, &ts->client->dev, "%s: I2C retry %d, ret:%d\n",
 					__func__, retry + 1, ret);
 				ts->plat_data->hw_param.comm_err_count++;
-				if (ts->debug_flag & SEC_TS_DEBUG_SEND_UEVENT) {
-					char result[32];
 
-					snprintf(result, sizeof(result), "RESULT=I2C");
-					sec_cmd_send_event_to_user(&ts->sec, NULL, result);
-				}
+				snprintf(result, sizeof(result), "RESULT=I2C");
+				sec_cmd_send_event_to_user(&ts->sec, NULL, result);
 			}
 		}
 	} else {
@@ -559,7 +567,7 @@ int slsi_ts_i2c_read(struct slsi_ts_data *ts, u8 reg, u8 *data, int len)
 	}
 
 	memcpy(data, buff, len);
-	if (ts->debug_flag & SEC_TS_DEBUG_PRINT_I2C_READ_CMD) {
+	if (ts->debug_flag & SEC_TS_DEBUG_PRINT_READ_CMD) {
 		pr_info("sec_input:i2c_cmd: R: %02X | ", reg);
 		for (i = 0; i < len; i++)
 			pr_cont("%02X ", data[i]);
@@ -1116,10 +1124,7 @@ int slsi_ts_input_open(struct input_dev *dev)
 	struct slsi_ts_data *ts = input_get_drvdata(dev);
 	int ret;
 
-	if (!ts->info_work_done) {
-		input_err(true, &ts->client->dev, "%s not finished info work\n", __func__);
-		return 0;
-	}
+	cancel_delayed_work_sync(&ts->work_read_info);
 
 	mutex_lock(&ts->modechange);
 
@@ -1158,10 +1163,8 @@ void slsi_ts_input_close(struct input_dev *dev)
 {
 	struct slsi_ts_data *ts = input_get_drvdata(dev);
 
-	if (!ts->info_work_done) {
-		input_err(true, &ts->client->dev, "%s not finished info work\n", __func__);
-		return;
-	}
+	cancel_delayed_work_sync(&ts->work_read_info);
+
 	if (ts->plat_data->shutdown_called) {
 		input_err(true, &ts->client->dev, "%s shutdown was called\n", __func__);
 		return;
@@ -1180,7 +1183,7 @@ void slsi_ts_input_close(struct input_dev *dev)
 #if IS_ENABLED(CONFIG_INPUT_SEC_SECURE_TOUCH)
 	secure_touch_stop(ts, 1);
 #endif
-#if IS_ENABLED(CONFIG_SAMSUNG_TUI) && IS_ENABLED(CONFIG_TEE_CLIENT_KAPI)
+#if IS_ENABLED(CONFIG_SAMSUNG_TUI)
 	stui_cancel_session();
 #endif
 
@@ -1490,6 +1493,7 @@ static int slsi_ts_init(struct i2c_client *client)
 #if IS_ENABLED(CONFIG_SAMSUNG_TUI)
 	ts->plat_data->stui_tsp_enter = slsi_stui_tsp_enter;
 	ts->plat_data->stui_tsp_exit = slsi_stui_tsp_exit;
+	ts->plat_data->stui_tsp_type = slsi_stui_tsp_type;
 #endif
 
 	ts->tdata = tdata;
@@ -1619,14 +1623,6 @@ int slsi_ts_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	struct slsi_ts_data *ts;
 	int ret = 0;
 
-#if IS_ENABLED(CONFIG_BATTERY_SAMSUNG)
-	if (lpcharge == 1) {
-		input_info(true, &client->dev,
-			"%s: Do not load driver due to : lpm %d\n",	__func__, lpcharge);
-		return -ENODEV;
-	}
-#endif
-
 	input_info(true, &client->dev, "%s\n", __func__);
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
@@ -1674,6 +1670,10 @@ int slsi_ts_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	if (!ts->plat_data->shutdown_called)
 		schedule_delayed_work(&ts->work_read_info, msecs_to_jiffies(50));
 
+#if IS_ENABLED(CONFIG_SEC_KUNIT)
+	ts_data = ts;
+	kunit_notifier_chain_register(slsi_cmd_test_module);
+#endif
 	return 0;
 }
 
@@ -1692,6 +1692,9 @@ int slsi_ts_remove(struct i2c_client *client)
 
 	slsi_ts_release(client);
 
+#if IS_ENABLED(CONFIG_SEC_KUNIT)
+	kunit_notifier_chain_unregister(slsi_cmd_test_module);
+#endif
 	return 0;
 }
 

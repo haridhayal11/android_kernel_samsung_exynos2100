@@ -37,6 +37,7 @@
 #define SEC_CONN_PRINT(format, ...) \
 	pr_info("[ABC_COND] " format, ##__VA_ARGS__)
 #define ABCEVENT_CONN_MAX_DEV_STRING 120
+#define ABC_CONN_DEBOUNCE_TIME_MS 300
 
 /* This value is used for checking gpio irq is enabled or not. */
 static int detect_conn_enabled;
@@ -184,11 +185,12 @@ void check_and_send_ABC_event_irq(int irq, struct abc_hub_info *pinfo,
 	for (i = 0; i < pinfo->pdata->cond.gpio_total_cnt; i++) {
 		if (irq != pinfo->pdata->cond.irq_num[i])
 			continue;
-		/* if edge interrupt occurs, check level one more.*/
+		/* if edge interrupt occurs, check level twice more.*/
 		/* and if it still level high send ABC_event.*/
-		usleep_range(1 * 1000, 1 * 1000);
+		usleep_range(ABC_CONN_DEBOUNCE_TIME_MS * 1000, ABC_CONN_DEBOUNCE_TIME_MS * 1000);
 		if (gpio_get_value(pinfo->pdata->cond.irq_gpio[i]))
-			send_ABC_event_by_num(i, pinfo, 1);
+			if (gpio_get_value(pinfo->pdata->cond.irq_gpio[i]))
+				send_ABC_event_by_num(i, pinfo, 1);
 
 		SEC_CONN_PRINT("%s status changed.\n",
 			       pinfo->pdata->cond.name[i]);

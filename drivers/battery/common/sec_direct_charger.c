@@ -100,6 +100,9 @@ static bool sec_direct_chg_set_switching_charge(
 static int sec_direct_chg_check_charging_source(struct sec_direct_charger_info *charger)
 {
 	union power_supply_propval value = {0,};
+#if defined(CONFIG_DUAL_BATTERY_CELL_SENSING)
+	union power_supply_propval value2 = {0,};
+#endif
 
 	pr_info("%s: dc_retry_cnt(%d)\n", __func__, charger->dc_retry_cnt);
 
@@ -143,6 +146,23 @@ static int sec_direct_chg_check_charging_source(struct sec_direct_charger_info *
 		return SEC_CHARGING_SOURCE_SWITCHING;
 	}
 
+	/* check mix limit */
+	psy_do_property("battery", get, POWER_SUPPLY_EXT_PROP_MIX_LIMIT, value);
+	if (value.intval) {
+		pr_info("%s:  S/C was selected! mix_limit(%d)\n", __func__, value.intval);
+		return SEC_CHARGING_SOURCE_SWITCHING;
+	}
+
+#if IS_ENABLED(CONFIG_DUAL_BATTERY)
+	/* check Tsub temperature */
+	psy_do_property("battery", get, POWER_SUPPLY_EXT_PROP_SUB_TEMP, value);
+	if (value.intval <= charger->pdata->dchg_temp_low_threshold ||
+			value.intval >= charger->pdata->dchg_temp_high_threshold) {
+		pr_info("%s:  S/C was selected! Tsub(%d)\n", __func__, value.intval);
+		return SEC_CHARGING_SOURCE_SWITCHING;
+	}
+#endif
+
 	/* check current event */
 	psy_do_property("battery", get, POWER_SUPPLY_EXT_PROP_CURRENT_EVENT, value);
 	if (value.intval & SEC_BAT_CURRENT_EVENT_SWELLING_MODE ||
@@ -179,7 +199,16 @@ static int sec_direct_chg_check_charging_source(struct sec_direct_charger_info *
 
 	/* check charging status */
 	psy_do_property("battery", get, POWER_SUPPLY_EXT_PROP_DIRECT_HAS_APDO, value);
-	if (charger->direct_chg_done || (charger->capacity >= 95) || !value.intval || charger->store_mode) {
+#if defined(CONFIG_DUAL_BATTERY_CELL_SENSING)
+	psy_do_property("battery", get,
+		POWER_SUPPLY_EXT_PROP_DIRECT_VBAT_CHECK, value2);
+
+	if (charger->direct_chg_done || (charger->capacity >= 95) || !value.intval || value2.intval ||
+		charger->store_mode)
+#else
+	if (charger->direct_chg_done || (charger->capacity >= 95) || !value.intval || charger->store_mode)
+#endif
+	{
 		pr_info("%s:  S/C was selected! dc_done(%s), SoC(%d), has_apdo(%d)\n",
 				__func__, charger->direct_chg_done ? "TRUE" : "FALSE",
 				charger->capacity, value.intval);
@@ -191,21 +220,18 @@ static int sec_direct_chg_check_charging_source(struct sec_direct_charger_info *
 static int sec_direct_chg_set_charging_source(struct sec_direct_charger_info *charger,
 		unsigned int charger_mode, int charging_source)
 {
+	union power_supply_propval value = {0,};
+
 	mutex_lock(&charger->charger_mutex);
 	if (charging_source == SEC_CHARGING_SOURCE_DIRECT &&
 		charger_mode == SEC_BAT_CHG_MODE_CHARGING) {
 		sec_direct_chg_set_switching_charge(charger, SEC_BAT_CHG_MODE_BUCK_OFF);
 		sec_direct_chg_set_direct_charge(charger, SEC_BAT_CHG_MODE_CHARGING);
-		if (charger->fpdo_pos == 0) {
-			union power_supply_propval value = {0,};
 
-			psy_do_property("battery", get,
-					POWER_SUPPLY_EXT_PROP_DIRECT_FIXED_PDO, value);
-			pr_info("%s : fixed pdo number change (%d -> %d)\n", __func__, charger->fpdo_pos, value.intval);
-			charger->fpdo_pos = value.intval;
-		}
+		value.intval = SEC_INPUT_VOLTAGE_APDO;
+		psy_do_property("battery", set,
+				POWER_SUPPLY_EXT_PROP_DIRECT_FIXED_PDO, value);
 	} else {
-		union power_supply_propval value = {0,};
 
 		psy_do_property("battery", get,
 					POWER_SUPPLY_EXT_PROP_DIRECT_CHARGER_MODE, value);
@@ -220,14 +246,10 @@ static int sec_direct_chg_set_charging_source(struct sec_direct_charger_info *ch
 			charger->ta_alert_mode =  value.intval;
 		}
 
-		if ((is_pd_apdo_wire_type(charger->cable_type) &&
-			(charger->now_isApdo ||
-			(charger->dc_err && (charger->ta_alert_mode == OCP_NONE)) ||
-			(!charger->hv_pdo && (charger->fpdo_pos > 1)))) &&
-			charger->batt_status != POWER_SUPPLY_STATUS_DISCHARGING) {
-			if ((charger->wc_tx_enable && charger->now_isApdo) || !charger->wc_tx_enable)
-				sec_pd_select_pdo(charger->fpdo_pos);
-		}
+		value.intval = SEC_INPUT_VOLTAGE_9V;
+		psy_do_property("battery", set,
+				POWER_SUPPLY_EXT_PROP_DIRECT_FIXED_PDO, value);
+
 		sec_direct_chg_set_direct_charge(charger, SEC_BAT_CHG_MODE_CHARGING_OFF);
 		sec_direct_chg_set_switching_charge(charger, charger_mode);
 	}
@@ -276,7 +298,7 @@ static int sec_direct_chg_set_input_current(struct sec_direct_charger_info *char
 
 	value.intval = input_current;
 	psy_do_property(charger->pdata->main_charger_name, set,
-		POWER_SUPPLY_PROP_CURRENT_MAX, value);
+		POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT, value);
 
 	/* direct charger input current is based on charging current */
 	return 0;
@@ -291,13 +313,8 @@ static int sec_direct_chg_set_charging_current(struct sec_direct_charger_info *c
 
 	/* main charger */
 	value.intval = charging_current;
-	if (psp == POWER_SUPPLY_PROP_CURRENT_AVG) {
-		psy_do_property(charger->pdata->main_charger_name, set,
-			POWER_SUPPLY_PROP_CURRENT_AVG, value);
-	} else {
-		psy_do_property(charger->pdata->main_charger_name, set,
-			POWER_SUPPLY_PROP_CURRENT_NOW, value);
-	}
+	psy_do_property(charger->pdata->main_charger_name, set,
+		POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT, value);
 
 	/* direct charger */
 	if (is_pd_apdo_wire_type(charger->cable_type)) {
@@ -308,7 +325,7 @@ static int sec_direct_chg_set_charging_current(struct sec_direct_charger_info *c
 		if (charging_source == SEC_CHARGING_SOURCE_DIRECT) {
 			value.intval = charger->dc_input_current;
 			psy_do_property(charger->pdata->direct_charger_name, set,
-				POWER_SUPPLY_PROP_CURRENT_MAX, value);
+				POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT, value);
 		}
 		sec_direct_chg_set_charging_source(charger, charger->charger_mode, charging_source);
 	}
@@ -327,7 +344,6 @@ static void sec_direct_chg_set_initial_status(struct sec_direct_charger_info *ch
 	}
 	charger->direct_chg_done = false;
 
-	charger->fpdo_pos = 0;
 	charger->dc_charging_current = charger->pdata->dchg_min_current;
 	charger->dc_input_current = charger->dc_charging_current / 2;
 	charger->dc_err = false;
@@ -374,7 +390,7 @@ static int sec_direct_chg_get_property(struct power_supply *psy,
 		}
 		val->intval = value.intval;
 		break;
-	case POWER_SUPPLY_PROP_CURRENT_MAX: /* get input current which was set */
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT: /* get input current which was set */
 		psy_do_property(charger->pdata->main_charger_name, get, psp, value);
 		if (is_direct_chg_mode_on(charger->direct_chg_mode)) {
 			// NEED to CHECK
@@ -383,7 +399,7 @@ static int sec_direct_chg_get_property(struct power_supply *psy,
 			val->intval = value.intval;
 		}
 		break;
-	case POWER_SUPPLY_PROP_CURRENT_NOW: /* get charge current which was set */
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT: /* get charge current which was set */
 		psy_do_property(charger->pdata->main_charger_name, get, psp, value);
 		if (is_direct_chg_mode_on(charger->direct_chg_mode)) {
 			// NEED to CHECK
@@ -396,6 +412,12 @@ static int sec_direct_chg_get_property(struct power_supply *psy,
 		psy_do_property(charger->pdata->direct_charger_name, get, psp, value);
 		val->intval = value.intval;
 		break;
+#if defined(CONFIG_DUAL_BATTERY_CELL_SENSING)
+	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		psy_do_property(charger->pdata->direct_charger_name, get, psp, value);
+		val->intval = value.intval;
+		break;
+#endif
 	case POWER_SUPPLY_EXT_PROP_MIN ... POWER_SUPPLY_EXT_PROP_MAX:
 		switch (ext_psp) {
 		case POWER_SUPPLY_EXT_PROP_MONITOR_WORK:
@@ -429,8 +451,9 @@ static int sec_direct_chg_get_property(struct power_supply *psy,
 		case POWER_SUPPLY_EXT_PROP_CHANGE_CHARGING_SOURCE:
 			val->intval = charger->test_mode_source;
 			break;
-		case POWER_SUPPLY_EXT_PROP_DIRECT_VOLTAGE_MAX:
-			psy_do_property(charger->pdata->direct_charger_name, get, ext_psp, value);
+		case POWER_SUPPLY_EXT_PROP_DIRECT_CONSTANT_CHARGE_VOLTAGE:
+			psy_do_property(charger->pdata->direct_charger_name, get,
+				POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE, value);
 			val->intval = value.intval;
 			break;
 		default:
@@ -471,8 +494,21 @@ static int sec_direct_chg_set_property(struct power_supply *psy,
 		prev_val = charger->cable_type;
 		charger->cable_type = val->intval;
 
-		if (charger->cable_type == SEC_BATTERY_CABLE_NONE)
+		if (charger->cable_type == SEC_BATTERY_CABLE_NONE) {
 			sec_direct_chg_set_initial_status(charger);
+#if defined(CONFIG_DUAL_BATTERY_CELL_SENSING)
+			value.intval = 0;
+			psy_do_property(charger->pdata->direct_charger_name, set,
+				POWER_SUPPLY_EXT_PROP_DIRECT_ADC_CTRL, value);
+#endif
+		}
+#if defined(CONFIG_DUAL_BATTERY_CELL_SENSING)
+		else {
+			value.intval = 1;
+			psy_do_property(charger->pdata->direct_charger_name, set,
+				POWER_SUPPLY_EXT_PROP_DIRECT_ADC_CTRL, value);
+		}
+#endif
 
 		/* main charger */
 		value.intval = val->intval;
@@ -491,16 +527,15 @@ static int sec_direct_chg_set_property(struct power_supply *psy,
 				psp, value);
 		}
 		break;
-	case POWER_SUPPLY_PROP_CURRENT_MAX:
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
 		charger->input_current = val->intval;
 		sec_direct_chg_set_input_current(charger, psp, charger->input_current);
 		break;
-	case POWER_SUPPLY_PROP_CURRENT_AVG:
-	case POWER_SUPPLY_PROP_CURRENT_NOW:
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
 		charger->charging_current = val->intval;
 		sec_direct_chg_set_charging_current(charger, psp, charger->charging_current);
 		break;
-	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
 		charger->float_voltage = val->intval;
 		psy_do_property(charger->pdata->main_charger_name, set,
 			psp, value);
@@ -534,10 +569,6 @@ static int sec_direct_chg_set_property(struct power_supply *psy,
 			if (val->intval)
 				sec_direct_chg_do_dc_fullcharged(charger);
 			break;
-		case POWER_SUPPLY_EXT_PROP_DIRECT_FIXED_PDO:
-			pr_info("%s: POWER_SUPPLY_EXT_PROP_DIRECT_FIXED_PDO(%d)\n", __func__, val->intval);
-			charger->fpdo_pos = val->intval;
-			break;
 		case POWER_SUPPLY_EXT_PROP_CURRENT_MEASURE:
 			psy_do_property(charger->pdata->main_charger_name, set,
 				ext_psp, value);
@@ -546,17 +577,17 @@ static int sec_direct_chg_set_property(struct power_supply *psy,
 			psy_do_property(charger->pdata->direct_charger_name, set,
 				ext_psp, value);
 			break;
-		case POWER_SUPPLY_EXT_PROP_DIRECT_VOLTAGE_MAX:
+		case POWER_SUPPLY_EXT_PROP_DIRECT_CONSTANT_CHARGE_VOLTAGE:
 			psy_do_property(charger->pdata->direct_charger_name, set,
-				ext_psp, value);
+				POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE, value);
 			break;
 		case POWER_SUPPLY_EXT_PROP_DIRECT_CURRENT_MAX:
 			psy_do_property(charger->pdata->direct_charger_name, set,
 				ext_psp, value);
 			break;
-		case POWER_SUPPLY_EXT_PROP_DIRECT_FLOAT_MAX:
+		case POWER_SUPPLY_EXT_PROP_DIRECT_CONSTANT_CHARGE_VOLTAGE_MAX:
 			psy_do_property(charger->pdata->direct_charger_name, set,
-				ext_psp, value);
+				POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE_MAX, value);
 			break;
 		case POWER_SUPPLY_EXT_PROP_DIRECT_ADC_CTRL:
 			psy_do_property(charger->pdata->direct_charger_name, set,
@@ -584,6 +615,14 @@ static int sec_direct_chg_set_property(struct power_supply *psy,
 					__func__, charger->cable_type, charger->charger_mode,
 					charger->test_mode_source, charger->store_mode);
 			}
+			break;
+		case POWER_SUPPLY_EXT_PROP_REFRESH_CHARGING_SOURCE:
+			if (is_pd_apdo_wire_type(charger->cable_type)) {
+				int charging_source;
+				
+				charging_source = sec_direct_chg_check_charging_source(charger);
+				sec_direct_chg_set_charging_source(charger, charger->charger_mode, charging_source);
+			}			
 			break;
 		case POWER_SUPPLY_EXT_PROP_CHARGING_ENABLED:
 			sec_direct_chg_set_charge(charger, val->intval);
@@ -671,7 +710,7 @@ static int sec_direct_charger_parse_dt(struct device *dev,
 }
 #endif /* CONFIG_OF */
 
-static void sec_direct_charger_check_devs_registered(struct device *dev)
+static int sec_direct_charger_check_devs_registered(struct device *dev)
 {
 	struct device_node *np = dev->of_node;
 	const char *dev_name;
@@ -679,7 +718,7 @@ static void sec_direct_charger_check_devs_registered(struct device *dev)
 
 	if (!np) {
 		pr_err("%s: np NULL\n", __func__);
-		return;
+		return 0;
 	}
 
 	if (!of_property_read_string(np, "charger,direct_charger", &dev_name)) {
@@ -699,8 +738,14 @@ static void sec_direct_charger_check_devs_registered(struct device *dev)
 			power_supply_put(psy_dev);
 		} else {
 			dev_err(dev, "%s: %s is not registered yet\n", __func__, dev_name);
+#if defined(CONFIG_ARCH_QCOM) && !defined(CONFIG_ARCH_EXYNOS) \
+	&& !defined(CONFIG_QGKI)	/* for QC GKI Build */
+			return -EPROBE_DEFER;
+#endif
 		}
 	}
+
+	return 0;
 }
 
 static enum power_supply_property sec_direct_charger_props[] = {
@@ -725,8 +770,10 @@ static int sec_direct_charger_probe(struct platform_device *pdev)
 
 	pr_info("%s: SEC Direct-Charger Driver Loading\n", __func__);
 
-	if (pdev->dev.of_node)
-		sec_direct_charger_check_devs_registered(&pdev->dev);
+	if (pdev->dev.of_node) {
+		if (sec_direct_charger_check_devs_registered(&pdev->dev))
+			return -EPROBE_DEFER;
+	}
 
 	charger = kzalloc(sizeof(*charger), GFP_KERNEL);
 	if (!charger)
@@ -838,8 +885,9 @@ static void sec_direct_charger_shutdown(struct platform_device *pdev)
 	psy_do_property(charger->pdata->direct_charger_name, set,
 		POWER_SUPPLY_EXT_PROP_CHARGING_ENABLED, value);
 
-	if (charger->fpdo_pos > 0)
-		sec_pd_select_pdo(charger->fpdo_pos);
+	value.intval = SEC_INPUT_VOLTAGE_5V;
+	psy_do_property("battery", set,
+		POWER_SUPPLY_EXT_PROP_DIRECT_FIXED_PDO, value);
 
 	pr_info("%s: --\n", __func__);
 }

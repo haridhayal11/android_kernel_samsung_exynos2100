@@ -605,31 +605,10 @@ static ssize_t sec_tsp_command_history_read(struct file *file, char __user *buf,
 	return count;
 }
 
-static const struct file_operations tsp_msg_file_ops = {
-	.owner = THIS_MODULE,
-	.read = sec_tsp_log_read,
-	.write = sec_tsp_log_write,
-	.llseek = generic_file_llseek,
-};
-
-static const struct file_operations tsp_raw_data_file_ops = {
-	.owner = THIS_MODULE,
-	.read = sec_tsp_raw_data_read,
-	.write = sec_tsp_raw_data_write,
-	.llseek = generic_file_llseek,
-};
-
-static const struct file_operations tsp_command_history_file_ops = {
-	.owner = THIS_MODULE,
-	.read = sec_tsp_command_history_read,
-	.llseek = generic_file_llseek,
-};
-
-static const struct file_operations tsp_sponge_log_file_ops = {
-	.owner = THIS_MODULE,
-	.read = sec_tsp_sponge_log_read,
-	.llseek = generic_file_llseek,
-};
+static sec_input_proc_ops(THIS_MODULE, tsp_msg_file_ops, sec_tsp_log_read, sec_tsp_log_write);
+static sec_input_proc_ops(THIS_MODULE, tsp_raw_data_file_ops, sec_tsp_raw_data_read, sec_tsp_raw_data_write);
+static sec_input_proc_ops(THIS_MODULE, tsp_command_history_file_ops, sec_tsp_command_history_read, NULL);
+static sec_input_proc_ops(THIS_MODULE, tsp_sponge_log_file_ops, sec_tsp_sponge_log_read, NULL);
 
 static int __init sec_tsp_log_init(void)
 {

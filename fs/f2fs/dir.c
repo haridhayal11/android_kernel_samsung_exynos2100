@@ -20,7 +20,7 @@
 /* an workaround patch for handling hash corruption for casefold file names */
 #ifdef CONFIG_F2FS_SEC_ENC_STRICT_MODE
 #define SEC_CASEFOLD_NR_RETRY			(2)
-#define SEC_PANIC_ON_CASEFOLD_TC_FAILED	(0)
+#define SEC_PANIC_ON_CASEFOLD_TC_FAILED	(1)
 #define DENTRY_FULLSCAN_LEVEL			(0)
 
 static const struct {
@@ -538,16 +538,15 @@ struct f2fs_dir_entry *__f2fs_find_entry(struct inode *dir,
 	unsigned int max_depth;
 	unsigned int level;
 
+	*res_page = NULL;
+
 	if (f2fs_has_inline_dentry(dir)) {
-		*res_page = NULL;
 		de = f2fs_find_in_inline_dir(dir, fname, res_page);
 		goto out;
 	}
 
-	if (npages == 0) {
-		*res_page = NULL;
+	if (npages == 0)
 		goto out;
-	}
 
 	max_depth = F2FS_I(dir)->i_current_depth;
 	if (unlikely(max_depth > MAX_DIR_HASH_DEPTH)) {
@@ -558,7 +557,6 @@ struct f2fs_dir_entry *__f2fs_find_entry(struct inode *dir,
 	}
 
 	for (level = 0; level < max_depth; level++) {
-		*res_page = NULL;
 		de = find_in_level(dir, level, fname, res_page);
 		if (de || IS_ERR(*res_page))
 			break;

@@ -589,7 +589,7 @@ static void dpp_reg_set_h_coef(u32 id, u32 h_ratio)
 	for (i = 0; i < 9; i++)
 		for (j = 0; j < 8; j++)
 			for (k = 0; k < 2; k++)
-				dpp_write(id, DPP_H_COEF(i, j, k),
+				dpp_write_relaxed(id, DPP_H_COEF(i, j, k),
 						h_coef_8t[sc_ratio][i][j]);
 }
 
@@ -615,26 +615,36 @@ static void dpp_reg_set_v_coef(u32 id, u32 v_ratio)
 	for (i = 0; i < 9; i++)
 		for (j = 0; j < 4; j++)
 			for (k = 0; k < 2; k++)
-				dpp_write(id, DPP_V_COEF(i, j, k),
+				dpp_write_relaxed(id, DPP_V_COEF(i, j, k),
 						v_coef_4t[sc_ratio][i][j]);
 }
 
 static void dpp_reg_set_scale_ratio(u32 id, struct dpp_params_info *p)
 {
-	dpp_write_mask(id, DPP_SCL_MAIN_H_RATIO, DPP_H_RATIO(p->h_ratio),
-			DPP_H_RATIO_MASK);
-	dpp_write_mask(id, DPP_SCL_MAIN_V_RATIO, DPP_V_RATIO(p->v_ratio),
-			DPP_V_RATIO_MASK);
+	u32 prev_h_ratio, prev_v_ratio;
 
-	dpp_reg_set_h_coef(id, p->h_ratio);
-	dpp_reg_set_v_coef(id, p->v_ratio);
+	prev_h_ratio = dpp_read_mask(id, DPP_SCL_MAIN_H_RATIO, DPP_H_RATIO_MASK);
+	prev_v_ratio = dpp_read_mask(id, DPP_SCL_MAIN_V_RATIO, DPP_V_RATIO_MASK);
 
-	dpp_dbg("h_ratio : %#x, v_ratio : %#x\n", p->h_ratio, p->v_ratio);
+	if (prev_h_ratio != p->h_ratio) {
+		dpp_write(id, DPP_SCL_MAIN_H_RATIO, DPP_H_RATIO(p->h_ratio));
+		dpp_reg_set_h_coef(id, p->h_ratio);
+	}
+
+	if (prev_v_ratio != p->v_ratio) {
+		dpp_write(id, DPP_SCL_MAIN_V_RATIO, DPP_V_RATIO(p->v_ratio));
+		dpp_reg_set_v_coef(id, p->v_ratio);
+	}
+
+	dpp_dbg("h_ratio[%#x:%#x], v_ratio : [%#x:%#x]\n",
+			prev_h_ratio, p->h_ratio, prev_v_ratio, p->v_ratio);
 }
 
 static void dpp_reg_set_scl_pos(u32 id, struct dpp_params_info *p)
 {
+#if defined(CONFIG_EXYNOS_SUPPORT_8K_SPLIT)
 	const struct dpu_fmt *fmt_info = dpu_find_fmt_info(p->format);
+#endif
 	u32 padd = 0;
 
 	/* Initialize setting of initial phase */

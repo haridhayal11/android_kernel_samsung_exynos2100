@@ -1,8 +1,0 @@
-#
-# Exynos CPU Performance Profiling
-#
-config EXYNOS_PERF
-	tristate "Exynos Performance"
-	default n
-	help
-	  Enable Exynos Performance Profiling

@@ -42,6 +42,10 @@
 #include <linux/fb.h>
 #endif /* CONFIG_SEC_PM */
 
+#if IS_ENABLED(CONFIG_SEC_ABC)
+#include <linux/sti/abc_common.h>
+#endif /* CONFIG_SEC_ABC */
+
 #if IS_ENABLED(CONFIG_SEC_PM_QCOM)
 extern int msm_drm_register_notifier_client(struct notifier_block *nb);
 extern int msm_drm_unregister_notifier_client(struct notifier_block *nb);
@@ -57,10 +61,9 @@ struct s2dos05_data {
 	struct device *dev;
 #endif
 #if IS_ENABLED(CONFIG_SEC_PM)
-	struct notifier_block fb_block;
-#if IS_ENABLED(CONFIG_SEC_PM_QCOM)
-	struct delayed_work fd_work;
-#endif
+	struct notifier_block fb_block __maybe_unused;
+	struct delayed_work fd_work __maybe_unused;
+	bool fd_work_init;
 #endif /* CONFIG_SEC_PM */
 };
 
@@ -76,6 +79,13 @@ int s2dos05_read_reg(struct i2c_client *i2c, u8 reg, u8 *dest)
 	if (ret < 0) {
 		pr_info("%s:%s reg(0x%02hhx), ret(%d)\n",
 			 MFD_DEV_NAME, __func__, reg, ret);
+#if IS_ENABLED(CONFIG_SEC_ABC)
+#if IS_ENABLED(CONFIG_SEC_FACTORY)
+		sec_abc_send_event("MODULE=pmic@INFO=s2dos05_read_reg");
+#else
+		sec_abc_send_event("MODULE=pmic@WARN=s2dos05_read_reg");
+#endif
+#endif /* CONFIG_SEC_ABC */
 		return ret;
 	}
 
@@ -94,8 +104,16 @@ int s2dos05_bulk_read(struct i2c_client *i2c, u8 reg, int count, u8 *buf)
 	mutex_lock(&s2dos05->i2c_lock);
 	ret = i2c_smbus_read_i2c_block_data(i2c, reg, count, buf);
 	mutex_unlock(&s2dos05->i2c_lock);
-	if (ret < 0)
+	if (ret < 0) {
+#if IS_ENABLED(CONFIG_SEC_ABC)
+#if IS_ENABLED(CONFIG_SEC_FACTORY)
+		sec_abc_send_event("MODULE=pmic@INFO=s2dos05_bulk_read");
+#else
+		sec_abc_send_event("MODULE=pmic@WARN=s2dos05_bulk_read");
+#endif
+#endif /* CONFIG_SEC_ABC */
 		return ret;
+	}
 
 	return 0;
 }
@@ -110,8 +128,16 @@ int s2dos05_read_word(struct i2c_client *i2c, u8 reg)
 	mutex_lock(&s2dos05->i2c_lock);
 	ret = i2c_smbus_read_word_data(i2c, reg);
 	mutex_unlock(&s2dos05->i2c_lock);
-	if (ret < 0)
+	if (ret < 0) {
+#if IS_ENABLED(CONFIG_SEC_ABC)
+#if IS_ENABLED(CONFIG_SEC_FACTORY)
+		sec_abc_send_event("MODULE=pmic@INFO=s2dos05_read_word");
+#else
+		sec_abc_send_event("MODULE=pmic@WARN=s2dos05_read_word");
+#endif
+#endif /* CONFIG_SEC_ABC */
 		return ret;
+	}
 
 	return ret;
 }
@@ -126,9 +152,17 @@ int s2dos05_write_reg(struct i2c_client *i2c, u8 reg, u8 value)
 	mutex_lock(&s2dos05->i2c_lock);
 	ret = i2c_smbus_write_byte_data(i2c, reg, value);
 	mutex_unlock(&s2dos05->i2c_lock);
-	if (ret < 0)
+	if (ret < 0) {
 		pr_info("%s:%s reg(0x%02hhx), ret(%d)\n",
 				MFD_DEV_NAME, __func__, reg, ret);
+#if IS_ENABLED(CONFIG_SEC_ABC)
+#if IS_ENABLED(CONFIG_SEC_FACTORY)
+		sec_abc_send_event("MODULE=pmic@INFO=s2dos05_write_reg");
+#else
+		sec_abc_send_event("MODULE=pmic@WARN=s2dos05_write_reg");
+#endif
+#endif /* CONFIG_SEC_ABC */
+	}
 
 	return ret;
 }
@@ -143,8 +177,16 @@ int s2dos05_bulk_write(struct i2c_client *i2c, u8 reg, int count, u8 *buf)
 	mutex_lock(&s2dos05->i2c_lock);
 	ret = i2c_smbus_write_i2c_block_data(i2c, reg, count, buf);
 	mutex_unlock(&s2dos05->i2c_lock);
-	if (ret < 0)
+	if (ret < 0) {
+#if IS_ENABLED(CONFIG_SEC_ABC)
+#if IS_ENABLED(CONFIG_SEC_FACTORY)
+		sec_abc_send_event("MODULE=pmic@INFO=s2dos05_bulk_write");
+#else
+		sec_abc_send_event("MODULE=pmic@WARN=s2dos05_bulk_write");
+#endif
+#endif /* CONFIG_SEC_ABC */
 		return ret;
+	}
 
 	return 0;
 }
@@ -165,6 +207,16 @@ int s2dos05_update_reg(struct i2c_client *i2c, u8 reg, u8 val, u8 mask)
 		ret = i2c_smbus_write_byte_data(i2c, reg, new_val);
 	}
 	mutex_unlock(&s2dos05->i2c_lock);
+
+#if IS_ENABLED(CONFIG_SEC_ABC)
+	if (ret < 0)
+#if IS_ENABLED(CONFIG_SEC_FACTORY)
+		sec_abc_send_event("MODULE=pmic@INFO=s2dos05_update_reg");
+#else
+		sec_abc_send_event("MODULE=pmic@WARN=s2dos05_update_reg");
+#endif
+#endif /* CONFIG_SEC_ABC */
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(s2dos05_update_reg);
@@ -348,6 +400,56 @@ static int s2m_get_elvss_ssd_current_limit(struct regulator_dev *rdev)
 	ret = (val & S2DOS05_ELVSS_SEL_SSD_MASK) >> 5;
 	return (ret + 1) * 2000;
 }
+
+#if IS_ENABLED(CONFIG_ARCH_QCOM)
+static int s2m_elvss_fd_is_enabled(struct regulator_dev *rdev)
+{
+	/* Always return false due to timing issue */
+	return 0;
+}
+#else
+static int s2m_elvss_fd_is_enabled(struct regulator_dev *rdev)
+{
+	struct s2dos05_data *info = rdev_get_drvdata(rdev);
+	struct i2c_client *i2c = info->iodev->i2c;
+	int ret;
+	u8 val;
+
+	ret = s2dos05_read_reg(i2c, S2DOS05_REG_UVLO_FD, &val);
+	if (ret < 0) {
+		/* If failed to read FD status, suppose it is not enabled */
+		pr_info("%s: fail to read i2c address\n", __func__);
+		return 0;
+	}
+
+	return !(val & 0x1);
+}
+#endif
+
+static int s2m_elvss_fd_enable(struct regulator_dev *rdev)
+{
+	int ret = 0;
+	struct s2dos05_data *info = rdev_get_drvdata(rdev);
+
+	/* To guarantee fd_work is initialized */
+	if (info->fd_work_init) {
+		ret = schedule_delayed_work(&info->fd_work, msecs_to_jiffies(500));
+		if(!ret)
+			pr_info("%s: schedule_delayed_work error!\n", __func__);
+	}
+
+	return ret;
+}
+
+static int s2m_elvss_fd_disable(struct regulator_dev *rdev)
+{
+	struct s2dos05_data *info = rdev_get_drvdata(rdev);
+
+	if (info->fd_work_init)
+		cancel_delayed_work_sync(&info->fd_work);
+	
+	return 0;
+}
 #endif /* CONFIG_SEC_PM */
 
 static struct regulator_ops s2dos05_ldo_ops = {
@@ -376,6 +478,12 @@ static struct regulator_ops s2dos05_buck_ops = {
 static struct regulator_ops s2dos05_elvss_ssd_ops = {
 	.set_current_limit	= s2m_set_elvss_ssd_current_limit,
 	.get_current_limit	= s2m_get_elvss_ssd_current_limit,
+};
+
+static struct regulator_ops s2dos05_elvss_fd_ops = {
+	.is_enabled		= s2m_elvss_fd_is_enabled,
+	.enable			= s2m_elvss_fd_enable,
+	.disable		= s2m_elvss_fd_disable,
 };
 #endif /* CONFIG_SEC_PM */
 
@@ -428,6 +536,14 @@ static struct regulator_ops s2dos05_elvss_ssd_ops = {
 	.type		= REGULATOR_CURRENT,			\
 	.owner		= THIS_MODULE,				\
 }
+
+#define ELVSS_FD_DESC(_name, _id)				{	\
+	.name		= _name,				\
+	.id		= _id,					\
+	.ops		= &s2dos05_elvss_fd_ops,			\
+	.type		= REGULATOR_CURRENT,			\
+	.owner		= THIS_MODULE,				\
+}
 #endif /* CONFIG_SEC_PM */
 
 static struct regulator_desc regulators[S2DOS05_REGULATOR_MAX] = {
@@ -449,6 +565,7 @@ static struct regulator_desc regulators[S2DOS05_REGULATOR_MAX] = {
 		_REG(_EN), _MASK(_B1), _TIME(_BUCK)),
 #if IS_ENABLED(CONFIG_SEC_PM)
 	ELVSS_DESC("s2dos05-elvss-ssd", S2DOS05_ELVSS_SSD),
+	ELVSS_FD_DESC("s2dos05-avdd-elvdd-elvss-fd", S2DOS05_ELVSS_FD),
 #endif /* CONFIG_SEC_PM */
 };
 
@@ -751,8 +868,7 @@ static ssize_t enable_fd_store(struct device *dev, struct device_attribute *attr
 
 static DEVICE_ATTR(enable_fd, 0664, enable_fd_show, enable_fd_store);
 
-#if IS_ENABLED(CONFIG_SEC_PM_QCOM)
-static void handle_fd_work(struct work_struct *work)
+static void __maybe_unused handle_fd_work(struct work_struct *work)
 {
 	struct s2dos05_data *s2dos05 =
 		container_of(to_delayed_work(work), struct s2dos05_data, fd_work);
@@ -767,9 +883,8 @@ static void handle_fd_work(struct work_struct *work)
 	s2dos05_read_reg(i2c, S2DOS05_REG_UVLO_FD, &uvlo_fd);
 	dev_info(&i2c->dev, "%s: uvlo_fd(0x%02X)\n", __func__, uvlo_fd);
 }
-#endif
 
-static int fb_state_change(struct notifier_block *nb, unsigned long val,
+static int __maybe_unused fb_state_change(struct notifier_block *nb, unsigned long val,
 			   void *data)
 {
 	struct s2dos05_data *s2dos05 =
@@ -785,7 +900,7 @@ static int fb_state_change(struct notifier_block *nb, unsigned long val,
 	if (val != FB_EVENT_BLANK)
 		return 0;
 
-	
+
 #if IS_ENABLED(CONFIG_SEC_PM_QCOM)
 	blank = *(int *)data;
 #else
@@ -867,7 +982,121 @@ out:
 	return sprintf(buf, "%d\n", result);
 }
 static DEVICE_ATTR(validation, 0444, validation_show, NULL);
+
+/* for LDO burnt: enable/disable all regulator, support only for sm3080 due to hidden register */
+#define NUM_REG	7	/* number of regulator to control */
+
+struct power_sequence {
+    int regulator;
+    int delay;		/* delay after regulator control */
+};
+
+static ssize_t enable_pwr_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct s2dos05_data *info = dev_get_drvdata(dev);
+	struct i2c_client *i2c = info->iodev->i2c;
+	u8 reg_status, ctrl;
+	u8 val, mask;
+	int i;
+	bool enable;
+	int ret;
+
+	/* { regulator - delay } sequence */
+	struct power_sequence en_order[NUM_REG] = {
+					{ S2DOS05_LDO1, 0 },
+					{ S2DOS05_LDO4, 900 },
+					{ SM3080_AVDD, 100 },
+					{ SM3080_ELVDD, 10 },
+					{ SM3080_ELVSS, 1000 },
+					{ S2DOS05_LDO2, 0 },
+					{ S2DOS05_LDO3, 0 } };
+	struct power_sequence dis_order[NUM_REG] = {
+					{ S2DOS05_LDO3, 5 },
+					{ S2DOS05_LDO2, 450 },
+					{ SM3080_ELVDD, 0 },
+					{ SM3080_ELVSS, 50 },
+					{ SM3080_AVDD, 50 },
+					{ S2DOS05_LDO4, 50 },
+					{ S2DOS05_LDO1, 10 } };
+	struct power_sequence *order;	/* be selected by enable */
+
+	ret = strtobool(buf, &enable);
+	if (ret)
+		return ret;
+
+	s2dos05_read_reg(i2c, S2DOS05_REG_STAT, &reg_status);
+	s2dos05_read_reg(i2c, S2DOS05_REG_EN, &ctrl);
+	dev_info(&i2c->dev, "++%s: en(%d), status(0x%02x), ctrl(0x%02x)\n",
+					__func__, enable, reg_status, ctrl);
+
+	order = enable ? en_order : dis_order;
+
+	for (i = 0; i < NUM_REG; i++) {
+		val = enable << order[i].regulator;
+		mask = 1 << order[i].regulator;
+
+		ret = s2dos05_update_reg(i2c, S2DOS05_REG_EN, val, mask);
+
+		msleep(order[i].delay);
+	}
+
+	/* enable fd because of el power on */
+	if (enable)
+		ret = s2dos05_update_reg(i2c, S2DOS05_REG_UVLO_FD, 0, 1);
+
+	s2dos05_read_reg(i2c, S2DOS05_REG_STAT, &reg_status);
+	s2dos05_read_reg(i2c, S2DOS05_REG_EN, &ctrl);
+	dev_info(&i2c->dev, "--%s: en(%d), status(0x%02x), ctrl(0x%02x)\n",
+					__func__, enable, reg_status, ctrl);
+
+	return count;
+}
+
+static ssize_t enable_pwr_show(struct device *dev,
+                struct device_attribute *attr, char *buf)
+{
+    struct s2dos05_data *s2dos05 = dev_get_drvdata(dev);
+    struct i2c_client *i2c = s2dos05->iodev->i2c;
+    u8 reg_status, ctrl;
+
+    s2dos05_read_reg(i2c, S2DOS05_REG_STAT, &reg_status);
+    s2dos05_read_reg(i2c, S2DOS05_REG_EN, &ctrl);
+    dev_info(&i2c->dev, "%s: status(0x%02x), ctrl(0x%02x)\n",
+                    __func__, reg_status, ctrl);
+
+    return sprintf(buf, "0x%02x\n0x%02x\n", reg_status, ctrl);
+}
+static DEVICE_ATTR(enable_pwr, 0664, enable_pwr_show, enable_pwr_store);
 #endif /* CONFIG_SEC_FACTORY */
+
+#if IS_ENABLED(CONFIG_SEC_PM) && IS_ENABLED(CONFIG_SEC_PM_QCOM)
+static void sec_set_fd(struct s2dos05_data *info)
+{
+	info->fb_block.notifier_call = fb_state_change;
+	msm_drm_register_notifier_client(&info->fb_block);
+	INIT_DELAYED_WORK(&info->fd_work, handle_fd_work);
+	info->fd_work_init = false;
+}
+#elif IS_ENABLED(CONFIG_SEC_PM) && IS_ENABLED(CONFIG_REGULATOR_S2DOS05_ELVSS_FD)
+static void sec_set_fd(struct s2dos05_data *info)
+{
+	INIT_DELAYED_WORK(&info->fd_work, handle_fd_work);
+	info->fd_work_init = true;
+}
+#elif IS_ENABLED(CONFIG_SEC_PM)
+static void sec_set_fd(struct s2dos05_data *info)
+{
+	info->fb_block.notifier_call = fb_state_change;
+	fb_register_client(&info->fb_block);
+	info->fd_work_init = false;
+}
+#else
+static void sec_set_fd(struct s2dos05_data *info)
+{
+	info->fd_work_init = false;
+}
+#endif
 
 static int s2dos05_sec_pm_init(struct s2dos05_data *info)
 {
@@ -896,13 +1125,9 @@ static int s2dos05_sec_pm_init(struct s2dos05_data *info)
 		dev_err(dev, "%s: Failed to enable FD(%d)\n", __func__, ret);
 		goto remove_sec_disp_pmic_dev;
 	}
-	info->fb_block.notifier_call = fb_state_change;
-#if IS_ENABLED(CONFIG_SEC_PM_QCOM)
-	msm_drm_register_notifier_client(&info->fb_block);
-	INIT_DELAYED_WORK(&info->fd_work, handle_fd_work);
-#else
-	fb_register_client(&info->fb_block);
-#endif
+
+	/* To separate FD operation */
+	sec_set_fd(info);
 
 	ret = device_create_file(iodev->sec_disp_pmic_dev, &dev_attr_enable_fd);
 	if (ret) {
@@ -918,11 +1143,22 @@ static int s2dos05_sec_pm_init(struct s2dos05_data *info)
 			dev_attr_validation.attr.name);
 		goto remove_sec_disp_enable_fd;
 	}
+
+	if (iodev->is_sm3080) {
+		ret = device_create_file(iodev->sec_disp_pmic_dev, &dev_attr_enable_pwr);
+		if (ret) {
+			pr_err("s2dos05_sysfs: failed to create enable_pwr file, %s\n",
+				dev_attr_enable_pwr.attr.name);
+			goto remove_sec_disp_validation;
+		}
+	}
 #endif /* CONFIG_SEC_FACTORY */
 
 	return 0;
 
 #if IS_ENABLED(CONFIG_SEC_FACTORY)
+remove_sec_disp_validation:
+	device_remove_file(info->iodev->sec_disp_pmic_dev, &dev_attr_validation);
 remove_sec_disp_enable_fd:
 	device_remove_file(info->iodev->sec_disp_pmic_dev, &dev_attr_enable_fd);
 #endif /* CONFIG_SEC_FACTORY */
@@ -940,6 +1176,7 @@ static void s2dos05_sec_pm_deinit(struct s2dos05_data *info)
 #endif
 #if IS_ENABLED(CONFIG_SEC_FACTORY)
 	device_remove_file(info->iodev->sec_disp_pmic_dev, &dev_attr_validation);
+	device_remove_file(info->iodev->sec_disp_pmic_dev, &dev_attr_enable_pwr);
 #endif /* CONFIG_SEC_FACTORY */
 	sec_device_destroy(info->iodev->sec_disp_pmic_dev->devt);
 }
@@ -1030,7 +1267,7 @@ static int s2dos05_pmic_probe(struct i2c_client *i2c,
 	if (ret < 0) {
 		dev_err(&i2c->dev, "Failed to read DEVICE ID address\n");
 		goto err_s2dos05_data;
-	} 
+	}
 
 	if (val & (1 << 7)) {
 		iodev->is_sm3080 = true;

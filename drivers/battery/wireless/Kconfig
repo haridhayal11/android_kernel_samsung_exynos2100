@@ -27,15 +27,6 @@ config WIRELESS_NO_HV
 	  If you are unsure, say N.
 	  some models need this for not support high voltage wireless charging.
 
-config CS100_JPNCONCEPT
-	bool "cs100 command support"
-	depends on BATTERY_SAMSUNG && I2C
-	help
-	  Say Y here to enable
-	  support for CS100 command.
-	  CS100 command is to stop when full-charged.
-	  only JPN models need this charging concepts.
-
 config WIRELESS_AUTH
 	bool "support for samsung wireless authentication massage"
 	default n

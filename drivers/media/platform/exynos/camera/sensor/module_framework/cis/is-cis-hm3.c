@@ -76,6 +76,7 @@ static unsigned int sensor_hm3_config_index_pre_ln;
 
 int sensor_hm3_cis_set_global_setting(struct v4l2_subdev *subdev);
 int sensor_hm3_cis_wait_streamon(struct v4l2_subdev *subdev);
+int sensor_hm3_cis_wait_streamoff(struct v4l2_subdev *subdev);
 int sensor_hm3_cis_set_cal(struct v4l2_subdev *subdev);
 
 static bool sensor_hm3_cis_is_wdr_mode_on(cis_shared_data *cis_data)
@@ -231,7 +232,7 @@ void sensor_hm3_cis_data_calc(struct v4l2_subdev *subdev, u32 mode)
 		info("[%s] call mode change in stream on state\n", __func__);
 		sensor_hm3_cis_wait_streamon(subdev);
 		sensor_hm3_cis_stream_off(subdev);
-		sensor_cis_wait_streamoff(subdev);
+		sensor_hm3_cis_wait_streamoff(subdev);
 		info("[%s] stream off done\n", __func__);
 	}
 
@@ -339,6 +340,7 @@ int sensor_hm3_cis_init(struct v4l2_subdev *subdev)
 	cis->long_term_mode.sen_strm_off_on_enable = false;
 	cis->mipi_clock_index_cur = CAM_MIPI_NOT_INITIALIZED;
 	cis->mipi_clock_index_new = CAM_MIPI_NOT_INITIALIZED;
+	cis->cis_data->cur_pattern_mode = SENSOR_TEST_PATTERN_MODE_OFF;
 
 	sensor_hm3_load_retention = false;
 
@@ -386,7 +388,7 @@ int sensor_hm3_cis_deinit(struct v4l2_subdev *subdev)
 		sensor_hm3_cis_stream_on(subdev);
 		sensor_hm3_cis_wait_streamon(subdev);
 		sensor_hm3_cis_stream_off(subdev);
-		sensor_cis_wait_streamoff(subdev);
+		sensor_hm3_cis_wait_streamoff(subdev);
 		pr_info("%s: complete to load retention\n", __func__);
 	}
 
@@ -1797,6 +1799,38 @@ p_err:
 
 
 #ifdef USE_CAMERA_SENSOR_RETENTION
+#define CRC_CHECK_WAIT_TIME 10 /* 10us*/
+#define CRC_CHECK_MAX_RETRY_COUNT 200 /* 10us * 200 = 2ms */
+
+int sensor_hm3_cis_check_ready_for_retention(struct v4l2_subdev *subdev)
+{
+	int ret = 0;
+	struct is_cis *cis = NULL;
+	u8 ready_retention = 0;
+	int retry_count = -1;
+
+	WARN_ON(!subdev);
+
+	cis = (struct is_cis *)v4l2_get_subdevdata(subdev);
+	WARN_ON(!cis);
+
+	do {
+		retry_count++;
+		I2C_MUTEX_LOCK(cis->i2c_lock);
+		/* retention mode CRC check */
+		is_sensor_read8(cis->client, 0x19C4, &ready_retention);
+		I2C_MUTEX_UNLOCK(cis->i2c_lock);
+
+		if (ready_retention != 0x01) {
+			usleep_range(CRC_CHECK_WAIT_TIME, CRC_CHECK_WAIT_TIME);
+		}
+	} while (ready_retention != 0x01 && retry_count < CRC_CHECK_MAX_RETRY_COUNT);
+
+	info("[%s] : ready_retention : %x, retry_count %d", __func__, ready_retention, retry_count);
+
+	return ret;
+}
+
 int sensor_hm3_cis_retention_prepare(struct v4l2_subdev *subdev)
 {
 	int ret = 0;
@@ -1870,7 +1904,8 @@ int sensor_hm3_cis_retention_prepare(struct v4l2_subdev *subdev)
 		ret |= is_sensor_write8(cis->client, 0x0100, 0x00); //stream off
 		I2C_MUTEX_UNLOCK(cis->i2c_lock);
 
-		sensor_cis_wait_streamoff(subdev);
+		sensor_hm3_cis_wait_streamoff(subdev);
+
 		sensor_hm3_need_stream_on_retention = false;
 	}
 
@@ -1911,6 +1946,9 @@ int sensor_hm3_cis_retention_crc_check(struct v4l2_subdev *subdev)
 
 	if (crc_check == 0x0100) {
 		info("[%s] retention SRAM CRC check: pass!\n", __func__);
+
+		/* init pattern */
+		is_sensor_write16(cis->client, 0x0600, 0x0000);
 	} else {
 		info("[%s] retention SRAM CRC check: fail!\n", __func__);
 		info("retention CRC Check register value: 0x%x\n", crc_check);
@@ -2147,6 +2185,24 @@ p_err:
 	return ret;
 }
 
+int sensor_hm3_cis_wait_streamoff(struct v4l2_subdev *subdev)
+{
+	int ret = 0;
+
+	WARN_ON(!subdev);
+
+	ret = sensor_cis_wait_streamoff(subdev);
+	if (ret < 0)
+		goto p_err;
+
+#ifdef USE_CAMERA_SENSOR_RETENTION
+	sensor_hm3_cis_check_ready_for_retention(subdev);
+#endif
+
+p_err:
+	return ret;
+}
+
 int sensor_hm3_cis_stream_on(struct v4l2_subdev *subdev)
 {
 	int ret = 0;
@@ -2247,6 +2303,9 @@ int sensor_hm3_cis_stream_on(struct v4l2_subdev *subdev)
 		is_sensor_write8(client, 0x0B00, 0x00); //NonaXTC
 	}
 #endif
+
+	//initalize retention ready reg
+	is_sensor_write8(client, 0x19C4, 0x00);
 
 	is_sensor_read16(client, 0x0B30, &fast_change_idx);
 
@@ -3675,7 +3734,8 @@ int sensor_hm3_cis_recover_stream_on(struct v4l2_subdev *subdev)
 	ext_info = &module->ext;
 	FIMC_BUG(!ext_info);
 
-	ext_info->use_retention_mode = SENSOR_RETENTION_INACTIVE;
+	if (ext_info->use_retention_mode != SENSOR_RETENTION_UNSUPPORTED)
+		ext_info->use_retention_mode = SENSOR_RETENTION_INACTIVE;
 #endif
 
 	info("%s start\n", __func__);
@@ -3733,7 +3793,7 @@ int sensor_hm3_cis_recover_stream_off(struct v4l2_subdev *subdev)
 	if (ret < 0) goto p_err;
 	ret = sensor_hm3_cis_stream_off(subdev);
 	if (ret < 0) goto p_err;
-	ret = sensor_cis_wait_streamoff(subdev);
+	ret = sensor_hm3_cis_wait_streamoff(subdev);
 	if (ret < 0) goto p_err;
 
 	info("%s end\n", __func__);
@@ -3783,17 +3843,18 @@ static struct is_cis_ops cis_ops_hm3 = {
 	.cis_get_min_digital_gain = sensor_hm3_cis_get_min_digital_gain,
 	.cis_get_max_digital_gain = sensor_hm3_cis_get_max_digital_gain,
 	.cis_compensate_gain_for_extremely_br = sensor_hm3_cis_compensate_gain_for_extremely_br,
-	.cis_wait_streamoff = sensor_cis_wait_streamoff,
+	.cis_wait_streamoff = sensor_hm3_cis_wait_streamoff,
 	.cis_wait_streamon = sensor_hm3_cis_wait_streamon,
 	.cis_set_wb_gains = sensor_hm3_cis_set_wb_gain,
 	.cis_data_calculation = sensor_hm3_cis_data_calc,
 	.cis_set_long_term_exposure = sensor_hm3_cis_long_term_exposure,
 	.cis_check_rev_on_init = sensor_cis_check_rev_on_init,
 	.cis_set_initial_exposure = sensor_cis_set_initial_exposure,
-//	.cis_recover_stream_on = sensor_hm3_cis_recover_stream_on,
+	.cis_recover_stream_on = sensor_hm3_cis_recover_stream_on,
 //	.cis_recover_stream_off = sensor_hm3_cis_recover_stream_off,
 	.cis_set_factory_control = sensor_hm3_cis_set_factory_control,
 	.cis_set_fake_retention = sensor_hm3_cis_set_fake_retention,
+	.cis_set_test_pattern = sensor_cis_set_test_pattern,
 };
 
 static int cis_hm3_probe(struct i2c_client *client,

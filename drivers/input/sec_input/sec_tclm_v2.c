@@ -70,12 +70,15 @@ int tclm_test_command(struct sec_tclm_data *data, int test_case, int cmd_param1,
 {
 	int ret = 1;
 	const int buff_size = 256;
-	struct device *dev;
+	struct device *dev = NULL;
 
 	if (data->client)
 		dev = &data->client->dev;
 	if (data->spi)
 		dev = &data->spi->dev;
+
+	if (!dev)
+		return -ENODEV;
 
 	switch (test_case) {
 	case 0:	// get tclm_level,afe_base
@@ -202,12 +205,15 @@ int sec_tclm_test_on_probe(struct sec_tclm_data *data)
 {
 	int retry = 3;
 	int ret = 0;
-	struct device *dev;
+	struct device *dev = NULL;
 
 	if (data->client)
 		dev = &data->client->dev;
 	if (data->spi)
 		dev = &data->spi->dev;
+
+	if (!dev)
+		return -ENODEV;
 
 	while (retry--) {
 		if (data->client && data->tclm_read)
@@ -227,14 +233,17 @@ EXPORT_SYMBOL(sec_tclm_test_on_probe);
 
 int sec_tclm_get_nvm_all(struct sec_tclm_data *data)
 {
-	int ret;
+	int ret = -1;
 	int retry = 3;
-	struct device *dev;
+	struct device *dev = NULL;
 
 	if (data->client)
 		dev = &data->client->dev;
 	if (data->spi)
 		dev = &data->spi->dev;
+
+	if (!dev)
+		return -ENODEV;
 
 	/* just don't read tune_fix_version, because this is write_only_value. */
 	while (retry--) {
@@ -280,12 +289,15 @@ void sec_tclm_position_history(struct sec_tclm_data *data)
 	int now_lastp = data->nvdata.cal_pos_hist_lastp;
 	unsigned char *pStr = NULL;
 	unsigned char pTmp[5] = { 0 };
-	struct device *dev;
+	struct device *dev = NULL;
 
 	if (data->client)
 		dev = &data->client->dev;
 	if (data->spi)
 		dev = &data->spi->dev;
+
+	if (!dev)
+		return;
 
 	if (data->nvdata.cal_pos_hist_cnt > CAL_HISTORY_QUEUE_MAX
 		|| data->nvdata.cal_pos_hist_lastp >= CAL_HISTORY_QUEUE_MAX) {
@@ -333,12 +345,15 @@ EXPORT_SYMBOL(sec_tclm_debug_info);
 
 void sec_tclm_root_of_cal(struct sec_tclm_data *data, int pos)
 {
-	struct device *dev;
+	struct device *dev = NULL;
 
 	if (data->client)
 		dev = &data->client->dev;
 	if (data->spi)
 		dev = &data->spi->dev;
+
+	if (!dev)
+		return;
 
 	data->root_of_calibration = pos;
 	input_info(true, dev, "%s: root - %d(%4s)\n", __func__,
@@ -348,12 +363,15 @@ EXPORT_SYMBOL(sec_tclm_root_of_cal);
 
 static bool sec_tclm_check_condition_valid(struct sec_tclm_data *data)
 {
-	struct device *dev;
+	struct device *dev = NULL;
 
 	if (data->client)
 		dev = &data->client->dev;
 	if (data->spi)
 		dev = &data->spi->dev;
+
+	if (!dev)
+		return false;
 
 	input_err(true, dev, "%s tclm_level:%02X, last pos:%d(%4s), now pos:%d(%4s)\n",
 		__func__, data->tclm_level, data->nvdata.cal_position, data->tclm_string[data->nvdata.cal_position].f_name,
@@ -386,6 +404,8 @@ static bool sec_tclm_check_condition_valid(struct sec_tclm_data *data)
 		} else {
 			return false;
 		}
+	case TCLM_LEVEL_NOT_SUPPORT:
+		return false;
 	}
 
 	return false;
@@ -423,12 +443,15 @@ int sec_execute_tclm_package(struct sec_tclm_data *data, int factory_mode)
 {
 	int ret;
 	int retry = 3;
-	struct device *dev;
+	struct device *dev = NULL;
 
 	if (data->client)
 		dev = &data->client->dev;
 	if (data->spi)
 		dev = &data->spi->dev;
+
+	if (!dev)
+		return -ENODEV;
 
 	/* first read cal data for compare */
 
@@ -523,12 +546,15 @@ int sec_tclm_check_cal_case(struct sec_tclm_data *data)
 {
 	int restore_cal = 0;
 	int ret = 0;
-	struct device *dev;
+	struct device *dev = NULL;
 
 	if (data->client)
 		dev = &data->client->dev;
 	if (data->spi)
 		dev = &data->spi->dev;
+
+	if (!dev)
+		return -ENODEV;
 
 	if (data->nvdata.cal_count == 0xFF) {
 		if (data->client && data->tclm_read)

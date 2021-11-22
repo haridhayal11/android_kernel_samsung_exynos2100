@@ -106,6 +106,10 @@ int dsp_pm_manager_alloc_libs(struct dsp_lib **libs, int libs_size,
 			DL_DEBUG("Alloc PM for library %s\n",
 				libs[idx]->name);
 			text_size = dsp_elf32_get_text_size(libs[idx]->elf);
+			if (text_size == UINT_MAX) {
+				DL_ERROR("getting text size failed\n");
+				return -1;
+			}
 			DL_DEBUG("PM alloc libs_size : %zu\n", text_size);
 
 			ret = dsp_pm_alloc(text_size, libs[idx], pm_inv);

@@ -23,7 +23,6 @@
 #include <linux/mount.h>
 #include <linux/mman.h>
 #include <linux/slab.h>
-#include <linux/xattr.h>
 #include <crypto/hash_info.h>
 #include <linux/ptrace.h>
 #include <linux/task_integrity.h>
@@ -41,8 +40,7 @@
 #include "five_cache.h"
 #include "five_dmverity.h"
 #include "five_dsms.h"
-
-static const bool unlink_on_error;	// false
+#include "five_testing.h"
 
 static const bool check_dex2oat_binary = true;
 static const bool check_memfd_file = true;
@@ -212,6 +210,7 @@ static void work_handler(struct work_struct *in_data)
 	kfree(context);
 }
 
+__mockable
 const char *five_d_path(const struct path *path, char **pathbuf, char *namebuf)
 {
 	char *pathname = NULL;
@@ -328,7 +327,8 @@ static int push_file_event_bunch(struct task_struct *task, struct file *file,
 
 		context->tint = TASK_INTEGRITY(task);
 
-		list_add_tail(&five_file->list, &TASK_INTEGRITY(task)->events.list);
+		list_add_tail(&five_file->list,
+			      &TASK_INTEGRITY(task)->events.list);
 		spin_unlock(&TASK_INTEGRITY(task)->list_lock);
 		INIT_WORK(&context->data_work, work_handler);
 		rc = queue_work(g_five_workqueue, &context->data_work) ? 0 : 1;
@@ -337,11 +337,12 @@ static int push_file_event_bunch(struct task_struct *task, struct file *file,
 
 		INIT_LIST_HEAD(&dead_list);
 		if ((function == BPRM_CHECK) &&
-			(!list_is_singular(&(TASK_INTEGRITY(task)->events.list)))) {
+		    (!list_is_singular(&(TASK_INTEGRITY(task)->events.list)))) {
 			list_cut_tail(&TASK_INTEGRITY(task)->events.list,
 					&dead_list);
 		}
-		list_add_tail(&five_file->list, &TASK_INTEGRITY(task)->events.list);
+		list_add_tail(&five_file->list,
+			      &TASK_INTEGRITY(task)->events.list);
 		spin_unlock(&TASK_INTEGRITY(task)->list_lock);
 		free_files_list(&dead_list);
 		kfree(context);
@@ -732,40 +733,6 @@ int five_bprm_check(struct linux_binprm *bprm)
 	return rc;
 }
 
-/* Does `unlink' of the `file'.
- * This function breaks delegation (drops file's leases. See
- * man 2 fcntl "Leases"). do_unlinkat function in fs/namei.c was used
- * as an example.
- */
-static int five_unlink(struct file *file)
-{
-	int rc;
-	struct dentry *dentry = file->f_path.dentry;
-	struct inode *inode = d_backing_inode(dentry->d_parent);
-	struct inode *delegated_inode = NULL;
-	bool retry;
-
-	do {
-		delegated_inode = NULL;
-		retry = false;
-		inode_lock_nested(inode, I_MUTEX_PARENT);
-		ihold(inode);
-		rc = vfs_unlink(inode, dentry, &delegated_inode);
-		inode_unlock(inode);
-		iput(inode);
-		if (rc == -EWOULDBLOCK && delegated_inode) {
-			rc = break_deleg_wait(&delegated_inode);
-			if (!rc)
-				retry = true;
-		}
-	} while (retry);
-
-	five_audit_info(current, file, "five_unlink", 0, 0,
-			"Unlink a file", rc);
-
-	return rc;
-}
-
 /**
  * This function handles two situations:
  * 1. Device had been rebooted before five_sign finished.
@@ -791,30 +758,8 @@ int five_file_open(struct file *file)
 	xattr_len = vfs_getxattr(file->f_path.dentry, XATTR_NAME_FIVE,
 					NULL, 0);
 	if (xattr_len == 0) {
-		struct integrity_iint_cache *iint;
-		bool is_signing = false;
-
-		if (!unlink_on_error) {
-			five_audit_verbose(current, file, "five_unlink", 0, 0,
+		five_audit_verbose(current, file, "dummy-cert", 0, 0,
 					"Found a dummy-cert", 0);
-			return 0;
-		}
-
-		inode_lock(inode);
-		iint = integrity_iint_find(inode);
-		if (iint)
-			is_signing = iint->five_signing;
-		inode_unlock(inode);
-
-		if (!is_signing) {
-			int rc;
-
-			rc = five_unlink(file);
-			rc = rc ?: -ENOENT;
-
-			return rc;
-		}
-		return -EPERM;
 	}
 
 	return 0;
@@ -860,7 +805,7 @@ static int __init hash_setup(const char *str)
 	return 1;
 }
 
-static int __init init_five(void)
+int __init init_five(void)
 {
 	int error;
 
@@ -967,7 +912,7 @@ int five_fork(struct task_struct *task, struct task_struct *child_task)
 			}
 
 			list_add_tail(&five_file->list,
-					&TASK_INTEGRITY(child_task)->events.list);
+				      &TASK_INTEGRITY(child_task)->events.list);
 		}
 
 		context->tint = TASK_INTEGRITY(child_task);
@@ -1008,7 +953,7 @@ int five_ptrace(struct task_struct *task, long request)
 	case PTRACE_PEEKSIGINFO:
 	case PTRACE_GETSIGMASK:
 	case PTRACE_GETEVENTMSG:
-#ifdef CONFIG_ARM64
+#if defined(CONFIG_ARM64) || defined(KUNIT_UML)
 	case COMPAT_PTRACE_GETREGS:
 	case COMPAT_PTRACE_GET_THREAD_AREA:
 	case COMPAT_PTRACE_GETVFPREGS:

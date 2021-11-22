@@ -109,6 +109,19 @@ static ssize_t audio_amp_##id##_curr_temperature_show(struct device *dev, \
 } \
 static DEVICE_ATTR(curr_temperature_##id, 0664, \
 			audio_amp_##id##_curr_temperature_show, NULL); \
+static ssize_t audio_amp_##id##_surface_temperature_store(struct device *dev, \
+	struct device_attribute *attr, const char *buf, size_t size) \
+{ \
+	int ret, temp = 0; \
+	ret = kstrtos32(buf, 10, &temp); \
+	if (audio_data->set_amp_surface_temperature) \
+		ret = audio_data->set_amp_surface_temperature((id), temp); \
+	else \
+		dev_info(dev, "%s: No callback registered\n", __func__); \
+	return size; \
+} \
+static DEVICE_ATTR(surface_temperature_##id, S_IRUGO | S_IWUSR | S_IWGRP, \
+			NULL, audio_amp_##id##_surface_temperature_store); \
 static struct attribute *audio_amp_##id##_attr[] = { \
 	&dev_attr_temperature_max_##id.attr, \
 	&dev_attr_temperature_keep_max_##id.attr, \
@@ -116,6 +129,7 @@ static struct attribute *audio_amp_##id##_attr[] = { \
 	&dev_attr_excursion_max_##id.attr, \
 	&dev_attr_excursion_overcount_##id.attr, \
 	&dev_attr_curr_temperature_##id.attr, \
+	&dev_attr_surface_temperature_##id.attr, \
 	NULL, \
 }
 
@@ -449,6 +463,20 @@ int audio_register_curr_temperature_cb(int (*curr_temperature) (enum amp_id))
 	return 0;
 }
 EXPORT_SYMBOL_GPL(audio_register_curr_temperature_cb);
+
+int audio_register_surface_temperature_cb(int (*surface_temperature) (enum amp_id, int temperature))
+{
+	if (audio_data->set_amp_surface_temperature) {
+		dev_err(audio_data->amp_dev,
+				"%s: Already registered\n", __func__);
+		return -EEXIST;
+	}
+
+	audio_data->set_amp_surface_temperature = surface_temperature;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(audio_register_surface_temperature_cb);
 
 DECLARE_AMP_BIGDATA_SYSFS(0);
 DECLARE_AMP_BIGDATA_SYSFS(1);

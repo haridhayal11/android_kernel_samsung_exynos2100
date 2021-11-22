@@ -45,6 +45,8 @@ struct rational {
 
 #define CAMERA2_MAX_STRIPE_REGION_NUM		5
 
+#define EV_LIST_SIZE						24
+
 #define OPEN_MAGIC_NUMBER			0x20202102
 #define SHOT_MAGIC_NUMBER			0x56789234
 
@@ -60,6 +62,7 @@ enum is_subscenario_id {
 	ISS_SUB_SCENARIO_STILL_PREVIEW_WDR_ON = 1,                                  /* 1: Single preview (HDR On) */
 	ISS_SUB_SCENARIO_STILL_FULL_PREVIEW_WDR_AUTO = 2,                           /* TODO: 2: Full resolution Preview (HDR Auto/Off) */
 	ISS_SUB_SCENARIO_SUPER_NIGHT_SHOT_PREVIEW = 3,                              /* Super night Preview (HDR Auto) */
+	ISS_SUB_SCENARIO_STILL_PREVIEW_GALAXY_RAW = 4,                              /* 4: galaxy raw preview */
 
 	ISS_SUB_SCENARIO_STILL_CAPTURE_WDR_AUTO = 10,                               /* 10: Single/Burst/Snapshot capture (HDR Auto/Off) */
 	ISS_SUB_SCENARIO_STILL_CAPTURE = 11,                                        /* 11: Single capture (HDR Off) : Pro mode	 */
@@ -79,6 +82,7 @@ enum is_subscenario_id {
 	ISS_SUB_SCENARIO_MERGED_STILL_FUSION_CAPTURE = 24,                          /* 24: fusion capture (HDR Auto/Off) */
 	ISS_SUB_SCENARIO_MERGED_STILL_CAPTURE_GFHDR_SHORT = 25,                     /* 25: GFHDR Short capture (HDR Auto/Off) */
 	ISS_SUB_SCENARIO_MERGED_STILL_CAPTURE_GFHDR_LONG = 26,                      /* 26: GFHDR Long capture (HDR Auto/Off) */
+	ISS_SUB_SCENARIO_MERGED_STILL_CAPTURE_GALAXY_RAW = 27,                      /* 27: Galaxy Raw still capture */
 
 	ISS_SUB_SCENARIO_VIDEO = 30,                                                /* 30: FHD 30fps (HDR Off) */
 	ISS_SUB_SCENARIO_VIDEO_WDR_AUTO = 31,                                       /* 31: FHD 30fps (HDR Auto) */
@@ -291,6 +295,7 @@ enum sensor_test_pattern_mode {
 	SENSOR_TEST_PATTERN_MODE_COLOR_BARS,
 	SENSOR_TEST_PATTERN_MODE_COLOR_BARS_FADE_TO_GRAY,
 	SENSOR_TEST_PATTERN_MODE_PN9,
+	SENSOR_TEST_PATTERN_MODE_BLACK,
 	SENSOR_TEST_PATTERN_MODE_CUSTOM1 = 257,
 };
 
@@ -705,6 +710,7 @@ enum aa_capture_intent {
 	AA_CAPTURE_INTENT_STILL_CAPTURE_SUPER_NIGHT_SHOT_TRIPOD_MAX             = 135,
 	AA_CAPTURE_INTENT_STILL_CAPTURE_SUPER_NIGHT_SHOT_EXTREME_DARK_MAX       = 136,
 	AA_CAPTURE_INTENT_STILL_CAPTURE_SR_HDR_DYNAMIC_SHOT                     = 137,
+	AA_CAPTURE_INTENT_STILL_CAPTURE_GALAXY_RAW_DYNAMIC_SHOT                 = 138,
 
 	AA_CAPTURE_INTENT_VIDEO_RECORD_CHANGE_FPS                               = 500,
 
@@ -1180,7 +1186,10 @@ struct camera2_aa_ctl {
 	uint32_t			ispHwTargetFpsRange[2];
 	uint32_t			vendor_memAvailable;
 	int32_t 			vendor_fpsHintResult;
-	uint32_t			vendor_reserved[24];
+	uint32_t			vendor_currentHyperlapseMode;   // 0 : auto, value : speed
+	char				vendor_multiFrameEvList[EV_LIST_SIZE];
+	uint32_t			vendor_zoomLockState;
+	uint32_t			vendor_reserved[16];
 };
 
 struct aa_apexInfo {
@@ -1650,6 +1659,7 @@ enum camera2_wdr_mode {
 	CAMERA_WDR_AUTO = 3,
 	CAMERA_WDR_AUTO_LIKE = 4,
 	CAMERA_WDR_AUTO_3P = 5,
+	CAMERA_WDR_AUTO_3P_VIDEO = 6,
 	TOTALCOUNT_CAMERA_WDR,
 	CAMERA_WDR_UNKNOWN,
 };
@@ -2555,4 +2565,3 @@ typedef struct camera2_ccm_udm      camera2_ccm_udm_t;
 
 typedef struct camera2_me_udm camera2_me_udm_t;
 #endif
-

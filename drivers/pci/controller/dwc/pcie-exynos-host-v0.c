@@ -3138,6 +3138,10 @@ int exynos_pcie_poweron(int ch_num)
 		/* TCXO_FAR on */
 		hsi_tcxo_far_control(1, 1);
 
+#if IS_ENABLED(CONFIG_SOC_EXYNOS2100)
+		exynos_gen4_nclkoff();
+#endif
+
 		ret = exynos_pcie_clock_enable(pp, PCIE_ENABLE_CLOCK);
 		dev_dbg(pci->dev, "pcie clk enable, ret value = %d\n", ret);
 
@@ -3421,6 +3425,10 @@ void exynos_pcie_poweroff(int ch_num)
 				(0x1 << (WAKEUP_MASK_PCIE_WIFI + exynos_pcie->ch_num)),
 				(0x0 << (WAKEUP_MASK_PCIE_WIFI + exynos_pcie->ch_num)));
 	}
+
+#if IS_ENABLED(CONFIG_SOC_EXYNOS2100)
+	exynos_gen4_nclkoff();
+#endif
 
 	spin_lock_irqsave(&exynos_pcie->reg_lock, flags1);
 	exynos_pcie->state = STATE_LINK_DOWN;

@@ -48,7 +48,9 @@
 #include "p61.h"
 #include "pn547.h"
 #include "cold_reset.h"
+#ifdef CONFIG_SEC_NFC_LOGGER
 #include "./nfc_logger/nfc_logger.h"
+#endif
 #if defined(CONFIG_ESE_SECURE) && defined(CONFIG_ESE_USE_TZ_API)
 #include "../misc/tzdev/include/tzdev/tee_client_api.h"
 #endif
@@ -461,14 +463,25 @@ static int p61_rw_spi_message(struct p61_device *p61_dev,
  */
 static int p61_dev_open(struct inode *inode, struct file *filp)
 {
-	struct p61_device *p61_dev = container_of(filp->private_data,
-				struct p61_device, miscdev);
 	struct spi_device *spidev = NULL;
 
-	spidev = spi_dev_get(p61_dev->spi);
+#ifdef CONFIG_MAKE_NODE_USING_PLATFORM_DEVICE
+	struct p61_device *p61_ese = p61_dev;
 
-	filp->private_data = p61_dev;
-	if (p61_dev->device_opened) {
+	if (p61_ese == NULL) {
+		NFC_LOG_ERR("%s: spi probe is not called\n", __func__);
+		return -EAGAIN;
+	}
+#else
+
+	struct p61_device *p61_ese = container_of(filp->private_data,
+				struct p61_device, miscdev);
+#endif
+	spidev = spi_dev_get(p61_ese->spi);
+
+	filp->private_data = p61_ese;
+
+	if (p61_ese->device_opened) {
 		NFC_LOG_ERR("%s: already opened!\n", __func__);
 		return -EBUSY;
 	}
@@ -477,17 +490,17 @@ static int p61_dev_open(struct inode *inode, struct file *filp)
 	msleep(60);
 #endif
 #if defined(CONFIG_ESE_SECURE) && defined(CONFIG_ESE_USE_TZ_API)
-	if (p61_dev->ese_secure_check == NOT_CHECKED) {
+	if (p61_ese->ese_secure_check == NOT_CHECKED) {
 		int ret = 0;
 
 		ret = tz_tee_ese_secure_check();
 		if (ret) {
-			p61_dev->ese_secure_check = ESE_NOT_SECURED;
+			p61_ese->ese_secure_check = ESE_NOT_SECURED;
 			P61_ERR_MSG("eSE spi is not Secured\n");
 			return -EBUSY;
 		}
-		p61_dev->ese_secure_check = ESE_SECURED;
-	} else if (p61_dev->ese_secure_check == ESE_NOT_SECURED) {
+		p61_ese->ese_secure_check = ESE_SECURED;
+	} else if (p61_ese->ese_secure_check == ESE_NOT_SECURED) {
 		P61_ERR_MSG("eSE spi is not Secured\n");
 		return -EBUSY;
 	}
@@ -496,15 +509,15 @@ static int p61_dev_open(struct inode *inode, struct file *filp)
 	NFC_LOG_INFO("%s: Major No: %d, Minor No: %d\n", __func__,
 			imajor(inode), iminor(inode));
 
-	if (!wake_lock_active(&p61_dev->ese_lock)) {
+	if (!wake_lock_active(&p61_ese->ese_lock)) {
 		NFC_LOG_INFO("%s: [NFC-ESE] wake lock.\n", __func__);
-		wake_lock(&p61_dev->ese_lock);
+		wake_lock(&p61_ese->ese_lock);
 	}
 
-	p61_dev->device_opened = true;
+	p61_ese->device_opened = true;
 #ifdef CONFIG_NFC_FEATURE_SN100U
-	p61_dev->pid = task_pid_nr(current);
-	NFC_LOG_INFO("%s: pid:%d\n", __func__, p61_dev->pid);
+	p61_ese->pid = task_pid_nr(current);
+	NFC_LOG_INFO("%s: pid:%d\n", __func__, p61_ese->pid);
 #endif
 
 	return 0;
@@ -864,6 +877,14 @@ static const struct file_operations p61_dev_fops = {
 	.release = p61_dev_release,
 };
 
+#ifdef CONFIG_MAKE_NODE_USING_PLATFORM_DEVICE
+static struct miscdevice p61_misc_device = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "p61",
+	.fops = &p61_dev_fops,
+};
+#endif
+
 static int p61_parse_dt(struct device *dev,
 	struct p61_device *p61_dev)
 {
@@ -872,15 +893,23 @@ static int p61_parse_dt(struct device *dev,
 	struct platform_device *spi_pdev;
 	int ese_det_gpio;
 	const char *ap_str;
+	int ret;
 
 	ese_det_gpio = of_get_named_gpio(np, "ese-det-gpio", 0);
 	if (!gpio_is_valid(ese_det_gpio)) {
 		NFC_LOG_INFO("%s: ese-det-gpio is not set\n", __func__);
 	} else {
-		gpio_request(ese_det_gpio, "ese_det_gpio");
+		ret = gpio_request(ese_det_gpio, "ese_det_gpio");
+		if (ret < 0)
+			NFC_LOG_ERR("%s failed to get gpio ese_det_gpio\n", __func__);
+
 		gpio_direction_input(ese_det_gpio);
 		if (!gpio_get_value(ese_det_gpio)) {
 			NFC_LOG_INFO("%s: ese is not supported\n", __func__);
+#ifdef CONFIG_MAKE_NODE_USING_PLATFORM_DEVICE
+			misc_deregister(&p61_misc_device);
+			NFC_LOG_ERR("Misc Deregister\n");
+#endif
 			return -ENODEV;
 		}
 		NFC_LOG_INFO("%s: ese is supported\n", __func__);
@@ -986,18 +1015,22 @@ static int p61_probe(struct device *dev)
 		NFC_LOG_ERR("%s - Failed to do clk_setup\n", __func__);
 
 #endif
+#ifndef CONFIG_MAKE_NODE_USING_PLATFORM_DEVICE
 	p61_dev->miscdev.minor = MISC_DYNAMIC_MINOR;
 	p61_dev->miscdev.name = "p61";
 	p61_dev->miscdev.fops = &p61_dev_fops;
 	p61_dev->miscdev.parent = dev;
-
+#endif
 	dev_set_drvdata(dev, p61_dev);
 #if defined(CONFIG_NFC_FEATURE_SN100U)
-#if IS_ENABLED(CONFIG_BATTERY_SAMSUNG)
+#if IS_ENABLED(CONFIG_BATTERY_SAMSUNG) && !defined(CONFIG_NFC_PVDD_LATE_ENABLE)
 	if (lpcharge)
 		ese_set_spi_configuration("lpm");
 	else
 #endif
+	if (p61_dev->ap_vendor == AP_VENDOR_MTK)
+		ese_set_spi_configuration("lpm");
+	else
 		ese_set_spi_configuration("sleep");
 #else
 #if !defined(CONFIG_ESE_SECURE)
@@ -1014,16 +1047,18 @@ static int p61_probe(struct device *dev)
 	wake_lock_init(&p61_dev->ese_lock, WAKE_LOCK_SUSPEND, "ese_wake_lock");
 	p61_dev->device_opened = false;
 
-#if IS_ENABLED(CONFIG_BATTERY_SAMSUNG)
+#if IS_ENABLED(CONFIG_BATTERY_SAMSUNG) && !defined(CONFIG_NFC_PVDD_LATE_ENABLE)
 	if (!lpcharge) {
 #else
 	{
 #endif
+#ifndef CONFIG_MAKE_NODE_USING_PLATFORM_DEVICE
 		ret = misc_register(&p61_dev->miscdev);
 		if (ret < 0) {
 			P61_ERR_MSG("misc_register failed! %d\n", ret);
 			goto err_exit0;
 		}
+#endif
 	}
 
 	p61_dev->enable_poll_mode = 1; /* No USE? */
@@ -1060,7 +1095,9 @@ static int p61_remove(struct device *dev)
 
 	P61_DBG_MSG("Entry : %s\n", __func__);
 	mutex_destroy(&p61_dev->read_mutex);
+#ifndef CONFIG_MAKE_NODE_USING_PLATFORM_DEVICE
 	misc_deregister(&p61_dev->miscdev);
+#endif
 	wake_lock_destroy(&p61_dev->ese_lock);
 	kfree(p61_dev->buf);
 	kfree(p61_dev);
@@ -1168,6 +1205,45 @@ static struct spi_driver p61_driver = {
 };
 
 #if IS_MODULE(CONFIG_SAMSUNG_NFC)
+#ifdef CONFIG_MAKE_NODE_USING_PLATFORM_DEVICE
+static int p61_ese_probe(struct platform_device *pdev)
+{
+	int ret = -1;
+
+	ret = misc_register(&p61_misc_device);
+	if (ret < 0)
+		NFC_LOG_INFO("misc_register failed! %d\n", ret);
+
+	NFC_LOG_INFO("%s: finished...\n", __func__);
+	return 0;
+}
+
+static int p61_ese_remove(struct platform_device *pdev)
+{
+	NFC_LOG_INFO("Entry : %s\n", __func__);
+	misc_deregister(&p61_misc_device);
+	return 0;
+}
+
+static const struct of_device_id p61_ese_match_table[] = {
+	{ .compatible = "p61_ese",},
+	{},
+};
+
+static struct platform_driver p61_ese_driver = {
+	.driver = {
+		.name = "p61_ese",
+		.owner = THIS_MODULE,
+#ifdef CONFIG_OF
+		.of_match_table = p61_ese_match_table,
+#endif
+
+	},
+	.probe =  p61_ese_probe,
+	.remove = p61_ese_remove,
+};
+#endif
+
 int p61_dev_init(void)
 {
 	int ret;
@@ -1177,7 +1253,10 @@ int p61_dev_init(void)
 	NFC_LOG_INFO("Entry\n");
 	ret = platform_driver_register(&p61_platform_driver);
 	NFC_LOG_INFO("eSE platform_driver_register, ret %d\n", ret);
-
+#ifdef CONFIG_MAKE_NODE_USING_PLATFORM_DEVICE
+	ret = platform_driver_register(&p61_ese_driver);
+	NFC_LOG_INFO("eSE driver platform register, ret %d\n", ret);
+#endif
 	ret = spi_register_driver(&p61_driver);
 	NFC_LOG_INFO("eSE spi driver register, ret %d\n", ret);
 
@@ -1186,6 +1265,9 @@ int p61_dev_init(void)
 EXPORT_SYMBOL(p61_dev_init);
 void p61_dev_exit(void)
 {
+#ifdef CONFIG_MAKE_NODE_USING_PLATFORM_DEVICE
+	platform_driver_unregister(&p61_ese_driver);
+#endif
 #ifdef CONFIG_ESE_SECURE
 	platform_driver_unregister(&p61_platform_driver);
 #else

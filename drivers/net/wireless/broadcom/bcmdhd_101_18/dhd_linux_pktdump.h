@@ -53,7 +53,8 @@ enum pkt_type {
 	PKT_TYPE_ICMP = 2,
 	PKT_TYPE_DNS = 3,
 	PKT_TYPE_ARP = 4,
-	PKT_TYPE_EAP = 5
+	PKT_TYPE_EAP = 5,
+	PKT_TYPE_IGMP = 6
 };
 
 extern msg_eapol_t dhd_is_4way_msg(uint8 *pktdata);
@@ -128,5 +129,8 @@ extern bool dhd_check_ip_prot(uint8 *pktdata, uint16 ether_type);
 extern bool dhd_check_arp(uint8 *pktdata, uint16 ether_type);
 extern bool dhd_check_dhcp(uint8 *pktdata);
 extern bool dhd_check_icmp(uint8 *pktdata);
+#ifdef IGMP_OFFLOAD_SUPPORT
+extern bool dhd_check_igmp(uint8 *pktdata);
+#endif /* IGMP_OFFLOAD_SUPPORT */
 extern bool dhd_check_dns(uint8 *pktdata);
 #endif /* __DHD_LINUX_PKTDUMP_H_ */

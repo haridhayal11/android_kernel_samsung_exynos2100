@@ -97,6 +97,23 @@ int dd_oem_page_crypto_inplace(struct dd_info *info, struct page *page, int dir)
 			(dir == WRITE) ? FS_ENCRYPT:FS_DECRYPT, 0, page, page, PAGE_SIZE, 0, GFP_NOFS);
 }
 
+/* { KNOX_SUPPORT_DAR_DUAL_DO */
+int fscrypt_dd_has_policy(const struct inode *inode)
+{
+	struct fscrypt_info *ci = NULL;
+	if (!inode)
+		return 0;
+
+	ci = inode->i_crypt_info;
+	if (ci && ci->ci_dd_info) {
+		if (dd_policy_encrypted(ci->ci_dd_info->policy.flags))
+			return 1;
+	}
+
+	return 0;
+}
+/* } KNOX_SUPPORT_DAR_DUAL_DO */
+
 int fscrypt_dd_encrypted_inode(const struct inode *inode)
 {
 	struct fscrypt_info *ci = NULL;
@@ -291,6 +308,17 @@ long fscrypt_dd_ioctl(unsigned int cmd, unsigned long *arg, struct inode *inode)
 			return -EFAULT;
 		return 0;
 	}
+	/* { KNOX_SUPPORT_DAR_DUAL_DO */
+	case FS_IOC_HAS_DD_POLICY: {
+		if (!fscrypt_dd_has_policy(inode)) {
+			dd_error("dd policy is not applied (ino:%ld)\n", inode->i_ino);
+			return -ENOENT;
+		}
+
+		dd_info("dd policy is applied (ino:%ld)\n", inode->i_ino);
+		return 0;
+	}
+	/* } KNOX_SUPPORT_DAR_DUAL_DO */
 	}
 	return 0;
 }

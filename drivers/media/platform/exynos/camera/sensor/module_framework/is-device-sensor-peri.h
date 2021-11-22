@@ -69,6 +69,7 @@ struct is_cis {
 	bool				hdr_ctrl_by_again;
 	bool				use_wb_gain;
 	bool				use_3hdr;
+	bool				use_vendor_total_gain;
 
 	struct is_sensor_ctl	sensor_ctls[CAM2P0_UCTL_LIST_SIZE];
 
@@ -600,8 +601,14 @@ int is_sensor_peri_s_analog_gain(struct is_device_sensor *device,
 				struct ae_param again);
 int is_sensor_peri_s_digital_gain(struct is_device_sensor *device,
 				struct ae_param dgain);
+int is_sensor_peri_s_totalgain(struct is_device_sensor *device,
+				struct ae_param expo,
+				struct ae_param again,
+				struct ae_param dgain);
 int is_sensor_peri_s_wb_gains(struct is_device_sensor *device,
 				struct wb_gains wb_gains);
+int is_sensor_set_test_pattern(struct is_device_sensor *device,
+				camera2_sensor_ctl_t *sensor_ctl);
 int is_sensor_peri_s_sensor_stats(struct is_device_sensor *device,
 				bool streaming,
 				struct is_sensor_ctl *module_ctl,

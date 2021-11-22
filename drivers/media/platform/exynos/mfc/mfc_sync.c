@@ -412,7 +412,8 @@ int __mfc_dec_ctx_ready_set_bit(struct mfc_core_ctx *core_ctx,
 
 	/* Resolution change */
 	else if ((core_ctx->state == MFCINST_RES_CHANGE_INIT || core_ctx->state == MFCINST_RES_CHANGE_FLUSH) &&
-		dst_buf_queue_check_available)
+		dst_buf_queue_check_available &&
+		IS_SINGLE_MODE(ctx))
 		is_ready = 1;
 
 	else if (core_ctx->state == MFCINST_RES_CHANGE_END &&

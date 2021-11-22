@@ -376,9 +376,11 @@ void mfc_dump_state(struct mfc_dev *dev)
 				dev->ctx[i]->operating_framerate,
 				dev->ctx[i]->crop_width, dev->ctx[i]->crop_height,
 				dev->ctx[i]->crop_left, dev->ctx[i]->crop_top);
-			mfc_dev_err("	master core: %d, op_mode: %d(stream: %d), queue_cnt(src:%d, dst:%d, ref:%d, qsrc:%d, qdst:%d)\n",
+			mfc_dev_err("	master core: %d, op_mode: %d(stream: %d), idle_mode: %d, wait_state %d, prio %d, rt %d, queue_cnt(src:%d, dst:%d, ref:%d, qsrc:%d, qdst:%d)\n",
 				dev->ctx[i]->op_core_num[MFC_CORE_MASTER],
-				dev->ctx[i]->op_mode, dev->ctx[i]->stream_op_mode,
+				dev->ctx[i]->op_mode, dev->ctx[i]->stream_op_mode, dev->ctx[i]->idle_mode,
+				dev->ctx[i]->wait_state,
+				dev->ctx[i]->prio, dev->ctx[i]->rt,
 				mfc_get_queue_count(&dev->ctx[i]->buf_queue_lock, &dev->ctx[i]->src_buf_ready_queue),
 				mfc_get_queue_count(&dev->ctx[i]->buf_queue_lock, &dev->ctx[i]->dst_buf_queue),
 				mfc_get_queue_count(&dev->ctx[i]->buf_queue_lock, &dev->ctx[i]->ref_buf_queue),

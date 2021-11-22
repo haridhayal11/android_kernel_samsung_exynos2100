@@ -266,7 +266,6 @@ int is_ois_control_gpio(struct is_core *core, int position, int onoff)
 	ret = module_pdata->gpio_cfg(module, SENSOR_SCENARIO_OIS_FACTORY, onoff);
 	if (ret) {
 		err("gpio_cfg is fail(%d)", ret);
-		goto p_err;
 	}
 
 	mutex_unlock(&mcu->power_mutex);
@@ -420,6 +419,17 @@ bool is_aperture_hall_test(struct is_core *core, u16 *hall_value)
 }
 #endif
 #endif
+
+bool is_ois_gyronoise_test(struct is_core *core, long *raw_data_x, long *raw_data_y)
+{
+	bool result = false;
+	struct is_device_ois *ois_device = NULL;
+
+	ois_device = is_ois_get_device(core);
+	result = CALL_OISOPS(ois_device, ois_read_gyro_noise, core, raw_data_x, raw_data_y);
+
+	return result;
+}
 
 #if !defined (CONFIG_CAMERA_USE_MCU) && !defined (CONFIG_CAMERA_USE_INTERNAL_MCU)
 bool is_ois_diff_test(struct is_core *core, int *x_diff, int *y_diff)

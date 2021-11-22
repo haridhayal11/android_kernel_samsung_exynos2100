@@ -23,6 +23,10 @@
 #include "../panel_drv.h"
 #include "../panel_debug.h"
 
+#if IS_ENABLED(CONFIG_SEC_ABC)
+#include <linux/sti/abc_common.h>
+#endif
+
 #ifdef PANEL_PR_TAG
 #undef PANEL_PR_TAG
 #define PANEL_PR_TAG	"ddi"
@@ -158,7 +162,7 @@ static int gamma_ctoi(s32 (*dst)[MAX_COLOR], u8 *src, int nr_tp)
 	return 0;
 }
 
-#if defined(CONFIG_KUNIT)
+#if defined(CONFIG_SEC_KUNIT)
 int s6e3hab_gamma_ctoi(s32 (*dst)[MAX_COLOR], u8 *src, int nr_tp)
 {
 	return gamma_ctoi(dst, src, nr_tp);
@@ -245,7 +249,7 @@ static void gamma_itoc(u8 *dst, s32(*src)[MAX_COLOR], int nr_tp)
 	}
 }
 
-#if defined(CONFIG_KUNIT)
+#if defined(CONFIG_SEC_KUNIT)
 void s6e3hab_gamma_itoc(u8 *dst, s32(*src)[MAX_COLOR], int nr_tp)
 {
 	gamma_itoc(dst, src, nr_tp);
@@ -3512,6 +3516,10 @@ static void show_dsi_err(struct dumpinfo *info)
 //Todo
 #ifdef CONFIG_DISPLAY_USE_INFO
 	inc_dpui_u32_field(DPUI_KEY_PNDSIE, dsi_err[0]);
+#endif
+#if IS_ENABLED(CONFIG_SEC_ABC)
+	if (dsi_err[0] > 0)
+		sec_abc_send_event("MODULE=display@ERROR=act_section_panel_main_dsi_error");
 #endif
 }
 

@@ -1,4 +1,5 @@
-/*
+/* SPDX-License-Identifier: GPL-2.0
+ *
  * linux/platform_data/cs40l2x.h -- Platform data for
  * CS40L20/CS40L25/CS40L25A/CS40L25B
  *
@@ -11,6 +12,18 @@
 
 #ifndef __CS40L2X_H
 #define __CS40L2X_H
+
+struct cs40l2x_br_desc {
+	bool present;
+	bool enable;
+	unsigned int thld1;
+	unsigned int max_att;
+	unsigned int atk_vol;
+	unsigned int atk_rate;
+	unsigned int wait;
+	unsigned int rel_rate;
+	bool mute_enable;
+};
 
 struct cs40l2x_platform_data {
 	unsigned int boost_ind;
@@ -31,6 +44,8 @@ struct cs40l2x_platform_data {
 	unsigned int q_max;
 	bool redc_comp_disable;
 	bool comp_disable;
+	bool dyn_f0_disable;
+	bool open_wt_disable;
 	unsigned int gpio1_rise_index;
 	unsigned int gpio1_fall_index;
 	unsigned int gpio1_fall_timeout;
@@ -56,6 +71,8 @@ struct cs40l2x_platform_data {
 	bool vbbr_enable;
 	unsigned int vpbr_thld1;
 	unsigned int vbbr_thld1;
+	struct cs40l2x_br_desc vpbr_config;
+	struct cs40l2x_br_desc vbbr_config;
 	unsigned int fw_id_remap;
 	bool amp_gnd_stby;
 	bool auto_recovery;
@@ -70,6 +87,7 @@ struct cs40l2x_platform_data {
 	unsigned int dig_scale_fo_ld;			/* FOLDER OPEN, LONG DURATION */
 	unsigned int dig_scale_fo_ld_low_temp;		/* FOLDER OPEN, LONG DURATION, LOW TEMP */
 	unsigned int dig_scale_fo_ld_lower_temp;	/* FOLDER OPEN, LONG DURATION, LOWER TEMP */
+	unsigned int dig_scale_tent;			/* FOLDER TENT */
 
 	int high_temp;
 	int low_temp;

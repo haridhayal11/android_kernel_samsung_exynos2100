@@ -11,7 +11,6 @@
 #include <linux/cdev.h>
 #include <linux/slab.h>
 #include <linux/interrupt.h>
-#include <linux/workqueue.h>
 #include <linux/pm.h>
 #include <linux/mutex.h>
 #include <linux/atomic.h>
@@ -20,24 +19,19 @@
 #include <linux/kfifo.h>
 #include <linux/poll.h>
 #include <linux/pinctrl/consumer.h>
-#include <linux/clk.h>
-#include <linux/delay.h>
 #include <linux/gpio.h>
 #include <linux/err.h>
-#include <linux/spi/spi.h>
 #include <linux/spi/spidev.h>
-#include <linux/pm_qos.h>
-#include <linux/cpufreq.h>
 #include <linux/regulator/consumer.h>
 #include <linux/pinctrl/consumer.h>
-#include <linux/pm_wakeup.h> /* can be used kernel version 5.4 over */
-#include <linux/version.h>
 #include "../pinctrl/core.h"
 #include "fingerprint_common.h"
 
 #undef DISABLED_GPIO_PROTECTION
 
-#define MAX_NAME_SIZE					 32
+#define VENDOR "QCOM"
+#define CHIP_ID "QBT2000"
+#define MAX_NAME_SIZE 32
 #define SPI_CLOCK_MAX 35000000
 
 #define QBT2000_DEV "qbt2000"
@@ -50,9 +44,6 @@
 
 #define MINOR_NUM_FD 0
 #define MINOR_NUM_IPC 1
-
-#define VENDOR						"QCOM"
-#define CHIP_ID						"QBT2000"
 
 #define FINGER_DOWN_GPIO_STATE 1
 #define FINGER_LEAVE_GPIO_STATE 0
@@ -79,11 +70,11 @@ enum qbt2000_commands {
 	QBT2000_IS_WHUB_CONNECTED = 105,
 };
 
-#define QBT2000_SENSORTEST_DONE 		0x0000 // do nothing or test done
-#define QBT2000_SENSORTEST_BGECAL 		0x0001 // begin the BGECAL
-#define QBT2000_SENSORTEST_NORMALSCAN 	0x0002 // begin the normalscan
-#define QBT2000_SENSORTEST_SNR 			0x0004 // begin the snr
-#define QBT2000_SENSORTEST_CAPTURE 		0x0008 // begin the image capture. it also needs liveness capture.
+#define QBT2000_SENSORTEST_DONE		0x0000 // do nothing or test done
+#define QBT2000_SENSORTEST_BGECAL	0x0001 // begin the BGECAL
+#define QBT2000_SENSORTEST_NORMALSCAN	0x0002 // begin the normalscan
+#define QBT2000_SENSORTEST_SNR		0x0004 // begin the snr
+#define QBT2000_SENSORTEST_CAPTURE	0x0008 // begin the image capture. it also needs liveness capture.
 
 /*
  * enum qbt2000_fw_event -
@@ -117,17 +108,17 @@ struct fw_ipc_info {
 
 struct qbt2000_drvdata {
 	struct class *qbt2000_class;
-	struct cdev	qbt2000_fd_cdev;
-	struct cdev	qbt2000_ipc_cdev;
-	struct device	*dev;
+	struct cdev qbt2000_fd_cdev;
+	struct cdev qbt2000_ipc_cdev;
+	struct device *dev;
 	struct device *fp_device;
-	atomic_t	fd_available;
-	atomic_t	ipc_available;
-	struct mutex	mutex;
-	struct mutex	ioctl_mutex;
-	struct mutex	fd_events_mutex;
-	struct mutex	ipc_events_mutex;
-	struct fw_ipc_info	fw_ipc;
+	atomic_t fd_available;
+	atomic_t ipc_available;
+	struct mutex mutex;
+	struct mutex ioctl_mutex;
+	struct mutex fd_events_mutex;
+	struct mutex ipc_events_mutex;
+	struct fw_ipc_info fw_ipc;
 	struct finger_detect_gpio fd_gpio;
 	DECLARE_KFIFO(fd_events, struct fw_event_desc, MAX_FW_EVENTS);
 	DECLARE_KFIFO(ipc_events, struct fw_event_desc, MAX_FW_EVENTS);
@@ -154,22 +145,16 @@ struct qbt2000_drvdata {
 	const char *sensor_position;
 	const char *btp_vdd;
 	struct regulator *regulator_1p8;
-	struct work_struct work_debug;
-	struct workqueue_struct *wq_dbg;
-	struct timer_list dbg_timer;
 	struct wakeup_source *fp_signal_lock;
 	struct spi_clk_setting *clk_setting;
 	struct boosting_config *boosting;
+	struct debug_logger *logger;
 };
-
-int qbt2000_set_clk(struct qbt2000_drvdata *drvdata, bool onoff);
-int qbt2000_register_platform_variable(struct qbt2000_drvdata *drvdata);
-int qbt2000_unregister_platform_variable(struct qbt2000_drvdata *drvdata);
-int qbt2000_pinctrl_register(struct qbt2000_drvdata *drvdata);
-int fps_resume_set(void);
 
 #ifdef CONFIG_BATTERY_SAMSUNG
 extern unsigned int lpcharge;
 #endif
+
+struct debug_logger *g_logger;
 
 #endif /* _UAPI_QBT2000_H_ */

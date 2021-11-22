@@ -13,7 +13,9 @@
 spinlock_t write_ib_lock;
 spinlock_t write_qos_lock;
 struct mutex trigger_ib_lock;
+struct mutex mem_lock;
 struct mutex rel_ib_lock;
+struct mutex sip_rel_lock;
 struct workqueue_struct *ib_handle_highwq;
 
 int total_ib_cnt;
@@ -87,6 +89,7 @@ void trigger_input_booster(struct work_struct *work)
 
 		// Make ib instance with all needed factor.
 		ib = create_ib_instance(p_IbTrigger, uniq_id);
+
 		pr_info(ITAG" IB Trigger Press :: IB Uniq Id(%d)", uniq_id);
 
 		if (ib == NULL) {
@@ -127,18 +130,29 @@ void trigger_input_booster(struct work_struct *work)
 		 *  if exists, Release flag on. Call ib's Release func.
 		 */
 
+		mutex_lock(&sip_rel_lock);
 		ib = find_release_ib(p_IbTrigger->dev_type, p_IbTrigger->key_id);
 
+		mutex_lock(&mem_lock);
 		if (ib == NULL) {
-			pr_err("IB is null on release");
+			pr_err(ITAG" IB is null on release");
+			mutex_unlock(&mem_lock);
+			mutex_unlock(&sip_rel_lock);
 			mutex_unlock(&trigger_ib_lock);
 			return;
 		}
-		pr_info(ITAG" IB Trigger Release :: Uniq ID(%d)", ib->uniq_id);
+		mutex_unlock(&mem_lock);
 
 		mutex_lock(&ib->lock);
-
+		pr_info(ITAG" IB Trigger Release :: Uniq ID(%d)", ib->uniq_id);
 		ib->rel_flag = FLAG_ON;
+		if(ib->ib_dt->tail_time == 0) {
+			pr_booster(" IB tail time is 0");
+			mutex_unlock(&ib->lock);
+			mutex_unlock(&sip_rel_lock);
+			mutex_unlock(&trigger_ib_lock);
+			return;
+		}
 
 		// If head operation is already finished, tail timeout work will be triggered.
 		if (ib->isHeadFinished) {
@@ -154,7 +168,7 @@ void trigger_input_booster(struct work_struct *work)
 			}
 		}
 		mutex_unlock(&ib->lock);
-
+		mutex_unlock(&sip_rel_lock);
 	}
 	mutex_unlock(&trigger_ib_lock);
 
@@ -288,6 +302,9 @@ void press_timeout_func(struct work_struct* work)
 
 	struct t_ib_info* target_ib = container_of(work, struct t_ib_info, ib_timeout_work[IB_HEAD].work);
 
+	if (!target_ib)
+		return;
+
 	pr_info(ITAG" Press Timeout Func :::: Unique_Id(%d) Tail_Time(%d)",
 		target_ib->uniq_id, target_ib->ib_dt->tail_time);
 
@@ -297,12 +314,12 @@ void press_timeout_func(struct work_struct* work)
 	long qos_values[MAX_RES_COUNT] = {0, };
 	long rel_flags[MAX_RES_COUNT] = {0, };
 
+	mutex_lock(&sip_rel_lock);
 	if (target_ib->ib_dt->tail_time != 0) {
 		mutex_lock(&target_ib->lock);
 		queue_work(ib_handle_highwq, &(target_ib->ib_state_work[IB_TAIL]));
 		mutex_unlock(&target_ib->lock);
-	}
-	else {
+	} else {
 		//NO TAIL Scenario : Delete Ib instance and free all memory space.
 		for (res_type = 0; res_type < allowed_res_count; res_type++) {
 			res = target_ib->ib_dt->res[allowed_resources[res_type]];
@@ -319,6 +336,7 @@ void press_timeout_func(struct work_struct* work)
 			spin_unlock(&write_qos_lock);
 			synchronize_rcu();
 			kfree(tv);
+			tv = NULL;
 
 			rcu_read_lock();
 			if (!list_empty(&qos_list[res.res_id])) {
@@ -343,6 +361,7 @@ void press_timeout_func(struct work_struct* work)
 
 		remove_ib_instance(target_ib);
 	}
+	mutex_unlock(&sip_rel_lock);
 
 }
 
@@ -355,6 +374,9 @@ void release_state_func(struct work_struct* work)
 	struct t_ib_res_info res;
 
 	struct t_ib_info* target_ib = container_of(work, struct t_ib_info, ib_state_work[IB_TAIL]);
+
+	if (target_ib == NULL)
+		return;
 
 	mutex_lock(&target_ib->lock);
 
@@ -410,6 +432,9 @@ void release_timeout_func(struct work_struct* work)
 	int res_type;
 
 	struct t_ib_info* target_ib = container_of(work, struct t_ib_info, ib_timeout_work[IB_TAIL].work);
+	if(!target_ib)
+		return;
+
 	pr_info(ITAG" Release Timeout Func :::: Unique_Id(%d)", target_ib->uniq_id);
 
 	for (res_type = 0; res_type < allowed_res_count; res_type++) {
@@ -430,6 +455,7 @@ void release_timeout_func(struct work_struct* work)
 		spin_unlock(&write_qos_lock);
 		synchronize_rcu();
 		kfree(tv);
+		tv = NULL;
 
 		rcu_read_lock();
 		if (!list_empty(&qos_list[res.res_id])) {
@@ -515,7 +541,12 @@ void remove_ib_instance(struct t_ib_info* target_ib)
 		spin_unlock(&write_ib_lock);
 		synchronize_rcu();
 		pr_info(ITAG" Del Ib Instance's Id : %d", target_ib->uniq_id);
-		kfree(target_ib);
+		mutex_lock(&mem_lock);
+		if (target_ib != NULL) {
+			kfree(target_ib);
+			target_ib = NULL;
+		}
+		mutex_unlock(&mem_lock);
 	}
 }
 
@@ -669,7 +700,9 @@ void input_booster_init(void)
 	spin_lock_init(&write_ib_lock);
 	spin_lock_init(&write_qos_lock);
 	mutex_init(&trigger_ib_lock);
+	mutex_init(&sip_rel_lock);
 	mutex_init(&rel_ib_lock);
+	mutex_init(&mem_lock);
 
 //Input Booster Trigger Strcut Init
 	ib_trigger = kcalloc(ABS_CNT, sizeof(struct t_ib_trigger) * MAX_IB_COUNT, GFP_KERNEL);

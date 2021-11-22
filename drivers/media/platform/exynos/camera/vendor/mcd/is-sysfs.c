@@ -537,15 +537,15 @@ static ssize_t camera_checkfw_user_show(char *buf, enum is_cam_info_index cam_in
 		if (test_bit(IS_CRC_ERROR_FIRMWARE, &finfo->crc_error)
 			|| test_bit(IS_CRC_ERROR_ALL_SECTION, &finfo->crc_error)
 			|| test_bit(IS_CRC_ERROR_DUAL_CAMERA, &finfo->crc_error)) {
+			err(" NG, crc check fail");
+			return sprintf(buf, "%s\n", "NG");
+		} else {
 			if (!test_bit(IS_ROM_STATE_LATEST_MODULE, &finfo->rom_state)) {
 				err(" NG, not latest cam module");
 				return sprintf(buf, "%s\n", "NG");
 			} else {
 				return sprintf(buf, "%s\n", "OK");
 			}
-		} else {
-			err(" NG, crc check fail");
-			return sprintf(buf, "%s\n", "NG");
 		}
 	} else {
 		err(" NG, fw ver crc check fail");
@@ -1196,6 +1196,7 @@ static ssize_t camera_ssrm_camera_info_show(struct device *dev,
 {
 	char temp_buffer[65] = {0,};
 	int i = 0, zoomtmp = 0;
+	int runningCameraCnt = 0;
 
 	if (ssrmCameraInfoCnt <= 0) {
 		SsrmCameraInfoExt.capture = 0;
@@ -1204,24 +1205,26 @@ static ssize_t camera_ssrm_camera_info_show(struct device *dev,
 	}
 
 	SSRM_INFO_PRINT(SsrmCameraInfoExt, MODE);
-	strncat(buf, "\n", strlen("\n"));
 
 	for (i = 0; i < IS_SENSOR_COUNT; i++) {
 		if (SsrmCameraInfo[i].ID != -1) {
-			strncat(buf, "[", strlen("["));
-			sprintf(temp_buffer, "ID=%d<%d>;", SsrmCameraInfo[i].ID, SsrmCameraInfo[i].ON);
+			sprintf(temp_buffer, "ID=%d,%d;", SsrmCameraInfo[i].ID, SsrmCameraInfo[i].ON);
+			if (SsrmCameraInfo[i].ON)
+				runningCameraCnt++;
 			strncat(buf, temp_buffer, strlen(temp_buffer));
 			if (SsrmCameraInfo[i].ISPWidth && SsrmCameraInfo[i].ISPHeight) {
 				sprintf(temp_buffer, "ISP=%d,%d;",
 						SsrmCameraInfo[i].ISPWidth, SsrmCameraInfo[i].ISPHeight);
 				strncat(buf, temp_buffer, strlen(temp_buffer));
 			}
-			strncat(buf, "]\n", strlen("]\n"));
 		}
 	}
 
+	sprintf(temp_buffer, "[%d];", runningCameraCnt);
+	strncat(buf, temp_buffer, strlen(temp_buffer));
+
 	if (SsrmCameraInfoExt.minFPS && SsrmCameraInfoExt.maxFPS) {
-		sprintf(temp_buffer, "[FPS=%d,%d(%d);",
+		sprintf(temp_buffer, "FPS=%d,%d,%d;",
 				SsrmCameraInfoExt.minFPS, SsrmCameraInfoExt.maxFPS, SsrmCameraInfoExt.FPSHint);
 		strncat(buf, temp_buffer, strlen(temp_buffer));
 	}
@@ -1230,7 +1233,7 @@ static ssize_t camera_ssrm_camera_info_show(struct device *dev,
 				SsrmCameraInfoExt.previewWidth, SsrmCameraInfoExt.previewHeight);
 		strncat(buf, temp_buffer, strlen(temp_buffer));
 	}
-	sprintf(temp_buffer, "cap=%d(%d);", SsrmCameraInfoExt.capture, SsrmCameraInfoExt.HDRCapture);
+	sprintf(temp_buffer, "cap=%d,%d;", SsrmCameraInfoExt.capture, SsrmCameraInfoExt.HDRCapture);
 	strncat(buf, temp_buffer, strlen(temp_buffer));
 	SsrmCameraInfoExt.capture = SsrmCameraInfoExt.HDRCapture = 0;
 
@@ -1247,7 +1250,7 @@ static ssize_t camera_ssrm_camera_info_show(struct device *dev,
 	SSRM_INFO_PRINT(SsrmCameraInfoExt, HDR10);
 	SSRM_INFO_PRINT(SsrmCameraInfoExt, flash);
 	SSRM_INFO_PRINT(SsrmCameraInfoExt, mem);
-	strncat(buf, "]\n", strlen("]\n"));
+	strncat(buf, "\n", strlen("\n"));
 
 	return strlen(buf);
 }
@@ -3442,7 +3445,7 @@ static ssize_t camera_ois_rawdata_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t count)
 {
-	uint8_t raw_data[MAX_GYRO_EFS_DATA_LENGTH] = {0, };
+	uint8_t raw_data[MAX_GYRO_EFS_DATA_LENGTH + 1] = {0, };
 	long raw_data_x = 0, raw_data_y = 0;
 	long efs_size = 0;
 
@@ -3511,6 +3514,61 @@ static ssize_t camera_ois_calibrationtest_show(struct device *dev,
 		is_ois_init_factory(sysfs_core);
 		result = is_ois_gyrocal_test(sysfs_core, &raw_data_x, &raw_data_y);
 #endif
+		if (raw_data_x < 0 && raw_data_y < 0) {
+			return sprintf(buf, "%d,-%ld.%03ld,-%ld.%03ld\n", result, abs(raw_data_x / 1000),
+				abs(raw_data_x % 1000), abs(raw_data_y / 1000), abs(raw_data_y % 1000));
+		} else if (raw_data_x < 0) {
+			return sprintf(buf, "%d,-%ld.%03ld,%ld.%03ld\n", result, abs(raw_data_x / 1000),
+				abs(raw_data_x % 1000), raw_data_y / 1000, raw_data_y % 1000);
+		} else if (raw_data_y < 0) {
+			return sprintf(buf, "%d,%ld.%03ld,-%ld.%03ld\n", result, raw_data_x / 1000,
+				raw_data_x % 1000, abs(raw_data_y / 1000), abs(raw_data_y % 1000));
+		} else {
+			return sprintf(buf, "%d,%ld.%03ld,%ld.%03ld\n", result, raw_data_x / 1000,
+				raw_data_x % 1000, raw_data_y / 1000, raw_data_y % 1000);
+		}
+
+		info("%s raw_data_x = %ld, raw_data_y = %ld\n", __func__, raw_data_x, raw_data_y);
+	} else {
+		err("OIS power is not enabled.");
+		return sprintf(buf, "%d,%ld.%03ld,%ld.%03ld\n", result, raw_data_x / 1000,
+			 raw_data_x % 1000, raw_data_y / 1000, raw_data_y % 1000);
+	}
+}
+
+static ssize_t camera_ois_gyronoise_show(struct device *dev,
+				    struct device_attribute *attr, char *buf)
+{
+	bool result = false;
+	long raw_data_x = 0, raw_data_y = 0;
+	bool camera_running;
+	bool camera_running2;
+#ifdef CAMERA_3RD_OIS
+	bool camera_running3;
+#endif
+	bool check_power = false;
+
+	camera_running = is_vendor_check_camera_running(SENSOR_POSITION_REAR);
+	camera_running2 = is_vendor_check_camera_running(SENSOR_POSITION_REAR2);
+#ifdef CAMERA_3RD_OIS
+	camera_running3 = is_vendor_check_camera_running(SENSOR_POSITION_REAR4);
+#endif
+
+	if (!camera_running && !camera_running2
+#ifdef CAMERA_3RD_OIS
+		&& !camera_running3
+#endif
+	) {
+		check_power = check_ois_power;
+		if (check_power)
+			is_ois_init_factory(sysfs_core);
+	} else {
+		check_power = true;
+	}
+
+	if (check_power) {
+		result = is_ois_gyronoise_test(sysfs_core, &raw_data_x, &raw_data_y);
+
 		if (raw_data_x < 0 && raw_data_y < 0) {
 			return sprintf(buf, "%d,-%ld.%03ld,-%ld.%03ld\n", result, abs(raw_data_x / 1000),
 				abs(raw_data_x % 1000), abs(raw_data_y / 1000), abs(raw_data_y % 1000));
@@ -4803,6 +4861,7 @@ static DEVICE_ATTR(ois_supperssion_ratio_rear4, S_IRUGO, camera_ois_rear4_supper
 static DEVICE_ATTR(ois_rawdata, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH,
 		camera_ois_rawdata_show, camera_ois_rawdata_store);
 static DEVICE_ATTR(calibrationtest, S_IRUGO, camera_ois_calibrationtest_show, NULL);
+static DEVICE_ATTR(ois_noise_stdev, S_IRUGO, camera_ois_gyronoise_show, NULL);
 static DEVICE_ATTR(ois_hall_position, S_IRUGO, camera_ois_hall_position_show, NULL);
 static DEVICE_ATTR(oisfw, S_IRUGO, camera_ois_version_show, NULL);
 static DEVICE_ATTR(ois_diff, S_IRUGO, camera_ois_diff_show, NULL);
@@ -5643,6 +5702,10 @@ int is_create_sysfs(struct is_core *core)
 			pr_err("failed to create ois device file, %s\n",
 				dev_attr_calibrationtest.attr.name);
 		}
+		if (device_create_file(camera_ois_dev, &dev_attr_ois_noise_stdev) < 0) {
+			pr_err("failed to create ois device file, %s\n",
+				dev_attr_ois_noise_stdev.attr.name);
+		}
 		if (device_create_file(camera_ois_dev, &dev_attr_ois_hall_position) < 0) {
 			pr_err("failed to create ois device file, %s\n",
 				dev_attr_ois_hall_position.attr.name);
@@ -5986,6 +6049,7 @@ int is_destroy_sysfs(struct is_core *core)
 #endif
 		device_remove_file(camera_ois_dev, &dev_attr_ois_rawdata);
 		device_remove_file(camera_ois_dev, &dev_attr_calibrationtest);
+		device_remove_file(camera_ois_dev, &dev_attr_ois_noise_stdev);
 		device_remove_file(camera_ois_dev, &dev_attr_ois_hall_position);
 		device_remove_file(camera_ois_dev, &dev_attr_oisfw);
 		device_remove_file(camera_ois_dev, &dev_attr_ois_diff);

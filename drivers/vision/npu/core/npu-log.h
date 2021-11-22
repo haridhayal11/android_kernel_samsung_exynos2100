@@ -25,6 +25,10 @@
 #include <soc/samsung/memlogger.h>
 #include "npu-ver-info.h"
 
+#if IS_ENABLED(CONFIG_SEC_ABC)
+#include <linux/sti/abc_common.h>
+#endif
+
 #define NPU_RING_LOG_BUFFER_MAGIC	0x3920FFAC
 #define LOG_UNIT_NUM     (1024)
 
@@ -61,14 +65,6 @@ struct npu_log_ops {
 };
 
 struct npu_log_unit {
-	/* mandatory data */
-	u64 timestamp;
-	unsigned long sec;
-	unsigned long nsec;
-	/* mandatory only if is_support_uts is true */
-	struct rtc_time tm;
-	/* optional datas */
-	int init_data;
 	char string[1024];
 };
 

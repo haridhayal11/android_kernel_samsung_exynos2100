@@ -110,4 +110,5 @@ enum epen_ble_charge_state {
 #define MPU_W9019			0x43
 #define MPU_W9020			0x44
 #define MPU_W9021			0x45
+#define MPU_WEZ01			0x46
 

@@ -565,12 +565,13 @@ static int get_connection_test(struct wacom_i2c *wac_i2c, int test_mode)
 	input_info(true, &client->dev, "connection_check : %s\n",
 			wac_i2c->connection_check ? "OK" : "NG");
 
+#if IS_ENABLED(CONFIG_INPUT_SEC_NOTIFIER)
 	if (wac_i2c->is_tsp_block) {
 		wac_i2c->tsp_scan_mode = sec_input_notify(&wac_i2c->nb, NOTIFIER_TSP_BLOCKING_RELEASE, NULL);
 		wac_i2c->is_tsp_block = false;
 		input_err(true, &client->dev, "%s : release tsp scan block\n", __func__);
 	}
-
+#endif
 	return ret;
 }
 

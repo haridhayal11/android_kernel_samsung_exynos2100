@@ -384,7 +384,7 @@ int is_subdev_close(struct is_subdev *subdev)
 	int ret = 0;
 
 	if (!test_bit(IS_SUBDEV_OPEN, &subdev->state)) {
-		mserr("subdev is already close", subdev, subdev);
+		msinfo("subdev is already close", subdev, subdev, __func__);
 		ret = -EINVAL;
 		goto p_err;
 	}
@@ -485,7 +485,7 @@ static int is_subdev_start(struct is_subdev *subdev)
 	leader = subdev->leader;
 
 	if (test_bit(IS_SUBDEV_START, &subdev->state)) {
-		mserr("already start", subdev, subdev);
+		msinfo("[%s] already start", subdev, subdev, __func__);
 		goto p_err;
 	}
 
@@ -648,7 +648,7 @@ static int is_sensor_subdev_stop(void *qdevice,
 	}
 
 	if (!test_bit(IS_SUBDEV_START, &subdev->state)) {
-		merr("already stop", device);
+		minfo("[%s]already stop", device, __func__);
 		goto p_err;
 	}
 
@@ -775,7 +775,7 @@ static int is_sensor_subdev_s_format(void *qdevice,
 	}
 
 	if (test_bit(IS_SUBDEV_INTERNAL_USE, &subdev->state)) {
-		mswarn("%s: It is sharing with internal use.", subdev, subdev, __func__);
+		msinfo("%s: It is sharing with internal use.", subdev, subdev, __func__);
 	} else {
 		ret = is_subdev_s_format(subdev, queue);
 		if (ret) {
@@ -1255,7 +1255,7 @@ static int is_subdev_internal_alloc_buffer(struct is_subdev *subdev,
 #ifdef ENABLE_LOGICAL_VIDEO_NODE
 	int k;
 	struct is_sub_node * snode = NULL;
-	u32 cap_node_num = 0;
+	int cap_node_num;
 #endif
 	u32 batch_num;
 	u32 payload_size, header_size;
@@ -1615,7 +1615,7 @@ static int _is_subdev_internal_start(struct is_subdev *subdev)
 	unsigned long flags;
 
 	if (test_bit(IS_SUBDEV_START, &subdev->state)) {
-		mswarn(" subdev already start", subdev, subdev);
+		msinfo("[%s] subdev already start", subdev, subdev, __func__);
 		goto p_err;
 	}
 
@@ -1917,7 +1917,7 @@ int is_subdev_internal_open(void *device, enum is_device_type type, struct is_su
 	struct is_device_ischain *ischain;
 
 	if (test_bit(IS_SUBDEV_INTERNAL_USE, &subdev->state)) {
-		mswarn("already INTERNAL_USE state", subdev, subdev);
+		msinfo("[%s] already INTERNAL_USE state", subdev, subdev, __func__);
 		goto p_err;
 	}
 

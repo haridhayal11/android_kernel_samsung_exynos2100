@@ -41,11 +41,22 @@
 #include <linux/battery/sec_battery_common.h>
 #include <linux/battery/sec_pd.h>
 
+#if IS_ENABLED(CONFIG_SEC_MPARAM) || (IS_MODULE(CONFIG_SEC_PARAM) && defined(CONFIG_ARCH_EXYNOS))
 #if defined(CONFIG_SEC_FACTORY)
 extern int factory_mode;
 #endif
+#else
+#if defined(CONFIG_SEC_FACTORY)
+static int __read_mostly factory_mode;
+module_param(factory_mode, int, 0444);
+#endif
+#endif
 
 extern struct max77705_usbc_platform_data *g_usbc_data;
+
+#if defined(CONFIG_SEC_FACTORY)
+static int max77705_get_facmode(void) { return factory_mode; }
+#endif
 
 static void max77705_process_pd(struct max77705_usbc_platform_data *usbc_data)
 {
@@ -71,6 +82,11 @@ void max77705_select_pdo(int num)
 	struct max77705_pd_data *pd_data = g_usbc_data->pd_data;
 	usbc_cmd_data value;
 	u8 temp;
+
+	if (pd_data->pd_noti.event == PDIC_NOTIFY_EVENT_DETACH) {
+		pr_info("%s : PD TA already detached. Doesn't select pdo(%d)\n", __func__, num);
+		return;
+	}
 
 	init_usbc_cmd_data(&value);
 	pr_info("%s : NUM(%d)\n", __func__, num);
@@ -376,7 +392,7 @@ void max77705_set_fw_noautoibus(int enable)
 	}
 
 #if defined(CONFIG_SEC_FACTORY)
-	if (factory_mode) {
+	if (max77705_get_facmode()) {
 		pr_info("%s: Factory Mode set AUTOIBUS_FW_AT_OFF\n", __func__);
 		op_data = 0x03; /* usbc fw off & auto off(manual on) */
 	}
@@ -998,7 +1014,8 @@ static void max77705_pd_check_pdmsg(struct max77705_usbc_platform_data *usbc_dat
 		if (usbc_data->cc_data->current_pr == SRC) {
 			max77705_vbus_turn_on_ctrl(usbc_data, OFF, false);
 			schedule_delayed_work(&usbc_data->vbus_hard_reset_work, msecs_to_jiffies(760));
-		}
+		} else if (usbc_data->cc_data->current_pr == SNK)
+			usbc_data->detach_done_wait = 1;
 #ifdef CONFIG_USB_NOTIFY_PROC_LOG
 		event = NOTIFY_EXTRA_HARDRESET_RECEIVED;
 		store_usblog_notify(NOTIFY_EXTRA, (void *)&event, NULL);
@@ -1009,7 +1026,8 @@ static void max77705_pd_check_pdmsg(struct max77705_usbc_platform_data *usbc_dat
 		if (usbc_data->cc_data->current_pr == SRC) {
 			max77705_vbus_turn_on_ctrl(usbc_data, OFF, false);
 			schedule_delayed_work(&usbc_data->vbus_hard_reset_work, msecs_to_jiffies(760));
-		}
+		} else if (usbc_data->cc_data->current_pr == SNK)
+			usbc_data->detach_done_wait = 1;
 #ifdef CONFIG_USB_NOTIFY_PROC_LOG
 		event = NOTIFY_EXTRA_HARDRESET_SENT;
 		store_usblog_notify(NOTIFY_EXTRA, (void *)&event, NULL);
@@ -1118,6 +1136,7 @@ static void max77705_pd_rid(struct max77705_usbc_platform_data *usbc_data, u8 fc
 	case FCT_255Kohm:
 		msg_maxim(" RID_255K");
 		pd_data->device = DEV_FCT_255K;
+		usbc_data->rid_check = true;
 #if IS_ENABLED(CONFIG_PDIC_NOTIFIER)
 		rid = RID_255K;
 #endif
@@ -1125,6 +1144,7 @@ static void max77705_pd_rid(struct max77705_usbc_platform_data *usbc_data, u8 fc
 	case FCT_301Kohm:
 		msg_maxim(" RID_301K");
 		pd_data->device = DEV_FCT_301K;
+		usbc_data->rid_check = true;
 #if IS_ENABLED(CONFIG_PDIC_NOTIFIER)
 		rid = RID_301K;
 #endif
@@ -1132,6 +1152,7 @@ static void max77705_pd_rid(struct max77705_usbc_platform_data *usbc_data, u8 fc
 	case FCT_523Kohm:
 		msg_maxim(" RID_523K");
 		pd_data->device = DEV_FCT_523K;
+		usbc_data->rid_check = true;
 #if IS_ENABLED(CONFIG_PDIC_NOTIFIER)
 		rid = RID_523K;
 #endif
@@ -1139,6 +1160,7 @@ static void max77705_pd_rid(struct max77705_usbc_platform_data *usbc_data, u8 fc
 	case FCT_619Kohm:
 		msg_maxim(" RID_619K");
 		pd_data->device = DEV_FCT_619K;
+		usbc_data->rid_check = true;
 #if IS_ENABLED(CONFIG_PDIC_NOTIFIER)
 		rid = RID_619K;
 #endif
@@ -1415,6 +1437,7 @@ int max77705_pd_init(struct max77705_usbc_platform_data *usbc_data)
 	pd_data->pd_noti.sink_status.has_apdo = false;
 	pd_data->pd_noti.sink_status.fp_sec_pd_select_pdo = max77705_select_pdo;
 	pd_data->pd_noti.sink_status.fp_sec_pd_select_pps = max77705_select_pps;
+	pd_data->pd_noti.sink_status.fp_sec_pd_manual_ccopen_req = pdic_manual_ccopen_request;
 
 	/* skip below codes for detecting incomplete connection cable. */
 	/* pd_data->pd_noti.event = PDIC_NOTIFY_EVENT_DETACH; */

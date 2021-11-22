@@ -248,8 +248,9 @@ enum mfc_mb_flag {
 	MFC_FLAG_DISP_RES_CHANGE	= 7,
 	MFC_FLAG_UNCOMP			= 8,
 	MFC_FLAG_FRAMERATE_CH		= 9,
-	MFC_FLAG_IDR			= 10,
+	MFC_FLAG_SYNC_FRAME		= 10,
 	MFC_FLAG_AV1_FILM_GRAIN		= 11,
+	MFC_FLAG_MULTIFRAME		= 12,
 	/* Driver set to user when SRC DQbuf */
 	MFC_FLAG_CONSUMED_ONLY		= 15,
 	/* User set to driver when SRC Qbuf */
@@ -357,7 +358,8 @@ enum mfc_qos_control {
 
 enum mfc_ts_type {
 	MFC_TS_SRC		= 0x1,
-	MFC_TS_DST		= 0x2,
+	MFC_TS_DST_Q		= 0x2,
+	MFC_TS_SRC_Q		= 0x3,
 };
 
 enum mfc_core_type {
@@ -381,6 +383,18 @@ enum mfc_op_mode {
 	MFC_OP_SWITCHING		= 3,
 	MFC_OP_SWITCH_TO_SINGLE		= 4,
 	MFC_OP_SWITCH_BUT_MODE2		= 5,
+};
+
+enum mfc_real_time {
+	/* real-time */
+	MFC_RT                  = 0,
+	/* low-priority real-time */
+	MFC_RT_LOW              = 1,
+	/* constrained real-time */
+	MFC_RT_CON              = 2,
+	/* non real-time */
+	MFC_NON_RT              = 3,
+	MFC_RT_UNDEFINED        = 4,
 };
 
 /* core driver */
@@ -815,6 +829,9 @@ struct mfc_platdata {
 	struct mfc_feature wait_nalq_status;
 	struct mfc_feature drm_switch_predict;
 	struct mfc_feature sbwc_enc_src_ctrl;
+	struct mfc_feature enc_idr_flag;
+	struct mfc_feature min_quality_mode;
+	struct mfc_feature enc_ts_delta;
 
 	/* AV1 Decoder */
 	unsigned int support_av1_dec;
@@ -941,7 +958,10 @@ typedef struct __EncoderInputStr {
 	int St2094_40sei[30];
 	int SourcePlaneStride[3];
 	int SourcePlane2BitStride[2];
-} EncoderInputStr; /* 86*4 = 344 bytes */
+	int MVHorRange;
+	int MVVerRange;
+	int TimeStampDelta;
+} EncoderInputStr; /* 89*4 = 356 bytes */
 
 typedef struct __DecoderOutputStr {
 	int StartCode; /* 0xAAAAAAAA; Decoder output structure marker */
@@ -1649,6 +1669,7 @@ struct mfc_enc_params {
 	u8 roi_enable;
 	u8 ivf_header_disable;	/* VP8, VP9 */
 	u8 fixed_target_bit;
+	u8 min_quality_mode;	/* H.264, HEVC when RC_MODE is 2(VBR) */
 
 	u32 check_color_range;
 	u32 color_range;
@@ -1991,7 +2012,11 @@ struct mfc_dec {
 	unsigned long dynamic_set;
 	unsigned long dynamic_used;
 
+	/* indicate multiframe in case of VP9, AV1 */
 	int has_multiframe;
+	/* disable NALQ for multiframe in case of MPEG4 PB */
+	int is_multiframe;
+	/* multiple show frame for AV1 */
 	int is_multiple_show;
 
 	unsigned int num_of_tile_over_4;
@@ -2091,6 +2116,8 @@ struct mfc_ctx {
 	struct _otf_handle *otf_handle;
 
 	int num;
+	int prio;
+	enum mfc_real_time rt;
 
 	struct mfc_fmt *src_fmt;
 	struct mfc_fmt *dst_fmt;
@@ -2140,6 +2167,7 @@ struct mfc_ctx {
 	struct mfc_core_lock corelock;
 	int serial_src_index;
 	int curr_src_index;
+	int cmd_counter;
 	struct mutex op_mode_mutex;
 
 	/* interrupt lock */
@@ -2178,13 +2206,15 @@ struct mfc_ctx {
 	unsigned long framerate;
 	unsigned long last_framerate;
 	unsigned long operating_framerate;
-	unsigned long disp_framerate;
+	unsigned long dst_q_framerate;
+	unsigned long src_q_framerate;
 	unsigned int qos_ratio;
 	bool update_framerate;
 	bool update_bitrate;
 
 	struct mfc_ts_control src_ts;
-	struct mfc_ts_control dst_ts;
+	struct mfc_ts_control dst_q_ts;
+	struct mfc_ts_control src_q_ts;
 
 	/* bitrate control for QoS*/
 	struct mfc_bitrate bitrate_array[MAX_TIME_INDEX];

@@ -1179,7 +1179,7 @@ static int is_hw_3aa_change_chain(struct is_hw_ip *hw_ip, u32 instance,
 
 	curr_id = hw_ip->id - DEV_HW_3AA0;
 	if (curr_id == next_id) {
-		mswarn_hw("Same chain (curr:%d, next:%d)", instance, hw_ip,
+		msinfo_hw("[%s] Same chain (curr:%d, next:%d)", instance, hw_ip, __func__,
 			curr_id, next_id);
 		goto p_err;
 	}

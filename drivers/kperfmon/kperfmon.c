@@ -11,6 +11,7 @@
 #include <linux/ologk.h>
 #undef KPERFMON_KERNEL
 
+#include <linux/version.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/kernel.h>
@@ -23,7 +24,13 @@
 #include <linux/workqueue.h>
 #include <linux/slab.h>
 #include <linux/sec_debug.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+#define KPERFMON_KERNEL
 #include <linux/perflog.h>
+#undef KPERFMON_KERNEL
+#else
+#include <linux/perflog.h>
+#endif
 #if !defined(KPERFMON_KMALLOC)
 #include <linux/vmalloc.h>
 #endif
@@ -31,6 +38,17 @@
 #include <linux/sched/signal.h>
 #include <asm/uaccess.h>
 #include <asm/stacktrace.h>
+
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+#define rtc_time_to_tm(a, b) rtc_time64_to_tm(a, b)
+
+struct timeval {
+	time64_t    tv_sec;
+	long        tv_usec;
+};
+#endif
+
 
 #include "kperfmon.h"
 
@@ -194,10 +212,20 @@ void GetNext(struct tRingBuffer *buffer)
 	buffer->position %= buffer->length;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+static const struct proc_ops kperfmon_fops = {
+	//.proc_open = sec_debug_reset_extra_info_proc_open,
+	.proc_read = kperfmon_read,
+	.proc_write = kperfmon_write,
+	//.proc_lseek = seq_lseek,
+	//.proc_release = single_release,
+};
+#else
 static const struct file_operations kperfmon_fops = {
 	.read = kperfmon_read,
 	.write = kperfmon_write,
 };
+#endif
 
 void set_kperfmon_debugger_function(char *writebuffer)
 {

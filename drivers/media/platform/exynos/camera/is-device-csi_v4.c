@@ -68,6 +68,11 @@ static int csi_s_fro(struct is_device_csi *csi)
 
 	dma_ch = csi->wdma_ch;
 	wdma_mod = is_camif_wdma_module_get(dma_ch);
+	if (!wdma_mod) {
+		merr("[CSI%d][DMA%d] wdma_mod is NULL", csi, csi->ch, dma_ch);
+		return -ENODEV;
+	}
+
 	csi_hw_s_dma_common_frame_id_decoder(wdma_mod->regs, dma_ch, csi->f_id_dec);
 
 	if (csi_hw_get_version(csi->base_reg) < IS_CSIS_VERSION(5, 4, 0, 0)) {
@@ -96,7 +101,7 @@ static int csi_dma_attach(struct is_device_csi *csi)
 	spin_lock_irqsave(&csi->dma_seq_slock, flag);
 
 	if (csi->wdma) {
-		mwarn("[CSI%d] DMA is already attached.", csi, csi->ch);
+		minfo("[%s][CSI%d] DMA is already attached.", csi, __func__, csi->ch);
 		goto err_already_attach;
 	}
 
@@ -104,7 +109,7 @@ static int csi_dma_attach(struct is_device_csi *csi)
 	 * If there is wdma_ch_hint, specific WDMA channel will be selected.
 	 * Or, WDMA channel will be selected dynamically.
 	 */
-	if (csi->sensor_cfg && csi->sensor_cfg->wdma_ch_hint >= 0)
+	if (csi->sensor_cfg)
 		wdma_ch_hint = csi->sensor_cfg->wdma_ch_hint;
 	else
 		wdma_ch_hint = csi->wdma_ch_hint;
@@ -449,6 +454,10 @@ static void csi_s_buf_addr_wrap(void *data, unsigned long id, struct is_frame *f
 
 }
 
+static const struct votf_ops csi_votf_ops = {
+	.s_addr		= csi_s_buf_addr_wrap,
+};
+
 static inline void csi_s_config_dma(struct is_device_csi *csi, struct is_vci_config *vci_config)
 {
 	int ret, vc = 0;
@@ -473,6 +482,11 @@ static inline void csi_s_config_dma(struct is_device_csi *csi, struct is_vci_con
 		writel(mux_val, wdma->regs_mux);
 		minfo("[CSI%d] input(%d) --> WDMA ch(%d)\n", csi, csi->ch,
 			mux_val, csi->wdma_ch);
+	}
+
+	if (!wdma_mod) {
+		merr("[CSI%d] Failed to get wdma_module", csi, csi->ch);
+		return;
 	}
 
 	for (vc = CSI_VIRTUAL_CH_0; vc < CSI_VIRTUAL_CH_MAX; vc++) {
@@ -1041,7 +1055,7 @@ static void csi_dma_tag(struct v4l2_subdev *subdev,
 	v4l2_subdev_notify(subdev, data_type, frame);
 }
 
-static void csi_err_check(struct is_device_csi *csi, u32 *err_id, enum csis_hw_type type)
+static void csi_err_check(struct is_device_csi *csi, ulong *err_id, enum csis_hw_type type)
 {
 	int vc, err, votf_ch = 0;
 	unsigned long prev_err_flag = 0;
@@ -1070,7 +1084,7 @@ static void csi_err_check(struct is_device_csi *csi, u32 *err_id, enum csis_hw_t
 		csi->error_id[vc] |= err_id[vc];
 
 	/* 4. VC ch0 only exception case */
-	err = find_first_bit((unsigned long *)&err_id[CSI_VIRTUAL_CH_0], CSIS_ERR_END);
+	err = find_first_bit(&err_id[CSI_VIRTUAL_CH_0], CSIS_ERR_END);
 	while (err < CSIS_ERR_END) {
 		switch (err) {
 		case CSIS_ERR_LOST_FE_VC:
@@ -1109,7 +1123,7 @@ static void csi_err_check(struct is_device_csi *csi, u32 *err_id, enum csis_hw_t
 		}
 
 		/* Check next bit */
-		err = find_next_bit((unsigned long *)&err_id[CSI_VIRTUAL_CH_0], CSIS_ERR_END, err + 1);
+		err = find_next_bit(&err_id[CSI_VIRTUAL_CH_0], CSIS_ERR_END, err + 1);
 	}
 }
 
@@ -1129,7 +1143,7 @@ static void csi_err_print(struct is_device_csi *csi)
 		if (!csi->error_id[vc])
 			continue;
 
-		err = find_first_bit((unsigned long *)&csi->error_id[vc], CSIS_ERR_END);
+		err = find_first_bit(&csi->error_id[vc], CSIS_ERR_END);
 		while (err < CSIS_ERR_END) {
 			switch (err) {
 			case CSIS_ERR_ID:
@@ -1238,7 +1252,7 @@ static void csi_err_print(struct is_device_csi *csi)
 #endif
 
 			/* Check next bit */
-			err = find_next_bit((unsigned long *)&csi->error_id[vc], CSIS_ERR_END, err + 1);
+			err = find_next_bit(&csi->error_id[vc], CSIS_ERR_END, err + 1);
 		}
 	}
 
@@ -1602,7 +1616,7 @@ static irqreturn_t is_isr_csi(int irq, void *data)
 	memset(&irq_src, 0x0, sizeof(struct csis_irq_src));
 	csi_hw_g_irq_src(csi->base_reg, &irq_src, true);
 
-	dbg_isr(2, "link: ERR(0x%X, 0x%X, 0x%X, 0x%X) S(0x%X) L(0x%X) E(0x%X)\n", csi,
+	dbg_isr(2, "link: ERR(0x%lX, 0x%lX, 0x%lX, 0x%lX) S(0x%X) L(0x%X) E(0x%X)\n", csi,
 		irq_src.err_id[CSI_VIRTUAL_CH_0],
 		irq_src.err_id[CSI_VIRTUAL_CH_1],
 		irq_src.err_id[CSI_VIRTUAL_CH_2],
@@ -1666,7 +1680,7 @@ static irqreturn_t is_isr_csi(int irq, void *data)
 			 */
 			/* check to error */
 			for (ch = CSI_VIRTUAL_CH_0; ch < CSI_VIRTUAL_CH_MAX; ch++)
-				err_flag |= csi->error_id[ch];
+				err_flag |= (u32)csi->error_id[ch];
 
 			/* error handling */
 			if (err_flag)
@@ -1679,7 +1693,7 @@ static irqreturn_t is_isr_csi(int irq, void *data)
 
 	/* Check error */
 	if (irq_src.err_flag)
-		csi_err_check(csi, (u32 *)irq_src.err_id, CSIS_LINK);
+		csi_err_check(csi, irq_src.err_id, CSIS_LINK);
 
 clear_status:
 	return IRQ_HANDLED;
@@ -1692,7 +1706,7 @@ static irqreturn_t is_isr_csi_dma(int irq, void *data)
 	int dma_frame_end = 0;
 	int dma_abort_done = 0;
 	int dma_err_flag = 0;
-	u32 dma_err_id[CSI_VIRTUAL_CH_MAX];
+	ulong dma_err_id[CSI_VIRTUAL_CH_MAX];
 	struct csis_irq_src irq_src;
 	int vc;
 	struct is_framemgr *framemgr;
@@ -1722,7 +1736,7 @@ static irqreturn_t is_isr_csi_dma(int irq, void *data)
 		csi_hw_g_dma_irq_src_vc(wdma->regs_ctl, &irq_src, vc, true);
 
 		dma_err_id[vc] = irq_src.err_id[vc];
-		dma_err_flag |= dma_err_id[vc];
+		dma_err_flag |= (int)dma_err_id[vc];
 
 		if (irq_src.dma_start)
 			dma_frame_str |= 1 << vc;
@@ -1734,7 +1748,7 @@ static irqreturn_t is_isr_csi_dma(int irq, void *data)
 			dma_abort_done |= 1 << vc;
 
 		if (dma_err_id[vc] & ~(1 << CSIS_ERR_DMA_ABORT_DONE))
-			minfo("[CSI%d][VC%d] CSIS_ERR_DMA ID(0x%08X)",
+			minfo("[CSI%d][VC%d] CSIS_ERR_DMA ID(0x%08lX)",
 				csi, csi->ch, vc, dma_err_id[vc]);
 	}
 
@@ -1822,7 +1836,7 @@ static irqreturn_t is_isr_csi_dma(int irq, void *data)
 
 					votf_fmgr = is_votf_get_framemgr(group, TWS, dma_subdev->id);
 
-					if (votf_fmgr && votf_fmgr->slave.s_oneshot) {
+					if (votf_fmgr) {
 						ret = votf_fmgr_call(votf_fmgr, slave, s_oneshot);
 						if (ret)
 							mserr("votf_oneshot_call(slave) is fail(%d)",
@@ -2185,7 +2199,7 @@ static long csi_ioctl(struct v4l2_subdev *subdev, unsigned int cmd, void *arg)
 				continue;
 			}
 
-			ret = is_votf_register_framemgr(group, TWS, csi, csi_s_buf_addr_wrap,
+			ret = is_votf_register_framemgr(group, TWS, csi, &csi_votf_ops,
 				dma_subdev->id);
 			if (ret)
 				mserr("is_votf_register_framemgr is failed\n", dma_subdev, dma_subdev);
@@ -2391,7 +2405,7 @@ static int csi_stream_on(struct v4l2_subdev *subdev,
 	int vc;
 	u32 settle;
 	u32 __iomem *base_reg;
-	u32 ebuf_ch;
+	int ebuf_ch;
 	struct is_device_sensor *device = v4l2_get_subdev_hostdata(subdev);
 	struct is_sensor_cfg *sensor_cfg;
 	struct is_subdev *dma_subdev;
@@ -2662,7 +2676,7 @@ static int csi_stream_off(struct v4l2_subdev *subdev,
 	struct is_device_csi *csi)
 {
 	int vc;
-	u32 ebuf_ch;
+	int ebuf_ch;
 	u32 __iomem *base_reg;
 	struct is_device_sensor *device = v4l2_get_subdev_hostdata(subdev);
 	struct is_group *group;
@@ -2875,7 +2889,11 @@ static int csi_s_format(struct v4l2_subdev *subdev,
 		switch (vci_cfg->type) {
 		case VC_TAILPDAF:
 			bits_per_pixel = 16;
-			buffer_num = SUBDEV_INTERNAL_BUF_MAX;
+			if (sensor_cfg->framerate <= 30)
+				buffer_num = 3;
+			else
+				buffer_num = SUBDEV_INTERNAL_BUF_MAX;
+
 			type_name = "VC_TAILPDAF";
 			break;
 		case VC_MIPISTAT:

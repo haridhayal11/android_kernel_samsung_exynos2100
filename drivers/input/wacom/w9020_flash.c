@@ -508,7 +508,7 @@ static int wacom_i2c_flash_w9020(struct wacom_i2c *wac_i2c, unsigned char *fw_da
 	struct i2c_client *client = wac_i2c->client;
 	bool bRet = false;
 	int iBLVer = 0, iMpuType = 0;
-#ifdef CONFIG_EPEN_WACOM_W9021
+#if IS_ENABLED(CONFIG_EPEN_WACOM_W9021)
 	unsigned long max_address = W9021_END_ADDR;	/* Max.address of Load data */
 	unsigned long start_address = W9021_START_ADDR;	/* Start.address of Load data */
 #else
@@ -530,7 +530,7 @@ static int wacom_i2c_flash_w9020(struct wacom_i2c *wac_i2c, unsigned char *fw_da
 		return -EXIT_FAIL_GET_MPU_TYPE;
 	}
 
-#ifdef CONFIG_EPEN_WACOM_W9021
+#if IS_ENABLED(CONFIG_EPEN_WACOM_W9021)
 	if (iMpuType != MPU_W9021) {
 		input_err(true, &client->dev,
 				"MPU is not for W9021 : %x\n", iMpuType);

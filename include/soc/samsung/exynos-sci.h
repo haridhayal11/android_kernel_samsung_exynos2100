@@ -201,12 +201,14 @@ struct exynos_sci_data {
 	const char			*region_name[LLC_REGION_MAX];
 	unsigned int			region_priority[LLC_REGION_MAX];
 	struct exynos_sci_gov_data	*gov_data;
+	bool				llc_on_flag;
 };
 
 #if defined(CONFIG_EXYNOS_SCI) || defined(CONFIG_EXYNOS_SCI_MODULE)
 extern void llc_invalidate(unsigned int invway);
 extern void llc_flush(unsigned int invway);
 extern int llc_enable(bool on);
+extern int cam_llc_enable(bool on);
 extern int llc_get_en(void);
 extern void llc_ecc_logging(void);
 extern unsigned int llc_get_region_info(unsigned int region_index);
@@ -216,6 +218,7 @@ extern int llc_off_disable(bool off);
 #define llc_invalidate() do {} while (0)
 #define llc_flush() do {} while (0)
 #define llc_enable(a) do {} while (0)
+#define cam_llc_enable(a) do {} while (0)
 #define llc_get_en() do {} while (0)
 #define llc_ecc_logging() do {} while (0)
 #define llc_get_region_info(a) do {} while (0)

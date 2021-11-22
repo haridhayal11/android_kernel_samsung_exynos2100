@@ -50,6 +50,7 @@
 #ifdef CONFIG_DWC3_RETRY_CONNECTION
 #include <linux/usb/composite.h>
 #endif
+#include <linux/reboot.h>
 
 #define OTG_NO_CONNECT		0
 #define OTG_CONNECT_ONLY	1
@@ -74,8 +75,15 @@ struct intf_typec {
 };
 #endif
 
+static int usb_reboot_noti(struct notifier_block *nb, unsigned long event, void *buf);
+static struct notifier_block usb_reboot_notifier = {
+	.notifier_call = usb_reboot_noti,
+};
+
 int otg_connection;
 EXPORT_SYMBOL_GPL(otg_connection);
+int usb_audio_connection;
+EXPORT_SYMBOL_GPL(usb_audio_connection);
 int phy_status = 1;
 EXPORT_SYMBOL_GPL(phy_status);
 static int dwc3_otg_statemachine(struct otg_fsm *fsm)
@@ -481,7 +489,7 @@ static int dwc3_otg_start_host(struct otg_fsm *fsm, int on)
 	struct dwc3_otg	*dotg = container_of(otg, struct dwc3_otg, otg);
 	struct dwc3	*dwc = dotg->dwc;
 	struct device	*dev = dotg->dwc->dev;
-	int ret = 0;
+	int ret = 0, i;
 	int ret1 = -1;
 
 	if (!dotg->dwc->xhci) {
@@ -531,6 +539,18 @@ static int dwc3_otg_start_host(struct otg_fsm *fsm, int on)
 							msecs_to_jiffies(5000));
 		}
 
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO
+		/* USB audio disconnect progressing */
+		for (i = 0; i < 1000; i += 100) {
+			if (usb_audio_connection) {
+				usleep_range(100000, 110000);
+				pr_info("%s: wait audio disconnect\n", __func__);
+			} else {
+				pr_info("%s: audio disconnect DONE!!\n", __func__);
+				break;
+			}
+		}
+#endif
 		platform_device_del(dwc->xhci);
 		dwc->xhci->dev.p->dead = 0;
 		list_clear = 1;
@@ -1127,6 +1147,24 @@ static void typec_work_func(struct work_struct *work)
 }
 #endif
 
+static int usb_reboot_noti(struct notifier_block *nb, unsigned long event, void *buf)
+{
+	struct dwc3_otg *dotg = g_dwc->dotg;
+	struct dwc3	*dwc = dotg->dwc;
+	struct otg_fsm  *fsm = &dotg->fsm;
+
+	switch (event) {
+	case SYS_RESTART:
+		if (otg_connection == 1) {
+			dev_info(dwc->dev, "Host enabled. Turn off host\n");
+			fsm->id = 1;
+			dwc3_otg_run_sm(fsm);
+		}
+		break;
+	}
+	return 0;
+}
+
 #if IS_ENABLED(CONFIG_IF_CB_MANAGER)
 void dwc3_usb_set_vbus_current(void *data, int state)
 {
@@ -1276,6 +1314,9 @@ int dwc3_otg_init(struct dwc3 *dwc)
 #ifdef CONFIG_USB_EXYNOS_TPMON
 	usb_tpmon_init();
 #endif
+	ret = register_reboot_notifier(&usb_reboot_notifier);
+	if (ret)
+		dev_err(dwc->dev, "failed register reboot notifier\n");
 
 	return 0;
 }

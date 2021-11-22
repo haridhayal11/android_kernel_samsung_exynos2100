@@ -538,9 +538,9 @@ int hrtimers_dead_cpu(unsigned int cpu);
 extern void save_pcpu_tick(int cpu);
 extern void restore_pcpu_tick(int cpu);
 #else
-#define hrtimers_dead_cpu	NULL
-#define save_pcpu_tick		NULL
-#define restore_pcpu_tick	NULL
+static inline int hrtimers_dead_cpu(unsigned int cpu) {return 0;}
+static inline void save_pcpu_tick(int cpu) {}
+static inline void restore_pcpu_tick(int cpu) {}
 #endif
 
 #endif

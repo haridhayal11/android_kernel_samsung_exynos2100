@@ -1785,6 +1785,8 @@ static void exynos_serial_set_termios(struct uart_port *port,
 	baud = uart_get_baud_rate(port, termios, old, MIN_BAUD, MAX_BAUD);
 	if (ourport->dbg_uart_ch && (baud == 9600))
 		baud = ourport->dbg_uart_baud;
+	if (!baud)
+		return;
 	quot = exynos_serial_getclk(ourport, baud, &clk, &clk_sel);
 	if (baud == 38400 && (port->flags & UPF_SPD_MASK) == UPF_SPD_CUST)
 		quot = port->custom_divisor;
@@ -1799,6 +1801,9 @@ static void exynos_serial_set_termios(struct uart_port *port,
 
 	if (ourport->info->has_divslot) {
 		unsigned int div = ourport->baudclk_rate / baud;
+
+		if (!div)
+			return;
 
 		/*
 		 * Find udivslot of the lowest error rate
@@ -2893,6 +2898,17 @@ static int exynos_serial_probe(struct platform_device *pdev)
 		}
 	}
 
+	if (ourport->uart_logging == 1) {
+		/* Allocate memory for UART logging */
+		ourport->uart_local_buf.buffer = kzalloc(LOG_BUFFER_SIZE, GFP_KERNEL);
+
+		if (!ourport->uart_local_buf.buffer)
+			return -ENOMEM;
+
+		ourport->uart_local_buf.size = LOG_BUFFER_SIZE;
+		ourport->uart_local_buf.index = 0;
+	}
+
 	pr_debug("%s: adding port\n", __func__);
 	uart_add_one_port(&exynos_uart_drv, &ourport->port);
 	platform_set_drvdata(pdev, &ourport->port);
@@ -2926,15 +2942,6 @@ static int exynos_serial_probe(struct platform_device *pdev)
 	ourport->dbg_mode = 0;
 
 	if (ourport->uart_logging == 1) {
-		/* Allocate memory for UART logging */
-		ourport->uart_local_buf.buffer = kzalloc(LOG_BUFFER_SIZE, GFP_KERNEL);
-
-		if (!ourport->uart_local_buf.buffer)
-			dev_err(&pdev->dev, "could not allocate buffer for UART logging\n");
-
-		ourport->uart_local_buf.size = LOG_BUFFER_SIZE;
-		ourport->uart_local_buf.index = 0;
-
 #ifdef BT_UART_TRACE
 		if (port_index == BLUETOOTH_UART_PORT_LINE) {
 			struct proc_dir_entry *ent;

@@ -79,6 +79,8 @@ struct AP_REQ_GET_STATUS_Type {
 #define NAME_LEN_HMD	14
 #define MAX_NUM_HMD	32
 #define TAG_HMD	"HMD"
+#define MAX_NVCN_CNT	30	/* No vbus & connection */
+#define MAX_CHK_TIME	30
 
 struct max77705_hmd_power_dev {
 	uint vid;
@@ -262,6 +264,10 @@ struct max77705_usbc_platform_data {
 #if defined(CONFIG_SUPPORT_SHIP_MODE)
 	int ship_mode_en;
 #endif
+
+	bool rid_check;
+	int lapse_idx;
+	u64 time_lapse[MAX_NVCN_CNT];
 };
 
 /* Function Status from s2mm005 definition */

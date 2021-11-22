@@ -693,6 +693,7 @@ void mfc_core_instance_dpb_flush(struct mfc_core *core, struct mfc_ctx *ctx)
 		mfc_ctx_ready_set_bit(core_ctx, &core->work_bits);
 		if (mfc_core_is_work_to_do(core))
 			queue_work(core->butler_wq, &core->butler_work);
+
 		
 		if (mfc_wait_for_done_drc(core_ctx)) {
 			mfc_err("[DRC] timed out waiting for DRC processing\n");

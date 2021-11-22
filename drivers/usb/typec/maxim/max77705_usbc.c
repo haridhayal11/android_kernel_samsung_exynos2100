@@ -43,6 +43,7 @@
 #include <linux/spu-verify.h>
 #endif
 #endif
+#include <linux/version.h>
 
 static enum pdic_sysfs_property max77705_sysfs_properties[] = {
 	PDIC_SYSFS_PROP_CHIP_NAME,
@@ -417,17 +418,9 @@ void max77705_data_role_change(struct max77705_usbc_platform_data *usbpd_data, i
 	};
 }
 
-#if !defined(CONFIG_SUPPORT_USB_TYPEC_OPS)
-static int max77705_dr_set(const struct typec_capability *cap, enum typec_data_role role)
-#else
 static int max77705_dr_set(struct typec_port *port, enum typec_data_role role)
-#endif
 {
-#if !defined(CONFIG_SUPPORT_USB_TYPEC_OPS)
-	struct max77705_usbc_platform_data *usbpd_data = container_of(cap, struct max77705_usbc_platform_data, typec_cap);
-#else
 	struct max77705_usbc_platform_data *usbpd_data = typec_get_drvdata(port);
-#endif
 #if defined(CONFIG_USB_HW_PARAM)
 	struct otg_notify *o_notify = get_otg_notify();
 #endif /* CONFIG_USB_HW_PARAM */
@@ -468,17 +461,9 @@ static int max77705_dr_set(struct typec_port *port, enum typec_data_role role)
 	return 0;
 }
 
-#if !defined(CONFIG_SUPPORT_USB_TYPEC_OPS)
-static int max77705_pr_set(const struct typec_capability *cap, enum typec_role role)
-#else
 static int max77705_pr_set(struct typec_port *port, enum typec_role role)
-#endif
 {
-#if !defined(CONFIG_SUPPORT_USB_TYPEC_OPS)
-	struct max77705_usbc_platform_data *usbpd_data = container_of(cap, struct max77705_usbc_platform_data, typec_cap);
-#else
 	struct max77705_usbc_platform_data *usbpd_data = typec_get_drvdata(port);
-#endif
 #if defined(CONFIG_USB_HW_PARAM)
 	struct otg_notify *o_notify = get_otg_notify();
 #endif /* CONFIG_USB_HW_PARAM */
@@ -521,17 +506,9 @@ static int max77705_pr_set(struct typec_port *port, enum typec_role role)
 	return 0;
 }
 
-#if !defined(CONFIG_SUPPORT_USB_TYPEC_OPS)
-static int max77705_port_type_set(const struct typec_capability *cap, enum typec_port_type port_type)
-#else
 static int max77705_port_type_set(struct typec_port *port, enum typec_port_type port_type)
-#endif
 {
-#if !defined(CONFIG_SUPPORT_USB_TYPEC_OPS)
-	struct max77705_usbc_platform_data *usbpd_data = container_of(cap, struct max77705_usbc_platform_data, typec_cap);
-#else
 	struct max77705_usbc_platform_data *usbpd_data = typec_get_drvdata(port);
-#endif
 
 	if (!usbpd_data)
 		return -EINVAL;
@@ -566,13 +543,11 @@ static int max77705_port_type_set(struct typec_port *port, enum typec_port_type 
 	return 0;
 }
 
-#if defined(CONFIG_SUPPORT_USB_TYPEC_OPS)
 static const struct typec_operations max77705_ops = {
 	.dr_set = max77705_dr_set,
 	.pr_set = max77705_pr_set,
 	.port_type_set = max77705_port_type_set
 };
-#endif
 
 int max77705_get_pd_support(struct max77705_usbc_platform_data *usbc_data)
 {
@@ -602,7 +577,9 @@ static int max77705_firmware_update_sys(struct max77705_usbc_platform_data *data
 	max77705_fw_header *fw_header;
 	const struct firmware *fw_entry;
 	int fw_size, ret = 0;
+#if IS_ENABLED(CONFIG_SPU_VERIFY)
 	long fw_verify_size;
+#endif
 	struct pdic_fw_update fwup[FWUP_CMD_MAX] = {
 		{"BUILT_IN", "", 0, 1},
 		{"UMS", MAXIM_DEFAULT_FW, 0, 1},
@@ -668,8 +645,9 @@ static int max77705_firmware_update_sys(struct max77705_usbc_platform_data *data
 					usbc_data->max77705->pmic_rev);
 		break;
 	}
-
+#if IS_ENABLED(CONFIG_SPU_VERIFY)
 out:
+#endif
 	release_firmware(fw_entry);
 	return ret;
 }
@@ -1476,8 +1454,13 @@ static ssize_t max77705_sysfs_set_prop(struct _pdic_data_t *ppdic_data,
 		memcpy(str, buf, size);
 		p	= str;
 		tok = strsep(&p, ",");
-		len = strlen(tok);
-		msg_maxim("tok: %s, len: %d", tok, len);
+		if (tok) {
+			len = strlen(tok);
+			msg_maxim("tok: %s, len: %d", tok, len);
+		} else {
+			len = 0;
+			msg_maxim("tok: len: 0");
+		}
 
 		if (!strncmp(TAG_HMD, tok, len)) {
 			/* called by HmtManager to inform list of supported HMD devices
@@ -1498,8 +1481,11 @@ static ssize_t max77705_sysfs_set_prop(struct _pdic_data_t *ppdic_data,
 			int num_hmd = 0, sz = 0;
 
 			tok = strsep(&p, ",");
-			sz	= strlen(tok);
-			kstrtouint(tok, 10, &num_hmd);
+			if (tok) {
+				sz = strlen(tok);
+				kstrtouint(tok, 10, &num_hmd);
+			}
+
 			msg_maxim("HMD num: %d, sz:%d", num_hmd, sz);
 
 			max77705_store_hmd_dev(usbpd_data, str + (len + sz + 2), size - (len + sz + 2),
@@ -1930,8 +1916,10 @@ int max77705_i2c_opcode_read(struct max77705_usbc_platform_data *usbc_data,
 	 */
 
 	/* Read opcode data */
-	size = max77705_bulk_read(usbc_data->muic, OPCODE_READ,
-			length + OPCODE_SIZE, values);
+    max77705_bulk_read(usbc_data->muic, OPCODE_READ, OPCODE_SIZE, values);
+    if (length > 0)
+        size = max77705_bulk_read(usbc_data->muic, OPCODE_READ + OPCODE_SIZE,
+                length, values + OPCODE_SIZE);
 
 #if 0
 	int i = 0; // To use this, move int i to the top to avoid build error
@@ -2039,7 +2027,7 @@ static void max77705_irq_execute(struct max77705_usbc_platform_data *usbc_data,
 		const usbc_cmd_data *cmd_data)
 {
 	int len = cmd_data->read_length;
-	unsigned char data[OPCODE_DATA_LENGTH] = {0,};
+	unsigned char data[OPCODE_DATA_LENGTH + OPCODE_SIZE] = {0,};
 	u8 response = 0xff;
 	u8 vdm_opcode_header = 0x0;
 	UND_DATA_MSG_VDM_HEADER_Type vdm_header;
@@ -2050,7 +2038,7 @@ static void max77705_irq_execute(struct max77705_usbc_platform_data *usbc_data,
 	uint8_t W_DATA = 0x0;
 
 	memset(&vdm_header, 0, sizeof(UND_DATA_MSG_VDM_HEADER_Type));
-	max77705_i2c_opcode_read(usbc_data, cmd_data->opcode,
+	max77705_i2c_opcode_read(usbc_data, cmd_data->response,
 			len, data);
 
 	/* opcode identifying the messsage type. (0x51)*/
@@ -2807,6 +2795,7 @@ void max77705_usbc_check_sysmsg(struct max77705_usbc_platform_data *usbc_data, u
 		g_usbc_data->max77705->usbc_irq = interrupt & 0xBF; //clear the USBC SYSTEM IRQ
 		max77705_usbc_clear_queue(usbc_data);
 		usbc_data->is_first_booting = 1;
+		usbc_data->pd_data->bPPS_on = false;
 		max77705_init_opcode(usbc_data, 1);
 		max77705_usbc_umask_irq(usbc_data);
 #ifdef MAX77705_RAM_TEST
@@ -2839,6 +2828,7 @@ void max77705_usbc_check_sysmsg(struct max77705_usbc_platform_data *usbc_data, u
 		msg_maxim("SYSERROR_BOOT_POR: %d, UIC_INT:0x%02x", usbc_data->por_count, interrupt);
 		max77705_usbc_clear_queue(usbc_data);
 		usbc_data->is_first_booting = 1;
+		usbc_data->pd_data->bPPS_on = false;
 		max77705_init_opcode(usbc_data, 1);
 		max77705_usbc_umask_irq(usbc_data);
 #ifdef CONFIG_USB_NOTIFY_PROC_LOG
@@ -3544,7 +3534,7 @@ static int max77705_usbc_probe(struct platform_device *pdev)
 	struct max77705_dev *max77705 = dev_get_drvdata(pdev->dev.parent);
 	struct max77705_platform_data *pdata = dev_get_platdata(max77705->dev);
 	struct max77705_usbc_platform_data *usbc_data = NULL;
-	int ret;
+	int ret = 0, i = 0;
 #if IS_ENABLED(CONFIG_PDIC_NOTIFIER)
 	ppdic_data_t ppdic_data;
 	ppdic_sysfs_property_t ppdic_sysfs_prop;
@@ -3642,14 +3632,8 @@ static int max77705_usbc_probe(struct platform_device *pdev)
 	usbc_data->typec_cap.pd_revision = 0x300;
 	usbc_data->typec_cap.prefer_role = TYPEC_NO_PREFERRED_ROLE;
 
-#if !defined(CONFIG_SUPPORT_USB_TYPEC_OPS)
-	usbc_data->typec_cap.pr_set = max77705_pr_set;
-	usbc_data->typec_cap.dr_set = max77705_dr_set;
-	usbc_data->typec_cap.port_type_set = max77705_port_type_set;
-#else
 	usbc_data->typec_cap.driver_data = usbc_data;
 	usbc_data->typec_cap.ops = &max77705_ops;
-#endif
 
 	usbc_data->typec_cap.type = TYPEC_PORT_DRP;
 	usbc_data->typec_cap.data = TYPEC_PORT_DRD;
@@ -3676,6 +3660,10 @@ static int max77705_usbc_probe(struct platform_device *pdev)
 #if defined(CONFIG_SUPPORT_SHIP_MODE)
 	usbc_data->ship_mode_en = 0;
 #endif
+	usbc_data->rid_check = false;
+	usbc_data->lapse_idx = 0;
+	for (i = 0; i < MAX_NVCN_CNT; i++)
+		usbc_data->time_lapse[i] = 0;
 
 	send_otg_notify(o_notify, NOTIFY_EVENT_POWER_SOURCE, 0);
 #endif
@@ -3799,7 +3787,11 @@ static int max77705_usbc_remove(struct platform_device *pdev)
 	mxim_debug_exit();
 #endif
 	sysfs_remove_group(&max77705->dev->kobj, &max77705_attr_grp);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)
 	kzfree(usbc_data->hmd_list);
+#else
+	kfree_sensitive(usbc_data->hmd_list);
+#endif
 	usbc_data->hmd_list = NULL;
 	mutex_destroy(&usbc_data->hmd_power_lock);
 	mutex_destroy(&usbc_data->op_lock);

@@ -1,4 +1,113 @@
-BCM4361/BCM4375/BCM430132 DHD 101.16.74 for Android R OS - Palette(O1,T2)/Canvas/Hubble/Davinci/Beyond/R7/R9/Watch Project
+BCM4361/BCM4375/BCM430132 DHD 101.16.85 for Android S OS - Palette(O1,T2)/Canvas/Hubble/Davinci/Beyond/R7/R9/Watch Project
+
+DHD 101.16.85 - 2021.09.14
+Others
+ - CS00012187270(By Hyeonu Choi) Added New Android private command SET_DWELL_TIME in order to one-shot set scan dwell times
+ - CS00012198566(By Jeong Min Cheol) Applied new pcie rc driver changes for S OS MSM platform
+ - CS00012203918(By Choi Hyeonu) Removed SSID in PNO log message due to protect personal information
+ - CS00012206194(By Myung Jung-Young) Changed the excess pm setting to be called in pm suspend/resume
+ - CS00012206375(By Sinwoo Park) Fixed CTS failure due to RTT burstsize mismatch
+ - Cleaned up excess PM info explicitly on WiFi stop
+ - Fixed the compile error when enabled Wcast-qual option
+
+
+DHD 101.16.84 - 2021.08.13
+Others
+ - CS00012200300(By Choi Hyeonu) Added return BCME_UNSUPPORTED for unknown private command
+ - CS00012200344(By Choi Jongmin) Changed the 11mode of softap bigdata for bit operation
+ - CS00012200952(By Lee SoonHo) Fixed not to do passive scan during P2P GO up phase
+ - CS00012201435(By Yoon YeJi) Added to update RCC frequencies list
+ - CS00012202540(By Park Jun-young) Changed the DHD IOVARs for setting resume to be called in early resume
+ - Fixed to trigger disconnection and memdump condition at repeatedly PM awake event
+
+
+DHD 101.16.82 - 2021.07.30
+Others
+ - CS00012196490(By Lee sanguk) Added private cmd to set MIMO/SISO for SoftAP
+ - CS00012198527(By Lee SoonHo) Fixed not to access nan wake lock after WiFi turned off
+ - CS00012198644(By Choi Junsu) Fixed OOB caused by invalid memory access
+ - CS00012198644(By Choi Junsu) Fixed OOB caused by strlen
+ - CS00012199012(By Jeong Min Cheol) Fixed FATAL_NOC_ERROR when triggering sysfs dump and calling dhd_stop() at same time
+
+
+DHD 101.16.81 - 2021.07.16
+Kernel Panic
+ - CS00012196505(By Gu JaYoung) Fixed kernel panic caused by invalid address access during watch FOTA
+
+Others
+ - CS00011635065(By Park Jun-young) Changed the DHD IOVARs for setting suspend/resume to be called in pm_notifier
+ - CS00011780474(By LEE EONJI) Added pre-memory allocation for DHD flow ring
+ - CS00012187292(By Choi Hyeonu) Introduced dump_in_progress sysfs to trigger/monitor dump
+ - CS00012192552(By Choi Sung-gi) Added 5G channels to initial scan list
+ - CS00012193990(By Min SungBin) Fixed NOC error by removing remained DHCP helper timer at disconnection
+ - CS00012193996(By Kim Beom Jip) Fixed to return nan capability error value properly
+ - CS00012195846(By Min SungBin) Moved iovar request on pm_resume to pm_complete
+ - Added excess PM awake operation to debug Current consumption
+ - Added DHD periodic ecounters for BCM4375
+ - Added excess PM awake operation to debug Current consumption
+ - Fixed to clean up 4 way handshake handler when it gets ack after transmit failure
+ - Fixed to send up NAN MatchExpiredInd event to upper layer
+ - Fixed to wlan oob interrupt type to level-triggered
+ - Prevented delay for dongle memory dump after dhd_stop
+
+
+DHD 101.16.79.6 - 2021.07.19
+Others
+ - CS00012192552(By Choi Sung-gi) Added 5G channels to initial scan list
+ - CS00012198527(By Lee SoonHo) Fixed not to access nan wake lock after WiFi turned off
+ - CS00012198644(By Choi Junsu) Fixed OOB caused by invalid memory access
+ - CS00012198644(By Choi Junsu) Fixed OOB caused by strlen
+ - Prevented delay for dongle memory dump after dhd_stop
+
+
+DHD 101.16.79.4 - 2021.07.14
+Others
+ - CS00012193996(By Kim Beom Jip) Fixed to return nan capability error value properly
+
+
+DHD 101.16.79.3 - 2021.07.06
+Kernel Panic
+ - CS00012196505(By Gu JaYoung) Fixed kernel panic caused by invalid address access during watch FOTA
+
+
+DHD 101.16.79.2 - 2021.06.29
+Others
+ - CS00012195846(By Min SungBin) Removed PM duration dump at host resume
+
+
+DHD 101.16.79.1 - 2021.06.16
+Others
+ - CS00012193990(By SungBin Min) Fixed NOC error by removing remained DHCP helper timer at disconnection
+
+
+DHD 101.16.79 - 2021.06.04
+Others
+ - CS00012188198(By Myung Jung-Young) Suppressed BLE scan during DHCP session
+ - CS00012191253(By Lee EonJi) Fixed to be not allowed to retry memdump during medump in progress
+ - Added DHD periodic ecounters (Disabled by default, it will be enabled in Android S)
+
+
+DHD 101.16.78 - 2021.05.28
+Security Patch
+ - CS00012189315(By Choi Sung-gi) SI-21842: Fixed buffer overrun by checking length
+
+Others
+ - CS00012187832(By Bang Haejung) Disabled broadcast packet filter in case of running as P2P GO
+
+
+DHD 101.16.77 - 2021.05.18
+Others
+ - CS00012186941(By Min Hyun-Kee) Removed to disable FCC Power Limit at set country
+ - CS00012188110(By Choi Sung-gi) Fixed prevent issue (CID:116686, 116554, 116600)
+ - CS00012188368(By Lee Sunghee) Enabled HE CAP report for 4389 Samsung project
+ - CS00012188854(By Jeong MinCheol) Fixed dump failure for 430132
+
+
+DHD 101.16.75 - 2021.05.14
+Others
+ - CS00012185211(By Choi Sung-gi) Fixed setting XZ country code at the time of preinit
+ - Added control_logtrace feature
+
 
 DHD 101.16.74 - 2021.05.07
 Kernel Panic

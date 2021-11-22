@@ -396,10 +396,17 @@ void is_sensor_setting_mode_change(struct is_device_sensor_peri *sensor_peri)
 	enum is_exposure_gain_count num_data = EXPOSURE_GAIN_COUNT_INVALID;
 	u32 frame_duration = 0;
 
+	struct is_sensor_ctl *module_ctl;
+	camera2_sensor_ctl_t *sensor_ctrl = NULL;
+
 	FIMC_BUG_VOID(!sensor_peri);
 
 	device = v4l2_get_subdev_hostdata(sensor_peri->subdev_cis);
 	FIMC_BUG_VOID(!device);
+
+	/* device->fcount + 1 = frame_count at copy_sensor_ctl */
+	module_ctl = &sensor_peri->cis.sensor_ctls[(device->fcount + 1) % EXPECT_DM_NUM];
+	sensor_ctrl = &module_ctl->cur_cam20_sensor_ctrl;
 
 	num_data = sensor_peri->cis.exp_gain_cnt;
 	switch (num_data) {
@@ -486,6 +493,8 @@ void is_sensor_setting_mode_change(struct is_device_sensor_peri *sensor_peri)
 	is_sensor_peri_s_wb_gains(device, sensor_peri->cis.mode_chg_wb_gains);
 	is_sensor_peri_s_sensor_stats(device, false, NULL,
 			(void *)(uintptr_t)(sensor_peri->cis.sensor_stats || sensor_peri->cis.lsc_table_status));
+
+	is_sensor_set_test_pattern(device, sensor_ctrl);
 
 	sensor_peri->sensor_interface.cis_itf_ops.request_reset_expo_gain(&sensor_peri->sensor_interface,
 			num_data,
@@ -2545,6 +2554,66 @@ p_err:
 	return ret;
 }
 
+int is_sensor_peri_s_totalgain(struct is_device_sensor *device,
+	struct ae_param expo,
+	struct ae_param again,
+	struct ae_param dgain)
+{
+	int ret = 0;
+	struct v4l2_subdev *subdev_module;
+	struct is_module_enum *module;
+	struct is_device_sensor_peri *sensor_peri = NULL;
+
+	FIMC_BUG(!device);
+
+	subdev_module = device->subdev_module;
+	if (!subdev_module) {
+		err("subdev_module is NULL");
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	module = v4l2_get_subdevdata(subdev_module);
+	if (!module) {
+		err("module is NULL");
+		ret = -EINVAL;
+		goto p_err;
+	}
+	sensor_peri = (struct is_device_sensor_peri *)module->private_data;
+
+#ifdef FIXED_SENSOR_DEBUG
+	if (unlikely(sysfs_sensor.is_en == true)) {
+		expo.long_val = sysfs_sensor.long_exposure_time;
+		expo.short_val = sysfs_sensor.short_exposure_time;
+		dbg_sensor(1, "exposure = %d %d\n", expo.long_val, expo.short_val);
+
+		again.long_val = sysfs_sensor.long_analog_gain * 10;
+		again.short_val = sysfs_sensor.short_analog_gain * 10;
+		dbg_sensor(1, "again = %d %d\n", sysfs_sensor.long_analog_gain, sysfs_sensor.short_analog_gain);
+
+		dgain.long_val = sysfs_sensor.long_digital_gain * 10;
+		dgain.short_val = sysfs_sensor.short_digital_gain * 10;
+		dbg_sensor(1, "dgain = %d %d\n", sysfs_sensor.long_digital_gain, sysfs_sensor.short_digital_gain);
+	}
+#endif
+
+	ret = CALL_CISOPS(&sensor_peri->cis, cis_set_totalgain, sensor_peri->subdev_cis, &expo, &again, &dgain);
+	if (ret < 0) {
+		err("err!!! ret(%d)", ret);
+		goto p_err;
+	}
+
+	device->exposure_time = expo.long_val;
+	/* 0: Previous input, 1: Current input */
+	sensor_peri->cis.cis_data->analog_gain[0] = sensor_peri->cis.cis_data->analog_gain[1];
+	sensor_peri->cis.cis_data->analog_gain[1] = again.long_val;
+	sensor_peri->cis.cis_data->digital_gain[0] = sensor_peri->cis.cis_data->digital_gain[1];
+	sensor_peri->cis.cis_data->digital_gain[1] = dgain.long_val;
+
+p_err:
+	return ret;
+}
+
 int is_sensor_peri_s_wb_gains(struct is_device_sensor *device,
 		struct wb_gains wb_gains)
 {
@@ -2570,6 +2639,36 @@ int is_sensor_peri_s_wb_gains(struct is_device_sensor *device,
 	ret = CALL_CISOPS(&sensor_peri->cis, cis_set_wb_gains, sensor_peri->subdev_cis, wb_gains);
 	if (ret < 0)
 		err("failed to set wb gains(%d)", ret);
+
+p_err:
+	return ret;
+}
+
+int is_sensor_set_test_pattern(struct is_device_sensor *device,
+				camera2_sensor_ctl_t *sensor_ctl)
+{
+	int ret = 0;
+	struct v4l2_subdev *subdev_module;
+
+	struct is_module_enum *module;
+	struct is_device_sensor_peri *sensor_peri = NULL;
+
+	BUG_ON(!device);
+	BUG_ON(!device->subdev_module);
+
+	subdev_module = device->subdev_module;
+
+	module = v4l2_get_subdevdata(subdev_module);
+	if (!module) {
+		err("module is NULL");
+		ret = -EINVAL;
+		goto p_err;
+	}
+	sensor_peri = (struct is_device_sensor_peri *)module->private_data;
+
+	ret = CALL_CISOPS(&sensor_peri->cis, cis_set_test_pattern, sensor_peri->subdev_cis, sensor_ctl);
+	if (ret < 0)
+		err("failed to set test pattern(%d)", ret);
 
 p_err:
 	return ret;

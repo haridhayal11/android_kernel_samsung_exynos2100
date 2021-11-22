@@ -14,6 +14,9 @@
 #include <kunit/strerror.h>
 #include <kunit/test-stream.h>
 #include <kunit/try-catch.h>
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/notifier.h>
 
 /**
  * struct test_resource - represents a *test managed resource*
@@ -200,7 +203,10 @@ int test_init_test(struct test *test, const char *name);
 
 int test_run_tests(struct test_module *module);
 
-#if IS_ENABLED(CONFIG_KUNIT)
+extern int register_kunit_notifier(struct notifier_block *nb);
+extern int unregister_kunit_notifier(struct notifier_block *nb);
+
+#if IS_ENABLED(CONFIG_SEC_KUNIT)
 int test_executor_init(void);
 #else
 static inline int test_executor_init(void)
@@ -240,6 +246,66 @@ void test_install_initcall(struct test_initcall *initcall);
 		static struct test_module *__test_module_##module __used       \
 		__aligned(8) __attribute__((__section__(".test_modules"))) = \
 			&module
+
+/**
+ * kunit_notifier_chain_init() - initialize kunit notifier for module built
+ * test which is included in target ko module.
+ * @module: a statically allocated &struct test_module.
+ *
+ * For the on device KUnit testing, the module built KUuit tests are not
+ * triggered by test_run_tests(). because it is assigned in the .test_modules
+ * section. So trigger the test_module directly with notifier call chain after
+ * the test.ko module loaded.
+ */
+#define kunit_notifier_chain_init(module)					\
+	extern struct test_module module;					\
+	static int kunit_run_notify_##module(struct notifier_block *self, 		\
+			unsigned long event, void *data)			\
+	{									\
+		if (test_run_tests(&module)) {					\
+			printk("kunit error: %s\n", module.name);		\
+			return NOTIFY_BAD;					\
+		}								\
+		return NOTIFY_OK;						\
+	}									\
+	static struct notifier_block callchain_notifier_##module = {		\
+		.notifier_call = kunit_run_notify_##module,				\
+	};									
+
+#define kunit_notifier_chain_register(module)					\
+	register_kunit_notifier(&callchain_notifier_##module);
+
+#define kunit_notifier_chain_unregister(module)					\
+	unregister_kunit_notifier(&callchain_notifier_##module);
+
+/**
+ * module_test_for_module() - used to register a &struct test_module for the
+ * KUnit test which is module built independently. 
+ * @module: a statically allocated &struct test_module.
+ *
+ * Use module_test_for_module() instead of module_test() for the independent
+ * module built test.
+ */
+#if IS_ENABLED(CONFIG_UML)
+#define module_test_for_module(module)	module_test(module)
+#else
+#define module_test_for_module(module)						\
+	kunit_notifier_chain_init(module);					\
+	static int __init kunit_test_suites_init(void)				\
+	{									\
+		printk("register module %s to kunit_notifier\n", module.name);	\
+		kunit_notifier_chain_register(module);				\
+		return 0;							\
+	}									\
+	module_init(kunit_test_suites_init);					\
+	static void __exit kunit_test_suites_exit(void)				\
+	{									\
+		printk("unregister module %s to kunit_notifier\n", module.name);\
+		kunit_notifier_chain_unregister(module);			\
+	}									\
+	module_exit(kunit_test_suites_exit);					\
+	MODULE_LICENSE("GPL");
+#endif /* CONFIG_UML */
 
 /**
  * test_alloc_resource() - Allocates a *test managed resource*.
@@ -448,16 +514,16 @@ static inline void test_expect_end(struct test *test,
 	typeof(expression) __result = (expression);			       \
 	char buf[64];							       \
 									       \
-	if (result != 0)						       \
+	if (__result != 0)						       \
 		__stream->add(__stream,					       \
 			      "Expected " #expression " is not error, "	       \
 			      "but is: %s.",				       \
-			      strerror_r(-result, buf, sizeof(buf)));	       \
-	EXPECT_END(test, result != 0, __stream);			       \
+			      strerror_r(-__result, buf, sizeof(buf)));	       \
+	EXPECT_END(test, __result == 0, __stream);			       \
 } while (0)
 
 /**
- * EXPECT_ERROR() - Causes a test failure when @expression evaluates to @errno.
+ * EXPECT_ERROR() - Causes a test failure when @expression does not evaluate to @errno.
  * @test: The test context object.
  * @expression: an arbitrary expression evaluating to an int error code. The
  * test fails when this does not evaluate to @errno.
@@ -472,12 +538,12 @@ static inline void test_expect_end(struct test *test,
 	char buf1[64];							       \
 	char buf2[64];							       \
 									       \
-	if (result != errno)						       \
+	if (__result != errno)						       \
 		__stream->add(__stream,					       \
 			      "Expected " #expression " is %s, but is: %s.",   \
-			      strerror_t(-errno, buf1, sizeof(buf1)),	       \
-			      strerror_r(-result, buf2, sizeof(buf2)));	       \
-	EXPECT_END(test, result == errno, __stream);			       \
+			      strerror_r(-errno, buf1, sizeof(buf1)),	       \
+			      strerror_r(-__result, buf2, sizeof(buf2)));	       \
+	EXPECT_END(test, __result == errno, __stream);			       \
 } while (0)
 
 static inline void test_expect_binary(struct test *test,
@@ -749,12 +815,12 @@ static inline void test_assert_end(struct test *test,
 	typeof(expression) __result = (expression);			       \
 	char buf[64];							       \
 									       \
-	if (result != 0)						       \
+	if (__result != 0)						       \
 		__stream->add(__stream,					       \
 			      "Asserted " #expression " is not error, "	       \
 			      "but is: %s.",				       \
-			      strerror_r(-result, buf, sizeof(buf)));	       \
-	ASSERT_END(test, result != 0, __stream);			       \
+			      strerror_r(-__result, buf, sizeof(buf)));	       \
+	ASSERT_END(test, __result == 0, __stream);			       \
 } while (0)
 
 /**
@@ -773,12 +839,12 @@ static inline void test_assert_end(struct test *test,
 	char buf1[64];							       \
 	char buf2[64];							       \
 									       \
-	if (result != errno)						       \
+	if (__result != errno)						       \
 		__stream->add(__stream,					       \
 			      "Expected " #expression " is %s, but is: %s.",   \
-			      strerror_t(-errno, buf1, sizeof(buf1)),	       \
-			      strerror_r(-result, buf2, sizeof(buf2)));	       \
-	ASSERT_END(test, result == errno, __stream);			       \
+			      strerror_r(-errno, buf1, sizeof(buf1)),	       \
+			      strerror_r(-__result, buf2, sizeof(buf2)));	       \
+	ASSERT_END(test, __result == errno, __stream);			       \
 } while (0)
 
 static inline void test_assert_binary(struct test *test,

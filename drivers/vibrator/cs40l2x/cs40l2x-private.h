@@ -1,20 +1,24 @@
-/*
- * cs40l2x.h -- CS40L20/CS40L25/CS40L25A/CS40L25B Haptics Driver
- *
- * Copyright 2018 Cirrus Logic, Inc.
- *
- * Author: Jeff LaBundy <jeff.labundy@cirrus.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- */
+/* SPDX-License-Identifier: GPL-2.0 */
 
 #ifndef __CS40L2X_H__
 #define __CS40L2X_H__
 
 #include <linux/regmap.h>
+
+#ifdef CONFIG_ANDROID_TIMED_OUTPUT
+#include "timed_output.h"
+#else
+#include <linux/leds.h>
+#endif
+
+#include <linux/regulator/consumer.h>
+#include <linux/hrtimer.h>
+#include <linux/workqueue.h>
+#include <linux/mutex.h>
+#include <linux/completion.h>
+#include <linux/firmware.h>
+#include "cs40l2x-pdata.h"
+#include <linux/vibrator/sec_vibrator.h>
 
 #define CS40L2X_FIRSTREG		0x00000000
 #define CS40L2X_LASTREG			0x03804FE8
@@ -265,6 +269,7 @@
 #define CS40L2X_DSP1_AHBM_WIN_DBG_CTRL1	0x025E2044
 #define CS40L2X_DSP1_XMEM_UNPACK24_0	0x02800000
 #define CS40L2X_DSP1_XMEM_UNPACK24_4093	0x02803FF4
+#define CS40L2X_DSP1_PAR_ALGO_PARAMS    0x028027D0
 #define CS40L2X_DSP1_CTRL_BASE		0x02B80000
 #define CS40L2X_DSP1_CORE_SOFT_RESET	0x02B80010
 #define CS40L2X_DSP1_DEBUG		0x02B80040
@@ -685,6 +690,8 @@
 
 #define CS40L2X_BST_CTL_MASK		0x000000FF
 #define CS40L2X_BST_CTL_SHIFT		0
+#define CS40L2X_BST_VOLT_MIN		2550  /* millivolts */
+#define CS40L2X_BST_VOLT_MAX		11000 /* millivolts */
 
 #define CS40L2X_BST_CTL_LIM_EN_MASK	0x00000004
 #define CS40L2X_BST_CTL_LIM_EN_SHIFT	2
@@ -693,8 +700,6 @@
 #define CS40L2X_BST_CTL_SEL_SHIFT	0
 #define CS40L2X_BST_CTL_SEL_CP_VAL	0
 #define CS40L2X_BST_CTL_SEL_CLASSH	1
-#define CS40L2X_BST_VOLT_MIN		2550  /* millivolts */
-#define CS40L2X_BST_VOLT_MAX		11000 /* millivolts */
 
 #define CS40L2X_BST_IPK_MASK		0x0000007F
 #define CS40L2X_BST_IPK_SHIFT		0
@@ -722,11 +727,33 @@
 #define CS40L2X_AMP_VOL_PCM_MASK	0x00003FF8
 #define CS40L2X_AMP_VOL_PCM_SHIFT	3
 
-#define CS40L2X_VPBR_THLD1_MASK		0x0000001F
-#define CS40L2X_VPBR_THLD1_SHIFT	0
+#define CS40L2X_VxBR_MUTE_EN_MASK	0x01000000
 
+#define CS40L2X_VxBR_REL_RATE_MASK	0x00E00000
+#define CS40L2X_VxBR_REL_RATE_SHIFT	21
+#define CS40L2X_VxBR_REL_RATE_MAX	7
+
+#define CS40L2X_VxBR_WAIT_MASK		0x00180000
+#define CS40L2X_VxBR_WAIT_SHIFT		19
+#define CS40L2X_VxBR_WAIT_MAX		3
+
+#define CS40L2X_VxBR_ATK_RATE_MASK	0x00070000
+#define CS40L2X_VxBR_ATK_RATE_SHIFT	16
+#define CS40L2X_VxBR_ATK_RATE_MAX	7
+
+#define CS40L2X_VxBR_ATK_VOL_MASK	0x0000F000
+#define CS40L2X_VxBR_ATK_VOL_SHIFT	12
+#define CS40L2X_VxBR_ATK_VOL_MAX	7
+
+#define CS40L2X_VxBR_MAX_ATT_MASK	0x00000F00
+#define CS40L2X_VxBR_MAX_ATT_SHIFT	8
+#define CS40L2X_VxBR_MAX_ATT_MAX	15
+
+#define CS40L2X_VxBR_THLD1_SHIFT	0
+#define CS40L2X_VPBR_THLD1_MASK		0x0000001F
+#define CS40L2X_VPBR_THLD1_MAX		0x1F
 #define CS40L2X_VBBR_THLD1_MASK		0x0000003F
-#define CS40L2X_VBBR_THLD1_SHIFT	0
+#define CS40L2X_VBBR_THLD1_MAX		0x3F
 
 #define CS40L2X_GAIN_CTRL_GPIO_MASK	0x00FFC000
 #define CS40L2X_GAIN_CTRL_GPIO_SHIFT	14
@@ -792,13 +819,19 @@
 #define CS40L2X_FW_DBLK_OFFSET_SIZE	3
 #define CS40L2X_FW_DBLK_TYPE_SIZE	1
 #define CS40L2X_FW_DBLK_LENGTH_SIZE	4
-#define CS40L2X_WT_HEADER_END		0xffffff
-#define CS40L2X_MAX_WAVEFORMS          128
 
+#define CS40L2X_ZERO_INIT		0
+#define CS40L2X_ZERO_VAL		0
+#define CS40L2X_TWO_BYTES		2
+#define CS40L2X_FOUR_BITS		4
+
+#define CS40L2X_CLAB_CONFIG_FILE_NAME	"cs40l25a_clab.bin"
+#define CS40L2X_PAR_CONFIG_FILE_NAME	"cs40l25a_par.bin"
 #define CS40L2X_WT_FILE_DATE_MISSING	"N/A"
 #define CS40L2X_WT_FILE_DATE_LEN_MAX	16
 #define CS40L2X_WT_FILE_NAME_MISSING	"N/A"
 #define CS40L2X_WT_FILE_NAME_DEFAULT	"cs40l20.bin"
+#define CS40L2X_WT_VIRTUAL_FILE_NAME	"virtual wavetable"
 #define CS40L2X_WT_FILE_NAME_LEN_MAX	32
 #define CS40L2X_WT_FILE_HEADER_SIZE	16
 #define CS40L2X_WT_DBLK_OFFSET_SIZE	2
@@ -807,6 +840,64 @@
 #define CS40L2X_WT_ALGO_REV_SIZE	4
 #define CS40L2X_WT_SAMPLE_RATE_SIZE	4
 #define CS40L2X_WT_DBLK_LENGTH_SIZE	4
+#define CS40L2X_WT_COMP_REPEAT_SIZE	1
+#define CS40L2X_WT_COMP_REPEAT_INDX	1
+#define CS40L2X_WT_COMP_NUMWVS_SIZE	1
+#define CS40L2X_WT_COMP_NUMWVS_INDX	2
+#define CS40L2X_WT_WORD_SIZE		3
+#define CS40L2X_WT_ZERO_PAD_SIZE	1
+#define CS40L2X_WT_TOTAL_WORD_SIZE	4
+#define CS40L2X_WT_COMP_LEGACY_DTLS	8
+#define CS40L2X_WT_COMP_WV_DTLS		12
+#define CS40L2X_WT_COMP_FIRST_REPEAT	255
+#define CS40L2X_WT_COMP_INDEF_OUTER	255
+#define CS40L2X_WT_HEADER_ENTRY_SIZE	12
+#define CS40L2X_WT_TYPE_8_PCM_FILE	8
+#define CS40L2X_WT_TYPE_9_VAR_FILE	9
+#define CS40L2X_WT_TYPE_10_COMP_FILE	10
+#define CS40L2X_WT_TYPE_11_Q_FILE	11
+#define CS40L2X_WT_TYPE_12_PWLE_FILE	12
+#define CS40L2X_WT_YM_SECTION_HEADER	6
+#define CS40L2X_WT_YM_PRE_HDR_BYTES     16
+#define CS40L2X_WT_DATE_HDR_BYTES	16
+#define CS40L2X_WT_YM_EMPTY_SIZE	4
+#define CS40L2X_WT_TERMINATOR_BYTES	4
+#define CS40L2X_WT_PRE_HDR_COMMON	12
+#define CS40L2X_WT_ZERO			0
+#define CS40L2X_WT_YM_PRE_HDR_VAL	6
+#define CS40L2X_WT_TERMINATOR_BYTE	255
+#define CS40L2X_WT_TERMINATOR		0x00FFFFFF
+#define CS40L2X_WT_COMP_INDEFINITE	0x00400000
+#define CS40L2X_WT_COMP_LEN_CALCD	0x00800000
+#define CS40L2X_WT_MAX_SAMPLES		0x003FFFFE
+#define CS40L2X_WT_CLR_EX_TYPE		0x0000FFFF
+#define CS40L2X_WT_YM_PRE_HEADER	0x00000600
+#define CS40L2X_WT_NUM_GPIO_VSLOTS	2
+#define CS40L2X_WT_NUM_COMP_VSLOTS	1
+#define CS40L2X_WT_NUM_EMBED_VSLOTS	1
+#define CS40L2X_WT_MAX_VIRT_WAVS	500
+#define CS40L2X_WT_MAX_BIN_SIZE		9584
+#define CS40L2X_WT_COMP_DUR_EN_BIT	128
+
+#define CS40L2X_WT_NUM_VIRT_SLOTS	(\
+	CS40L2X_WT_NUM_COMP_VSLOTS +\
+	CS40L2X_WT_NUM_GPIO_VSLOTS +\
+	CS40L2X_WT_NUM_EMBED_VSLOTS)
+
+#define CS40L2X_WT_COMP_NONRPTNG_SIZE	(\
+	CS40L2X_WT_DBLK_LENGTH_SIZE +\
+	CS40L2X_WT_COMP_REPEAT_SIZE +\
+	CS40L2X_WT_COMP_NUMWVS_SIZE +\
+	CS40L2X_WT_ZERO_PAD_SIZE +\
+	CS40L2X_WT_ZERO_PAD_SIZE)
+
+#define CS40L2X_WT_HEADER_END		0xffffff
+#define CS40L2X_WT_DESC_BYTE_OFFSET	12
+
+#define CS40L2X_SETTLE_DELAY_MS		50
+#define CS40L2X_MAX_WAVEFORMS		128
+#define CS40L2X_OWT_CALC_SIZE		(\
+	CS40L2X_MAX_WAVEFORMS * 2)
 
 #define CS40L2X_XM_FW_ID		(CS40L2X_DSP1_XMEM_UNPACK24_0 + 12)
 #define CS40L2X_XM_NUM_ALGOS		(CS40L2X_DSP1_XMEM_UNPACK24_0 + 36)
@@ -819,6 +910,7 @@
 #define CS40L2X_ALGO_ENTRY_SIZE		24
 #define CS40L2X_ALGO_LIST_TERM		0xBEDEAD
 #define CS40L2X_ALGO_REV_MASK		0xFF0000
+#define CS40L2X_ALG0_PARAM_OFFSET	20
 
 #define CS40L2X_NUM_ALGOS_MAX		16
 
@@ -850,14 +942,16 @@
 #define CS40L2X_INDEX_CLICK_MIN		0x00000001
 #define CS40L2X_INDEX_CLICK_MAX		0x00007FFF
 #define CS40L2X_INDEX_CONT_MIN		0x00008000
-#define CS40L2X_INDEX_CONT_MAX		0x0000FFFB
+#define CS40L2X_INDEX_OVWR_SAVE		0x0000FFF9
+#define CS40L2X_INDEX_CONT_MAX		0x0000FFFA
+#define CS40L2X_INDEX_PBQ_SAVE		0x0000FFFB
 #define CS40L2X_INDEX_QEST		0x0000FFFC
 #define CS40L2X_INDEX_PEAK		0x0000FFFD
 #define CS40L2X_INDEX_PBQ		0x0000FFFE
 #define CS40L2X_INDEX_DIAG		0x0000FFFF
 #define CS40L2X_INDEX_IDLE		0xFFFFFFFF
 
-#define CS40L2X_PBQ_SEG_LEN_MAX		10
+#define CS40L2X_PBQ_SEG_LEN_MAX		20
 #define CS40L2X_PBQ_DEPTH_MAX		256
 #define CS40L2X_PBQ_SCALE_MAX		100
 #define CS40L2X_PBQ_DELAY_MAX		10000
@@ -869,6 +963,11 @@
 #define CS40L2X_PBQ_TAG_SILENCE		0x0000
 #define CS40L2X_PBQ_TAG_START		0x8000
 #define CS40L2X_PBQ_TAG_STOP		0x8001
+#define CS40L2X_PBQ_INNER_REPEAT	255
+#define CS40L2X_PBQ_INNER_FLAG		256
+#define CS40L2X_PBQ_FW_BYTES_MIN	192
+#define CS40L2X_PBQ_DUR_MIN_REV		0x0A0101
+#define CS40L2X_OWT_MIN_REV		0x080908
 
 #define CS40L2X_DIAG_STATE_INIT		0x00
 #define CS40L2X_DIAG_STATE_RUN1		0x01
@@ -985,12 +1084,14 @@
 
 #define CS40L2X_DEVICE_NAME		"vibrator"
 
-#define CS40L2X_NUM_FW_FAMS		5
+#define CS40L2X_NUM_FW_FAMS		7
 #define CS40L2X_FW_ID_ORIG		0x1400A7
 #define CS40L2X_FW_ID_B1ROM		0x1400BA
 #define CS40L2X_FW_ID_REMAP		0x1400C3
 #define CS40L2X_FW_ID_CAL		0x1400C6
 #define CS40L2X_FW_ID_CLAB		0x1400CB
+#define CS40L2X_FW_ID_PAR		0x1400CF
+#define CS40L2X_FW_ID_A2H		0x1400D0
 
 #define CS40L2X_PDATA_PRESENT		0x80000000
 #define CS40L2X_PDATA_MASK		~CS40L2X_PDATA_PRESENT
@@ -1018,6 +1119,15 @@
 
 #define CS40L2X_VIBE_STATE_STOPPED	0
 #define CS40L2X_VIBE_STATE_RUNNING	1
+
+#define CS40L2X_PBQ_SAVE_STATE_DONE	0
+#define CS40L2X_PBQ_SAVE_STATE_BUSY	1
+
+#define CS40L2X_SAVE_UNSAFE		0
+#define CS40L2X_SAVE_SAFE		1
+
+#define CS40L2X_FW_BUSY			0
+#define CS40L2X_FW_WAIT_COMPLETE	1
 
 #define CS40L2X_EXC_ENABLED		1
 #define CS40L2X_EXC_DISABLED		0
@@ -1061,8 +1171,10 @@
 #define CS40L2X_ALGO_ID_DYN_F0		0x000111
 #define CS40L2X_ALGO_ID_QEST		0x000112
 #define CS40L2X_ALGO_ID_CLAB		0x000117
+#define CS40L2X_ALGO_ID_PAR		0x000121
 
 #define CS40L2X_MAX_A2H_LEVELS		10
+
 #define CS40L2X_DSP_CACHE_MAX		64
 
 #define CS40L2X_CLAB_ENABLED		1
@@ -1074,6 +1186,26 @@
 #define CS40L2X_F0_WT_EN		BIT(4)
 #define CS40L2X_WT_HEAD_END		0xFFFFFF
 
+#define CS40L2X_PAR_ENABLED		1
+#define CS40L2X_PAR_DISABLED		0
+#define CS40L2X_GC_ENABLED		1
+#define CS40L2X_GC_DISABLED		0
+
+#define CS40L2X_IMON_OFFS_CALC_EN	1
+#define CS40L2X_IMON_OFFS_CALC_DIS	0
+
+#define CS40L2X_PLLSRC_SCLK		0
+#define CS40L2X_PLLSRC_MCLK		5
+
+#define CS40L2X_AUTOSUSPEND_DELAY_MS	3000
+
+#define CS40l2X_F0_MAX_ENTRIES		20
+#define CS40L2X_DYN_F0_INDEX_SHIFT	13
+#define CS40L2X_DYN_F0_MASK		GENMASK(12, 0)
+#define CS40L2X_DYN_F0_DEFAULT		0x7FE000
+#define CS40L2X_DYN_F0_FILE_NAME	"cs40l25a_f0.bin"
+#define CS40L2X_COND_CLSH_MIN_REV	0x090007
+
 /* A2H */
 
 #define CS40L2X_A2H_ENABLE		1
@@ -1081,47 +1213,107 @@
 #define CS40L2X_A2H_I2S_START		2
 #define CS40L2X_A2H_I2S_END		3
 
-#define CS40L2X_IMON_OFFS_CALC_EN	1
-#define CS40L2X_IMON_OFFS_CALC_DIS	0
+#define CS40L2X_ASP_WIDTH_RX_MASK	GENMASK(31, 24)
+#define CS40L2X_ASP_WIDTH_RX_SHIFT	24
+#define CS40L2X_ASP_SP_RX_WL_MASK	GENMASK(5, 0)
+
+#define CS40L2X_ASP_RX_ENABLE_MASK	GENMASK(17, 16)
+#define CS40L2X_SIZE_TWO_ARRAY		2
+
+#define CS40L2X_PWLE_MIN_SEGS		2
+#define CS40L2X_PWLE_MAX_SEGS		255
+#define CS40L2X_PWLE_MAX_SEG_VALS	7
+#define CS40L2X_PWLE_MAX_TOT_SV (\
+	CS40L2X_PWLE_MAX_SEGS *\
+	CS40L2X_PWLE_MAX_SEG_VALS)
+#define CS40L2X_PWLE_TOTAL_VALS	(\
+	CS40L2X_PWLE_MAX_TOT_SV +\
+	CS40L2X_PWLE_MIN_SEGS)
+#define CS40L2X_PWLE_MAX_SEG_BYTES	9
+#define CS40L2X_PWLE_NON_SEG_BYTES	7
+#define CS40L2X_PWLE_BYTES_MAX	((\
+	CS40L2X_PWLE_MAX_SEGS *\
+	CS40L2X_PWLE_MAX_SEG_BYTES) +\
+	CS40L2X_PWLE_NON_SEG_BYTES)
+#define CS40L2X_PWLE_SEG_LEN_MAX	11
+#define CS40L2X_PWLE_MAX_RP_VAL		255
+#define CS40L2X_PWLE_MAX_WT_VAL		1023
+#define CS40L2X_PWLE_MAX_TIME_VAL	16383
+#define CS40L2X_PWLE_INDEF_TIME_VAL	65535
+#define CS40L2X_PWLE_TIME_RES		25
+#define CS40L2X_PWLE_FREQ_RES		125
+#define CS40L2X_PWLE_MAX_LEV_VAL	98256
+#define CS40L2X_PWLE_LEV_ADD_NEG	2048
+#define CS40L2X_PWLE_LEV_DIV		48
+#define CS40L2X_PWLE_MAX_FREQ_VAL	561
+#define CS40L2X_PWLE_MIN_FREQ_VAL	50
+#define CS40L2X_PWLE_MAX_VB_RES		9999999
+#define CS40L2X_PWLE_MAX_VB_TARG	8388607
+#define CS40L2X_PWLE_NUM_CONST_VALS	2
+#define CS40L2X_PWLE_MAX_VB_RES_DIG	6
+#define CS40L2X_PWLE_MAX_LV_RES_DIG	4
+#define CS40L2X_PWLE_MAX_WVFRM_FEAT	12
+#define CS40L2X_PWLE_WVFRM_FT_SHFT	20
+#define CS40L2X_PWLE_SAMPLES_PER_MS	8
+#define CS40L2X_PWLE_SEG_BYTES		6
+#define CS40L2X_PWLE_WV_SMPL_BYTES	3
+#define CS40L2X_PWLE_REPEAT_BYTES	1
+#define CS40L2X_PWLE_WT_BYTES		2
+#define CS40L2X_PWLE_NUM_SEG_BYTES	1
+#define CS40L2X_PWLE_NUM_VBT_BYTES	3
+#define CS40L2X_PWLE_END_PAD_BYTES	2
+#define CS40L2X_ZERO_PAD_MASK		0xFFFFFF00
+#define CS40L2X_MS_FOUR_BYTE_MASK	0xF0
+#define CS40L2X_LS_FOUR_BYTE_MASK	0x0F
+#define CS40L2X_PWLE_CHIRP_BIT		0x8
+#define CS40L2X_PWLE_BRAKE_BIT		0x4
+#define CS40L2X_PWLE_AMP_REG_BIT	0x2
+#define CS40L2X_PWLE_FIRST_BYTES	(\
+	CS40L2X_PWLE_WV_SMPL_BYTES +\
+	CS40L2X_PWLE_REPEAT_BYTES +\
+	CS40L2X_PWLE_WT_BYTES +\
+	CS40L2X_PWLE_NUM_SEG_BYTES)
+#define CS40L2X_PACKED_BYTES_MAX	(((\
+	CS40L2X_PWLE_BYTES_MAX / 2) + 1) *\
+	CS40L2X_WT_NUM_VIRT_SLOTS)
+#define CS40L2X_SINGLE_PACKED_MAX	(\
+	CS40L2X_PACKED_BYTES_MAX /\
+	CS40L2X_WT_NUM_VIRT_SLOTS)
+/* CS40L2X_PACKED_BYTES_MAX if changed, should stay above
+ * the recommended min value of 576 and be evenly divisible
+ * by CS40L2X_PBQ_FW_BYTES_MIN because the driver will attempt
+ * to automatically reduce the size of the required space for
+ * an open slot to use for open wavetable and chirp scalability
+ * if there aren't CS40L2X_PACKED_BYTES_MAX bytes available.
+ */
 
 #ifdef CONFIG_CS40L2X_SAMSUNG_FEATURE
 #define DEBUG_PRINT_PLAYBACK_QUEUE 40
 #define CS40L2X_INTENSITY_SCALE_MAX 10000
 
-#define MAX_STR_LEN_VIB_TYPE 32
-#define MAX_STR_LEN_EVENT_CMD 32
 
 enum VIB_EVENT {
 	VIB_EVENT_NONE = 0,
 	VIB_EVENT_FOLDER_CLOSE,
 	VIB_EVENT_FOLDER_OPEN,
-	VIB_EVENT_FOLDER_OPEN_SHORT_DURATION,
-	VIB_EVENT_FOLDER_OPEN_LONG_DURATION,
 	VIB_EVENT_ACCESSIBILITY_BOOST_ON,
 	VIB_EVENT_ACCESSIBILITY_BOOST_OFF,
+	VIB_EVENT_TENT_CLOSE,
+	VIB_EVENT_TENT_OPEN,
 	VIB_EVENT_MAX,
-};
-
-enum EVENT_CMD {
-	EVENT_CMD_NONE = 0,
-	EVENT_CMD_FOLDER_CLOSE,
-	EVENT_CMD_FOLDER_OPEN,
-	EVENT_CMD_ACCESSIBILITY_BOOST_ON,
-	EVENT_CMD_ACCESSIBILITY_BOOST_OFF,
-	EVENT_CMD_MAX,
 };
 
 // manage by sec motor ic driver
 #define SHORT_DURATION_THRESHOLD 50 // 50 msec
 
-typedef union
-{
+typedef union {
 	uint32_t	DATA;
 	struct {
 	uint32_t	FOLDER_STATE:1,
 			SHORT_DURATION:1,
 			ACCESSIBILITY_BOOST:1,
-			RESERVED:29;
+			TENT_STATE:1,
+			RESERVED:28;
 	} EVENTS;
 } EVENT_STATUS;
 #endif /* CONFIG_CS40L2X_SAMSUNG_FEATURE */
@@ -1164,8 +1356,17 @@ struct cs40l2x_coeff_desc {
 struct cs40l2x_pbq_pair {
 	unsigned int tag;
 	unsigned int mag;
+	unsigned int dur;
 	unsigned int repeat;
 	unsigned int remain;
+};
+
+struct cs40l2x_composite_data {
+	unsigned int rpt;
+	unsigned int index;
+	unsigned int amp;
+	unsigned int delay;
+	unsigned int dur;
 };
 
 struct cs40l2x_wseq_pair {
@@ -1198,6 +1399,220 @@ struct cs40l2x_dblk_desc {
 struct cs40l2x_refclk_pair {
 	unsigned int freq;
 	unsigned int coeff;
+};
+
+struct cs40l2x_f0_dynamic {
+	unsigned int index;
+	unsigned int f0;
+	bool changed;
+};
+
+struct cs40l2x_ovwr_waveform {
+	bool is_xm;
+	unsigned int data_len;
+	unsigned int wvfrm_type;
+	unsigned int wvfrm_feature;
+	unsigned int embed_index;
+	unsigned int samples;
+	char data[CS40L2X_SINGLE_PACKED_MAX];
+};
+
+struct cs40l2x_private {
+	struct device *dev;
+	struct regmap *regmap;
+	struct regulator_bulk_data supplies[2];
+	unsigned int num_supplies;
+	unsigned int devid;
+	unsigned int revid;
+	struct work_struct vibe_start_work;
+	struct work_struct vibe_pbq_work;
+	struct work_struct vibe_stop_work;
+	struct work_struct vibe_mode_work;
+	struct workqueue_struct *vibe_workqueue;
+	struct mutex lock;
+	unsigned int cp_trigger_index;
+	unsigned int cp_trailer_index;
+	unsigned int num_waves;
+	unsigned int num_xm_wavs;
+	unsigned int num_ym_wavs;
+	unsigned int num_virtual_waves;
+	unsigned int loaded_virtual_index;
+	unsigned int wt_limit_xm;
+	unsigned int wt_limit_ym;
+	unsigned int wt_xm_size;
+	unsigned int wt_ym_size;
+	unsigned int wt_total_size;
+	unsigned int wt_open_xm;
+	unsigned int wt_open_ym;
+	unsigned int xm_hdr_strt_pos;
+	unsigned int ym_hdr_strt_pos;
+	unsigned int xm_hdr_strt_reg;
+	unsigned int ym_hdr_strt_reg;
+	unsigned int wt_xm_header_end_pos;
+	unsigned int wt_ym_header_end_pos;
+	unsigned int virt_wt_end_header_pos;
+	unsigned int wt_xm_header_last_offset;
+	unsigned int wt_ym_header_last_offset;
+	unsigned int wt_xm_header_last_size;
+	unsigned int wt_ym_header_last_size;
+	unsigned int pbq_updated_fw_raw_wt_size;
+	unsigned int comp_bytes;
+	unsigned int *wvfrm_lengths;
+	unsigned int wvfrm_lengths_size;
+	unsigned int *updated_offsets;
+	unsigned int updated_offsets_size;
+	unsigned int updated_block_size;
+	unsigned int pwle_str_size;
+	char *pbq_fw_raw_wt;
+	char *pbq_updated_fw_raw_wt;
+	char two_bytes[CS40L2X_SIZE_TWO_ARRAY];
+	char three_bytes[CS40L2X_WT_WORD_SIZE];
+	bool open_wt_enable;
+	bool virtual_stored;
+	bool queue_stored;
+	bool virtual_bin;
+	bool create_ym;
+	bool xm_append;
+	char wt_file[CS40L2X_WT_FILE_NAME_LEN_MAX];
+	char wt_date[CS40L2X_WT_FILE_DATE_LEN_MAX];
+	char pwle_str[CS40L2X_PWLE_TOTAL_VALS];
+	bool exc_available;
+	struct cs40l2x_dblk_desc pre_dblks[CS40L2X_MAX_A2H_LEVELS];
+	struct cs40l2x_dblk_desc a2h_dblks[CS40L2X_MAX_A2H_LEVELS];
+	bool vibe_init_success;
+	bool vibe_mode;
+	bool vibe_state;
+	bool safe_save_state;
+	struct gpio_desc *reset_gpio;
+	struct cs40l2x_platform_data pdata;
+	unsigned int num_algos;
+	struct cs40l2x_algo_info algo_info[CS40L2X_NUM_ALGOS_MAX + 1];
+	struct list_head coeff_desc_head;
+	unsigned int num_coeff_files;
+	unsigned int diag_state;
+	unsigned int diag_dig_scale;
+	unsigned int f0_measured;
+	unsigned int redc_measured;
+	unsigned int q_measured;
+	unsigned int bemf_measured;
+	struct cs40l2x_pbq_pair pbq_pairs[CS40L2X_PBQ_DEPTH_MAX];
+	struct cs40l2x_composite_data comp_sets[CS40L2X_PBQ_DEPTH_MAX];
+	struct hrtimer pbq_timer;
+	unsigned int pbq_depth;
+	unsigned int comp_sets_size;
+	unsigned int pbq_index;
+	unsigned int pbq_state;
+	unsigned int pbq_cp_dig_scale;
+	unsigned int pwle_feature;
+	unsigned int pwle_wvfrm_len;
+	unsigned int pwle_repeat;
+	unsigned int wvfrm_len_wait_time;
+	unsigned int pwle_wait_time;
+	unsigned int pwle_num_segs;
+	unsigned int pwle_num_vb_targs;
+	unsigned int num_virtual_pwle_waves;
+	unsigned int last_type_entered;
+	unsigned int display_pwle_segs;
+	unsigned int comp_outer[CS40L2X_PBQ_DEPTH_MAX];
+	unsigned int comp_inner[CS40L2X_PBQ_DEPTH_MAX];
+	unsigned int pbq_fw_composite[CS40L2X_PBQ_DEPTH_MAX + 3];
+	unsigned int pbq_fw_composite_len;
+	unsigned int virtual_gpio_index[CS40L2X_SIZE_TWO_ARRAY];
+	unsigned int loaded_gpio_index[CS40L2X_SIZE_TWO_ARRAY];
+	unsigned int virtual_slot_index;
+	unsigned int virtual_gpio1_fall_index;
+	unsigned int virtual_gpio1_rise_index;
+	unsigned int virtual_embed_slot_index;
+	unsigned int virtual_embed_user_index;
+	struct list_head virtual_waveform_head;
+	struct list_head pwle_segment_head;
+	struct cs40l2x_ovwr_waveform *ovwr_wav;
+	int pbq_repeat;
+	int pbq_remain;
+	struct cs40l2x_wseq_pair wseq_table[CS40L2X_WSEQ_LENGTH_MAX];
+	unsigned int wseq_length;
+	unsigned int event_control;
+	unsigned int hw_err_mask;
+	unsigned int hw_err_count[CS40L2X_NUM_HW_ERRS];
+	unsigned int peak_gpio1_enable;
+	unsigned int gpio_mask;
+	int vpp_measured;
+	int ipp_measured;
+	bool asp_available;
+	bool asp_enable;
+	bool a2h_enable;
+	struct hrtimer asp_timer;
+	const struct cs40l2x_fw_desc *fw_desc;
+	unsigned int fw_id_remap;
+	bool comp_enable_pend;
+	bool comp_enable;
+	bool comp_enable_redc;
+	bool comp_enable_f0;
+	bool comp_dur_en;
+	bool comp_dur_min_fw;
+	bool amp_gnd_stby;
+	bool clab_wt_en[CS40L2X_MAX_WAVEFORMS];
+	bool f0_wt_en[CS40L2X_MAX_WAVEFORMS];
+	bool dyn_f0_enable;
+	bool cond_class_h_en;
+	bool save_pwle;
+	bool clab_bin_found;
+	bool par_bin_found;
+	struct cs40l2x_wseq_pair dsp_cache[CS40L2X_DSP_CACHE_MAX];
+	unsigned int dsp_cache_depth;
+
+	/* Access to DSP registers */
+	unsigned int (*dsp_reg)(struct cs40l2x_private *cs40l2x,
+			const char *coeff_name, const unsigned int block_type,
+			const unsigned int algo_id);
+
+	struct cs40l2x_f0_dynamic dynamic_f0[CS40l2X_F0_MAX_ENTRIES];
+	int dynamic_f0_index;
+
+#ifdef CONFIG_ANDROID_TIMED_OUTPUT
+	struct timed_output_dev timed_dev;
+	struct hrtimer vibe_timer;
+	int vibe_timeout;
+#else
+	struct led_classdev led_dev;
+#endif /* CONFIG_ANDROID_TIMED_OUTPUT */
+	unsigned int autosuspend_delay;
+	struct completion hap_done;
+#ifdef CONFIG_CS40L2X_SAMSUNG_FEATURE
+	unsigned int intensity;
+	EVENT_STATUS save_vib_event;
+	struct sec_vibrator_drvdata sec_vib_ddata;
+	int current_temp;
+#endif
+};
+
+int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
+			const struct firmware *fw);
+int cs40l2x_ack_write(struct cs40l2x_private *cs40l2x, unsigned int reg,
+			unsigned int write_val, unsigned int reset_val);
+
+struct cs40l2x_virtual_waveform {
+	bool is_xm;
+	unsigned int index;
+	unsigned int data_len;
+	unsigned int wvfrm_type;
+	unsigned int wvfrm_feature;
+	unsigned int embed_index;
+	unsigned int samples;
+	char data[CS40L2X_SINGLE_PACKED_MAX];
+	struct list_head list;
+};
+
+struct cs40l2x_pwle_segment {
+	unsigned int index;
+	unsigned int time;
+	unsigned int level;
+	unsigned int freq;
+	unsigned int chirp;
+	unsigned int brake;
+	unsigned int amp_reg;
+	unsigned int vb_targ;
+	struct list_head list;
 };
 
 extern const unsigned char cs40l2x_bst_k1_table[4][5];

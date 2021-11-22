@@ -8,6 +8,10 @@
  * published by the Free Software Foundation.
  */
 
+#if IS_ENABLED(CONFIG_SEC_KUNIT)
+#include <kunit/test.h>
+#include <kunit/mock.h>
+#endif
 #include <asm/unaligned.h>
 #include <linux/completion.h>
 #include <linux/ctype.h>
@@ -36,10 +40,31 @@
 #include <linux/workqueue.h>
 #include <linux/power_supply.h>
 #include <linux/proc_fs.h>
+#include <linux/version.h>
 
 #include "sec_cmd.h"
 #include "sec_tclm_v2.h"
 
+#if !IS_ENABLED(CONFIG_QGKI) && IS_ENABLED(CONFIG_TOUCHSCREEN_DUAL_FOLDABLE)
+#define DUAL_FOLDABLE_GKI
+#endif
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0))
+#define sec_input_proc_ops(ops_owner, ops_name, read_fn, write_fn)	\
+const struct proc_ops ops_name = {					\
+	.proc_read = read_fn,						\
+	.proc_write = write_fn,						\
+	.proc_lseek = generic_file_llseek,				\
+}
+#else
+#define sec_input_proc_ops(ops_owner, ops_name, read_fn, write_fn)	\
+const struct file_operations ops_name = {				\
+	.owner = ops_owner,						\
+	.read = read_fn,						\
+	.write = write_fn,						\
+	.llseek = generic_file_llseek,					\
+}
+#endif
 /*
  * sys/class/sec/tsp/support_feature
  * bit value should be made a promise with InputFramework.
@@ -56,6 +81,8 @@
 #define INPUT_FEATURE_SUPPORT_MIS_CALIBRATION_TEST	(1 << 9) /* mis-calibration test support */
 #define INPUT_FEATURE_ENABLE_MULTI_CALIBRATION		(1 << 10) /* multi calibration support */
 
+#define INPUT_FEATURE_SUPPORT_INPUT_MONITOR			(1 << 16) /* input monitor support */
+
 /*
  * sec Log
  */
@@ -64,7 +91,7 @@
 #define INPUT_TCLM_LOG_BUF_SIZE		64
 
 #if IS_ENABLED(CONFIG_SEC_DEBUG_TSP_LOG)
-#include <linux/sec_debug.h>		/* exynos */
+//#include <linux/sec_debug.h>		/* exynos */
 #include "sec_tsp_log.h"
 
 #define input_dbg(mode, dev, fmt, ...)						\
@@ -176,17 +203,30 @@
 #define KEY_WAKEUP_UNLOCK	253	/* Wake-up to recent view, ex: AOP */
 #define KEY_RECENT		254
 
+#define KEY_WATCH		550	/* Premium watch: 2finger double tap */
+
 #define BTN_PALM		0x118	/* palm flag */
 #define BTN_LARGE_PALM		0x119	/* large palm flag */
 
 #define KEY_BLACK_UI_GESTURE	0x1c7
 #define KEY_INT_CANCEL		0x2be	/* for touch event skip */
 #define KEY_DEX_ON		0x2bd
-#define KEY_WINK			0x2bf	/* Intelligence Key */
+#define KEY_WINK		0x2bf	/* Intelligence Key */
+#define KEY_APPS		0x2c1	/* APPS key */
+#define KEY_SIP			0x2c2	/* Sip key */
+#define KEY_SETTING		0x2c5	/* Setting */
+#define KEY_SFINDER		0x2c6	/* Sfinder key */
+#define KEY_SHARE		0x2c9	/* keyboard share */
+#define KEY_FN_LOCK		0x2ca	/* fn_lock key */
+#define KEY_FN_UNLOCK		0x2cb	/* fn_unlock key */
 
 #define ABS_MT_CUSTOM		0x3e	/* custom event */
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
+#define SW_PEN_INSERT		0x0f  /* set = pen insert, remove */
+#else
 #define SW_PEN_INSERT		0x13  /* set = pen insert, remove */
+#endif
 
 enum grip_write_mode {
 	G_NONE				= 0,
@@ -282,9 +322,8 @@ typedef enum {
 /* SEC_TS_DEBUG : Print event contents */
 #define SEC_TS_DEBUG_PRINT_ALLEVENT  0x01
 #define SEC_TS_DEBUG_PRINT_ONEEVENT  0x02
-#define SEC_TS_DEBUG_PRINT_I2C_READ_CMD  0x04
-#define SEC_TS_DEBUG_PRINT_I2C_WRITE_CMD 0x08
-#define SEC_TS_DEBUG_SEND_UEVENT  0x80
+#define SEC_TS_DEBUG_PRINT_READ_CMD  0x04
+#define SEC_TS_DEBUG_PRINT_WRITE_CMD 0x08
 
 #define CMD_RESULT_WORD_LEN		10
 
@@ -300,6 +339,7 @@ typedef enum {
 #define SEC_TS_MODE_SPONGE_SINGLE_TAP		(1 << 3)
 #define SEC_TS_MODE_SPONGE_PRESS		(1 << 4)
 #define SEC_TS_MODE_SPONGE_DOUBLETAP_TO_WAKEUP	(1 << 5)
+#define SEC_TS_MODE_SPONGE_TWO_FINGER_DOUBLETAP	(1 << 7)
 
 /*SPONGE library parameters*/
 #define SEC_TS_MAX_SPONGE_DUMP_BUFFER	512
@@ -352,6 +392,7 @@ enum sec_ts_cover_id {
 	SEC_TS_LED_BACK_COVER,
 	SEC_TS_CLEAR_SIDE_VIEW_COVER,
 	SEC_TS_MINI_SVIEW_WALLET_COVER,
+	SEC_TS_CLEAR_CAMERA_VIEW_COVER,
 
 	SEC_TS_MONTBLANC_COVER = 100,
 	SEC_TS_NFC_SMART_COVER = 255,
@@ -400,6 +441,8 @@ enum sec_input_notify_t {
 	NOTIFIER_WACOM_PEN_CHARGING_STARTED,	/* to tsp: pen charging started */
 	NOTIFIER_WACOM_PEN_INSERT,		/* to tsp: pen is inserted */
 	NOTIFIER_WACOM_PEN_REMOVE,		/* to tsp: pen is removed */
+	NOTIFIER_WACOM_PEN_HOVER_IN,		/* to tsp: pen hover is in */
+	NOTIFIER_WACOM_PEN_HOVER_OUT,		/* to tsp: pen hover is out */
 	NOTIFIER_LCD_VRR_LFD_LOCK_REQUEST,	/* to LCD: set LFD min lock */
 	NOTIFIER_LCD_VRR_LFD_LOCK_RELEASE,	/* to LCD: unset LFD min lock */
 	NOTIFIER_LCD_VRR_LFD_OFF_REQUEST,	/* to LCD: set LFD OFF */
@@ -504,8 +547,13 @@ struct sec_ts_fod_data {
 	u8 vi_y;
 	u8 vi_size;
 	u8 vi_data[SEC_CMD_STR_LEN];
-
+	u8 vi_event;
 	u8 press_prop;
+};
+
+enum sec_ts_fod_vi_method {
+	CMD_SYSFS = 0,
+	CMD_IRQ = 1,
 };
 
 #define SEC_INPUT_HW_PARAM_SIZE		512
@@ -547,6 +595,7 @@ struct sec_ts_plat_data {
 	char location[SEC_TS_LOCATION_DETECT_SIZE];
 
 	u8 prox_power_off;
+	bool power_enabled;
 
 	struct sec_ts_coordinate coord[SEC_TS_SUPPORT_TOUCH_COUNT];
 	struct sec_ts_coordinate prev_coord[SEC_TS_SUPPORT_TOUCH_COUNT];
@@ -582,6 +631,7 @@ struct sec_ts_plat_data {
 	void (*init)(void *data);
 	int (*stui_tsp_enter)(void);
 	int (*stui_tsp_exit)(void);
+	int (*stui_tsp_type)(void);
 
 	union power_supply_propval psy_value;
 	struct power_supply *psy;
@@ -608,6 +658,7 @@ struct sec_ts_plat_data {
 	u8 touchable_area;
 	u8 ed_enable;
 	u8 pocket_mode;
+	u8 lightsensor_detect;
 	u8 fod_lp_mode;
 	int cover_type;
 	u8 wirelesscharger_mode;
@@ -625,12 +676,23 @@ struct sec_ts_plat_data {
 	bool support_fod_lp_mode;
 	bool enable_settings_aot;
 	bool sync_reportrate_120;
+	bool support_refresh_rate_mode;
 	bool support_vrr;
 	bool support_open_short_test;
 	bool support_mis_calibration_test;
 	bool support_wireless_tx;
 	bool support_flex_mode;
+	bool support_lightsensor_detect;
+	bool support_input_monitor;
 	int support_dual_foldable;
+	int support_sensor_hall;
+	int support_rawdata_map_num;
+	int dump_ic_ver;
+	bool disable_vsync_scan;
+	bool unuse_dvdd_power;
+	bool chip_on_board;
+	bool enable_sysinput_enabled;
+	bool not_support_io_ldo;
 
 	struct completion resume_done;
 	struct wakeup_source *sec_ws;
@@ -652,20 +714,21 @@ int sec_tclm_execute_force_calibration(struct i2c_client *client, int cal_mode);
 extern int get_lcd_attached(char *mode);
 #endif
 
-#if IS_ENABLED(CONFIG_EXYNOS_DPU30)
+#if IS_ENABLED(CONFIG_EXYNOS_DPU30) || IS_ENABLED(CONFIG_MCD_PANEL)
 extern int get_lcd_info(char *arg);
 #endif
 
-#if IS_ENABLED(CONFIG_MTK_LCM)
+#if IS_ENABLED(CONFIG_SMCDSD_PANEL)
 extern unsigned int lcdtype;
 #endif
 
+int sec_input_get_lcd_id(struct device *dev);
 int sec_input_handler_start(struct device *dev);
 void sec_delay(unsigned int ms);
 int sec_input_set_temperature(struct device *dev, int state);
 void sec_input_set_grip_type(struct device *dev, u8 set_type);
 int sec_input_check_cover_type(struct device *dev);
-void sec_input_set_fod_info(struct device *dev, int vi_x, int vi_y, int vi_size);
+void sec_input_set_fod_info(struct device *dev, int vi_x, int vi_y, int vi_size, int vi_event);
 ssize_t sec_input_get_fod_info(struct device *dev, char *buf);
 bool sec_input_set_fod_rect(struct device *dev, int *rect_data);
 int sec_input_check_wirelesscharger_mode(struct device *dev, int mode, int force);
@@ -688,15 +751,9 @@ int sec_input_power(struct device *dev, bool on);
 int sec_input_sysfs_create(struct kobject *kobj);
 void sec_input_sysfs_remove(struct kobject *kobj);
 
-#if IS_ENABLED(CONFIG_BATTERY_SAMSUNG)
-extern unsigned int lpcharge;
-#endif
-
-#if IS_ENABLED(CONFIG_SAMSUNG_LPM_MODE)
-extern int poweroff_charging;
-#endif
-
 void sec_input_register_notify(struct notifier_block *nb, notifier_fn_t notifier_call, int priority);
 void sec_input_unregister_notify(struct notifier_block *nb);
 int sec_input_notify(struct notifier_block *nb, unsigned long noti, void *v);
 int sec_input_self_request_notify(struct notifier_block *nb);
+int sec_input_enable_device(struct input_dev *dev);
+int sec_input_disable_device(struct input_dev *dev);

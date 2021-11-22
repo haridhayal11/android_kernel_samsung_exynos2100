@@ -749,8 +749,8 @@ static void is_group_s_leader(struct is_group *group,
 		 */
 		if (leader->vctx && subdev->vctx &&
 			(leader->vctx->refcount < subdev->vctx->refcount)) {
-			mgwarn("Invalid subdev instance (%s(%u) < %s(%u))",
-				group, group,
+			mginfo("[%s] Invalid subdev instance (%s(%u) < %s(%u))",
+				group, group, __func__,
 				leader->name, leader->vctx->refcount,
 				subdev->name, subdev->vctx->refcount);
 		}
@@ -2453,7 +2453,7 @@ int is_group_stop(struct is_groupmgr *groupmgr,
 	FIMC_BUG(group->id >= GROUP_ID_MAX);
 
 	if (!test_bit(IS_GROUP_START, &group->state)) {
-		mwarn("already group stop", group);
+		minfo("[%s] already group stop", group, __func__);
 		return -EPERM;
 	}
 
@@ -2494,7 +2494,7 @@ int is_group_stop(struct is_groupmgr *groupmgr,
 				set_bit(IS_GROUP_FORCE_STOP, &head->state);
 				up(&head->smp_trigger);
 			} else if (!test_bit(IS_SENSOR_FRONT_START, &sensor->state)) {
-				mwarn(" front is stopped, forcely trigger(pc %d)", device, head->pcount);
+				minfo("[%s] front is stopped, forcely trigger(pc %d)", device, __func__, head->pcount);
 				set_bit(IS_GROUP_FORCE_STOP, &head->state);
 				up(&head->smp_trigger);
 			} else if (!test_bit(IS_SENSOR_BACK_START, &sensor->state)) {
@@ -2529,7 +2529,7 @@ int is_group_stop(struct is_groupmgr *groupmgr,
 #endif
 		}
 
-		mgwarn(" %d reqs waiting1...(pc %d) smp_resource(%d)", device, head,
+		mginfo("[%s] %d reqs waiting1...(pc %d) smp_resource(%d)", device, head, __func__,
 				framemgr->queued_count[FS_REQUEST], head->pcount,
 				list_empty(&gtask->smp_resource.wait_list));
 		msleep(20);
@@ -3343,7 +3343,7 @@ int is_group_shot(struct is_groupmgr *groupmgr,
 	struct is_group_task *gtask_child;
 	bool try_sdown = false;
 	bool try_rdown = false;
-	bool try_gdown[GROUP_ID_MAX] = {false};
+	bool try_gdown[GROUP_ID_MAX];
 	u32 gtask_child_id = 0;
 
 	FIMC_BUG(!groupmgr);
@@ -3355,6 +3355,7 @@ int is_group_shot(struct is_groupmgr *groupmgr,
 	FIMC_BUG(group->id >= GROUP_ID_MAX);
 
 	set_bit(IS_GROUP_SHOT, &group->state);
+	memset(try_gdown, 0, sizeof(try_gdown));
 	device = group->device;
 	gtask = &groupmgr->gtask[group->id];
 
@@ -3470,7 +3471,7 @@ int is_group_shot(struct is_groupmgr *groupmgr,
 
 		/* check for group stop */
 		if (unlikely(test_bit(IS_GROUP_FORCE_STOP, &group->state))) {
-			mgwarn(" cancel by fstop3", group, group);
+			mginfo("[%s] cancel by fstop3", group, group, __func__);
 			ret = -EINVAL;
 			goto p_err_cancel;
 		}
@@ -3614,7 +3615,7 @@ p_err_ignore:
 			break;
 
 		gtask_child = &groupmgr->gtask[child->id];
-		if (try_gdown[child->id])
+		if (try_gdown[child->id] && !list_empty(&gtask_child->smp_resource.wait_list))
 			up(&gtask_child->smp_resource);
 
 		child = child->child;
@@ -3623,7 +3624,7 @@ p_err_ignore:
 	if (try_sdown)
 		smp_shot_inc(group);
 
-	if (try_rdown)
+	if (try_rdown && !list_empty(&gtask->smp_resource.wait_list))
 		up(&gtask->smp_resource);
 
 	clear_bit(IS_GROUP_SHOT, &group->state);
@@ -3640,7 +3641,7 @@ p_err_cancel:
 			break;
 
 		gtask_child = &groupmgr->gtask[child->id];
-		if (try_gdown[child->id])
+		if (try_gdown[child->id] && !list_empty(&gtask_child->smp_resource.wait_list))
 			up(&gtask_child->smp_resource);
 
 		child = child->child;
@@ -3649,7 +3650,7 @@ p_err_cancel:
 	if (try_sdown)
 		smp_shot_inc(group);
 
-	if (try_rdown)
+	if (try_rdown && !list_empty(&gtask->smp_resource.wait_list))
 		up(&gtask->smp_resource);
 
 	clear_bit(IS_GROUP_SHOT, &group->state);

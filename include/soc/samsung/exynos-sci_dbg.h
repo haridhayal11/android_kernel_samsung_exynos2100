@@ -186,6 +186,7 @@ struct exynos_sci_dbg_data {
 	void __iomem			*cacheaid_base;
 };
 
+extern void carveout_reserved_mem(void *r);
 extern bool get_exynos_sci_llc_debug_mode(void);
 extern void set_exynos_sci_llc_debug_mode(int enable);
 

@@ -151,7 +151,7 @@ __sec_pm_cpufreq_register(struct cpufreq_policy *policy)
 					GFP_KERNEL);
 	if (!cpufreq_dev->freq_table) {
 		pr_err("%s: fail to allocate freq_table\n", __func__);
-		cpufreq_dev = ERR_PTR(-ENOMEM);
+		ret = -ENOMEM;
 		goto free_cpufreq_dev;
 	}
 
@@ -175,7 +175,6 @@ __sec_pm_cpufreq_register(struct cpufreq_policy *policy)
 	if (ret < 0) {
 		pr_err("%s: Failed to add freq constraint (%d)\n", __func__,
 		       ret);
-		cpufreq_dev = ERR_PTR(ret);
 		goto free_table;
 	}
 
@@ -190,7 +189,7 @@ free_table:
 free_cpufreq_dev:
 	kfree(cpufreq_dev);
 
-	return cpufreq_dev;
+	return ERR_PTR(ret);
 }
 
 struct sec_pm_cpufreq_dev *

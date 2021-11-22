@@ -1342,6 +1342,9 @@ int fw_will_note(size_t len)
 	npu_err("----------- Done unposted_mbox ----------------------\n");
 
 	memlog_sync_to_file(npu_log.npu_memlog_obj);
+#if IS_ENABLED(CONFIG_SEC_ABC)
+	sec_abc_send_event("MODULE=npu@INFO=npu_fw_warning");
+#endif
 	return 0;
 }
 
@@ -1356,11 +1359,11 @@ size_t npu_array_to_string(void *src, size_t src_size,
 
 	ptr = src;
 
-	ptr->sec = ptr->timestamp / 1000000000;
-	ptr->nsec = ptr->timestamp % 1000000000;
+	// ptr->sec = ptr->timestamp / 1000000000;
+	// ptr->nsec = ptr->timestamp % 1000000000;
 
-	n += scnprintf(buf + n, count - n, "[%lu.%06lu]", ptr->sec,
-								ptr->nsec / 1000);
+	// n += scnprintf(buf + n, count - n, "[%lu.%06lu]", ptr->sec,
+	// 							ptr->nsec / 1000);
 
 	n += scnprintf(buf + n, count - n, "%s", ptr->string);
 
@@ -1373,7 +1376,7 @@ struct npu_log_unit *npu_set_string(struct npu_log_unit *npu_log_ptr, const char
 {
 	va_list ap;
 
-	npu_log_ptr->timestamp = local_clock();
+	// npu_log_ptr->timestamp = local_clock();
 
 	va_start(ap, fmt);
 	vsprintf(npu_log_ptr->string, fmt, ap);
@@ -1439,11 +1442,13 @@ int npu_log_probe(struct npu_device *npu_device)
 	}
 
 	npu_log.npu_memarray_file_obj = memlog_alloc_file(npu_log.memlog_desc_array, "arr-fil",
-						SZ_2M*2, SZ_2M*2, 500, 1);
+						sizeof(struct npu_log_unit) * LOG_UNIT_NUM,
+						sizeof(struct npu_log_unit) * LOG_UNIT_NUM,
+						500, 1);
 	if (npu_log.npu_memarray_file_obj) {
 		memlog_register_data_to_string(npu_log.npu_memarray_file_obj, npu_array_to_string);
-		npu_log.npu_memarray_obj = memlog_alloc_array(npu_log.memlog_desc_array, LOG_UNIT_NUM*2,
-			sizeof(struct npu_log_unit), npu_log.npu_memarray_file_obj, "npu-arr", "npu_log_unit", 0);
+		npu_log.npu_memarray_obj = memlog_alloc_array(npu_log.memlog_desc_array, LOG_UNIT_NUM,
+			sizeof(struct npu_log_unit), npu_log.npu_memarray_file_obj, "npu-arr", "npu_log_unit", MEMLOG_UFALG_NO_TIMESTAMP);
 		if (npu_log.npu_memarray_obj)
 			npu_log.npu_log_ptr = npu_log.npu_memarray_obj->vaddr;
 		else

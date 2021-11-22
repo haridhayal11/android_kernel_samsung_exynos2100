@@ -440,6 +440,14 @@ int is_parse_dt(struct platform_device *pdev)
 	probe_info("ret(%d) non_secure_mem_info(%#08lx, %#08lx)", ret,
 		core->non_secure_mem_info[0], core->non_secure_mem_info[1]);
 
+	ret = of_property_read_u32_array(np, "memlog_size", pdata->is_memlog_size, 2);
+	if (ret) {
+		pdata->is_memlog_size[0] = IS_MEMLOG_PRINTF_DRV_SIZE;
+		pdata->is_memlog_size[1] = IS_MEMLOG_PRINTF_DDK_SIZE;
+	}
+	probe_info("ret(%d) is_memlog_size(0x%#08lx, 0x%#08lx)", ret,
+		pdata->is_memlog_size[0], pdata->is_memlog_size[1]);
+
 	vender_np = of_get_child_by_name(np, "vender");
 	if (vender_np) {
 		ret = is_vender_dt(vender_np);

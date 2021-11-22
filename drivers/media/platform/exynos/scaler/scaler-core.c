@@ -971,13 +971,20 @@ unsigned int sc_get_mif_freq_by_bw(struct sc_ctx *ctx,
 	return (unsigned int)(total_bw * mif_ref / bw_ref);
 }
 
-void sc_request_devfreq(struct sc_ctx *ctx, unsigned long lv)
+void sc_request_devfreq(struct sc_ctx *ctx, int lv)
 {
+	struct sc_dev *sc = ctx->sc_dev;
 	struct sc_qos_request *qos_req = &ctx->pm_qos;
-	struct sc_qos_table *qos_table = ctx->sc_dev->qos_table;
-	int bts_id = ctx->sc_dev->bts_id;
+	struct sc_qos_table *qos_table = sc->qos_table;
+	int bts_id = sc->bts_id;
 	struct bts_bw bw;
 	unsigned int req_mif;
+
+	if (lv < 0 || lv >= sc->qos_table_cnt) {
+		dev_err(sc->dev, "%s: requested lv(%d) is invalid (0 ~ %d)\n",
+			__func__, lv, sc->qos_table_cnt - 1);
+		return;
+	}
 
 	sc_get_bandwidth(ctx, &bw);
 

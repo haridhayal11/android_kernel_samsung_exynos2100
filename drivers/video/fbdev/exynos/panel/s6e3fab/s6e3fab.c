@@ -26,6 +26,10 @@
 #include "../dynamic_mipi/band_info.h"
 #endif
 
+#if IS_ENABLED(CONFIG_SEC_ABC)
+#include <linux/sti/abc_common.h>
+#endif
+
 #ifdef PANEL_PR_TAG
 #undef PANEL_PR_TAG
 #define PANEL_PR_TAG	"ddi"
@@ -128,8 +132,18 @@ exit_copy:
 	return;
 }
 
-#endif
+static int get_current_ddi_osc_index(struct panel_device *panel)
+{
+	struct dm_status_info *dm_status = &panel->dynamic_mipi.dm_status;
 
+	return dm_status->current_ddi_osc;
+}
+#else
+static int get_current_ddi_osc_index(struct panel_device *panel)
+{
+	return 0;
+}
+#endif
 
 #ifdef CONFIG_PANEL_AID_DIMMING
 
@@ -447,13 +461,11 @@ static int getidx_vrr_table(struct maptbl *tbl)
 	return maptbl_index(tbl, layer, row, 0);
 }
 
-
 static int getidx_vrr_osc_mode_table(struct maptbl *tbl)
 {
 	struct panel_device *panel = (struct panel_device *)tbl->pdata;
 	int row = 0, layer = 0;
 	int vrr_mode;
-	struct dm_status_info *dm_status = &panel->dynamic_mipi.dm_status;
 
 	vrr_mode = get_panel_refresh_mode(panel);
 	if (vrr_mode < 0)
@@ -461,13 +473,13 @@ static int getidx_vrr_osc_mode_table(struct maptbl *tbl)
 
 	switch (vrr_mode) {
 	case S6E3FAB_VRR_MODE_HS:
-		if (dm_status->current_ddi_osc == 1)
+		if (get_current_ddi_osc_index(panel) == 1)
 			row = S6E3FAB_VRR_MODE_HS_OSC1;
 		else
 			row = S6E3FAB_VRR_MODE_HS;
 		break;
 	case S6E3FAB_VRR_MODE_NS:
-		if (dm_status->current_ddi_osc == 1)
+		if (get_current_ddi_osc_index(panel) == 1)
 			row = S6E3FAB_VRR_MODE_NS_OSC1;
 		else
 			row = S6E3FAB_VRR_MODE_NS;
@@ -484,8 +496,6 @@ static int getidx_vrr_osc_mode_table(struct maptbl *tbl)
 
 	return maptbl_index(tbl, layer, row, 0);
 }
-
-
 
 static int getidx_vrr_mode_table(struct maptbl *tbl)
 {
@@ -767,34 +777,6 @@ static void copy_tset_maptbl(struct maptbl *tbl, u8 *dst)
 		BIT(7) | abs(panel_data->props.temperature) :
 		panel_data->props.temperature;
 }
-
-#ifdef CONFIG_SUPPORT_GRAYSPOT_TEST
-static void copy_grayspot_cal_maptbl(struct maptbl *tbl, u8 *dst)
-{
-	struct panel_device *panel;
-	struct panel_info *panel_data;
-	u8 val;
-	int ret = 0;
-
-	if (!tbl || !dst)
-		return;
-
-	panel = (struct panel_device *)tbl->pdata;
-	if (unlikely(!panel))
-		return;
-
-	panel_data = &panel->panel_data;
-
-	ret = resource_copy_by_name(panel_data, &val, "grayspot_cal");
-	if (unlikely(ret)) {
-		panel_err("grayspot_cal not found in panel resource\n");
-		return;
-	}
-
-	panel_info("grayspot_cal 0x%02x\n", val);
-	*dst = val;
-}
-#endif
 
 #ifdef CONFIG_EXYNOS_DECON_LCD_COPR
 static void copy_copr_maptbl(struct maptbl *tbl, u8 *dst)
@@ -1542,6 +1524,10 @@ static void show_dsi_err(struct dumpinfo *info)
 #ifdef CONFIG_DISPLAY_USE_INFO
 	inc_dpui_u32_field(DPUI_KEY_PNDSIE, dsi_err[0]);
 #endif
+#if IS_ENABLED(CONFIG_SEC_ABC)
+	if (dsi_err[0] > 0)
+		sec_abc_send_event("MODULE=display@ERROR=act_section_panel_main_dsi_error");
+#endif
 }
 
 static void show_self_diag(struct dumpinfo *info)
@@ -1791,8 +1777,6 @@ static void show_mafpc_flash_log(struct dumpinfo *info)
 			mafpc_flash[0], (mafpc_flash[0] & 0x02) ? "BYPASS" : "POC");
 	panel_info("====================================================\n");
 }
-#endif
-
 
 static void show_abc_crc_log(struct dumpinfo *info)
 {
@@ -1815,8 +1799,7 @@ static void show_abc_crc_log(struct dumpinfo *info)
 	panel_info("* Reg Value : 0x%02x, 0x%02x Result : %s\n", abc_crc[0], abc_crc[1]);
 	panel_info("====================================================\n");
 }
-
-
+#endif
 
 static void show_self_mask_crc(struct dumpinfo *info)
 {
@@ -2340,7 +2323,6 @@ static int do_gamma_flash_checksum(struct panel_device *panel, void *data, u32 l
 
 	return ret;
 }
-#endif
 
 static int s6e3fab_mtp_gamma_check(struct panel_device *panel, void *data, u32 len)
 {
@@ -2406,6 +2388,8 @@ static int s6e3fab_mtp_gamma_check(struct panel_device *panel, void *data, u32 l
 
 	return result;
 }
+
+#endif
 
 static bool is_panel_state_not_lpm(struct panel_device *panel)
 {

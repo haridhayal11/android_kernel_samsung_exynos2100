@@ -987,7 +987,7 @@ err:
 	return size;
 }
 
-#ifdef CS35L41_FACTORY_RECOVERY_SYSFS
+#ifdef CONFIG_SND_SOC_CS35L41_REINIT_SYSFS
 static ssize_t cirrus_cal_reinit_show(struct device *dev,
 					struct device_attribute *attr,
 					char *buf)
@@ -1011,15 +1011,18 @@ static ssize_t cirrus_cal_reinit_store(struct device *dev,
 	if (ret == 0 && reinit == 1) {
 		mutex_lock(&amp_group->cal_lock);
 
-		for (i = 0; i < amp_group->num_amps; i++)
-			cs35l41_reinit(amp_group->amps[i].component);
+		for (i = 0; i < amp_group->num_amps; i++) {
+			if (amp_group->amps[i].amp_reinit != NULL)
+				amp_group->amps[i].amp_reinit(
+					amp_group->amps[i].component);
+		}
 
 		mutex_unlock(&amp_group->cal_lock);
 	}
 
 	return size;
 }
-#endif /* CS35L41_FACTORY_RECOVERY_SYSFS*/
+#endif /* CONFIG_SND_SOC_CS35L41_REINIT_SYSFS*/
 
 static ssize_t cirrus_cal_vval_show(struct device *dev,
 					struct device_attribute *attr,
@@ -1268,10 +1271,10 @@ static DEVICE_ATTR(status, 0664, cirrus_cal_status_show,
 				cirrus_cal_status_store);
 static DEVICE_ATTR(v_status, 0664, cirrus_cal_v_status_show,
 				cirrus_cal_v_status_store);
-#ifdef CS35L41_FACTORY_RECOVERY_SYSFS
+#ifdef CONFIG_SND_SOC_CS35L41_REINIT_SYSFS
 static DEVICE_ATTR(reinit, 0664, cirrus_cal_reinit_show,
 				cirrus_cal_reinit_store);
-#endif /* CS35L41_FACTORY_RECOVERY_SYSFS */
+#endif /* CONFIG_SND_SOC_CS35L41_REINIT_SYSFS */
 
 static struct device_attribute v_val_attribute = {
 	.attr = {.mode = VERIFY_OCTAL_PERMISSIONS(0664)},
@@ -1331,9 +1334,9 @@ static struct attribute *cirrus_cal_attr_base[] = {
 	&dev_attr_version.attr,
 	&dev_attr_status.attr,
 	&dev_attr_v_status.attr,
-#ifdef CS35L41_FACTORY_RECOVERY_SYSFS
+#ifdef CONFIG_SND_SOC_CS35L41_REINIT_SYSFS
 	&dev_attr_reinit.attr,
-#endif /* CS35L41_FACTORY_RECOVERY_SYSFS */
+#endif /* CONFIG_SND_SOC_CS35L41_REINIT_SYSFS */
 	NULL,
 };
 

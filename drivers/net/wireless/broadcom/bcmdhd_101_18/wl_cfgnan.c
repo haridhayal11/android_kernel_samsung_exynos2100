@@ -3336,9 +3336,8 @@ wl_cfgnan_delayed_disable(struct work_struct *work)
 	} else {
 		WL_INFORM_MEM(("nan is in disabled state\n"));
 	}
-	rtnl_unlock();
-
 	DHD_NAN_WAKE_UNLOCK(cfg->pub);
+	rtnl_unlock();
 
 	return;
 }
@@ -4549,6 +4548,13 @@ wl_cfgnan_trigger_geofencing_ranging(struct net_device *dev,
 				/* TODO: Attempt again over a timer */
 				err_at = 2;
 			} else {
+				/*
+				 * Report disc result
+				 * without ranging result,
+				 * on ranging failure
+				 */
+				wl_cfgnan_disc_result_on_geofence_cancel(cfg,
+					ranging_inst);
 				/* Remove target and clean ranging inst */
 				wl_cfgnan_remove_ranging_instance(cfg, ranging_inst);
 				err_at = 3;
@@ -6278,10 +6284,13 @@ wl_cfgnan_get_capablities_handler(struct net_device *ndev,
 
 	NAN_DBG_ENTER();
 
+	RETURN_EIO_IF_NOT_UP(cfg);
+
 	/* Do not query fw about nan if feature is not supported */
 	if (!FW_SUPPORTED(dhdp, nan)) {
 		WL_DBG(("NAN is not supported\n"));
-		return ret;
+		ret = BCME_NOTUP;
+		goto fail;
 	}
 
 	if (cfg->nancfg->nan_init_state) {

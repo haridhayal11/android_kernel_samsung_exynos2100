@@ -291,7 +291,7 @@ static struct fd_hdr_header *mcd_map_hdr_info(struct saved_hdr_info *saved_hdr, 
 	}
 
 	header = (struct fd_hdr_header *)dma_buf_vmap(hdr_buf);
-	if (!header) {
+	if (IS_ERR_OR_NULL(header)) {
 		decon_err("%s: header from dma_buf_vmap is null, fd: %d\n", __func__, fd_hdr);
 		goto exit_map_buf_put;
 	}
@@ -582,12 +582,12 @@ static ssize_t last_winconfig_show(struct device *dev,
 		if (type == CSC_STANDARD_UNSPECIFIED)
 			count += sprintf(buf + count, "type: Unspecified");
 		else
-			count += sprintf(buf + count, "type: %s, ", (type > CSC_DCI_P3_C || type < 0) ? "NA" : csc_type_str[type]);
+			count += sprintf(buf + count, "type: %s, ", (type > CSC_DCI_P3_C) ? "NA" : csc_type_str[type]);
 
 		if (range == CSC_RANGE_UNSPECIFIED)
 			count += sprintf(buf + count, "range: Unspecified)");
 		else
-			count += sprintf(buf + count, "range: %s)", (range > CSC_RANGE_EXTENDED || range < 0) ? "NA" : csc_range_str[range]);
+			count += sprintf(buf + count, "range: %s)", (range > CSC_RANGE_EXTENDED) ? "NA" : csc_range_str[range]);
 
 		 count += sprintf(buf + count, " hdr: %s\n",
 			(dpp_config->dpp_parm.hdr_std > DPP_TRANSFER_GAMMA2_8 || dpp_config->dpp_parm.hdr_std < 0) ?

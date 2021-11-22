@@ -213,6 +213,8 @@ int sensor_3j1_cis_init(struct v4l2_subdev *subdev)
 	cis->cis_data->cur_height = SENSOR_3J1_MAX_HEIGHT;
 	cis->cis_data->low_expo_start = 33000;
 	cis->need_mode_change = false;
+	cis->cis_data->cur_pattern_mode = SENSOR_TEST_PATTERN_MODE_OFF;
+	cis->long_term_mode.sen_strm_off_on_enable = false;
 #ifdef USE_CAMERA_ADAPTIVE_MIPI
 	cis->mipi_clock_index_cur = CAM_MIPI_NOT_INITIALIZED;
 	cis->mipi_clock_index_new = CAM_MIPI_NOT_INITIALIZED;
@@ -1277,6 +1279,68 @@ p_err:
 	return ret;
 }
 
+int sensor_3j1_cis_long_term_exposure(struct v4l2_subdev *subdev)
+{
+	int ret = 0;
+	struct is_cis *cis;
+	struct is_long_term_expo_mode *lte_mode;
+	unsigned char cit_lshift_val = 0;
+	unsigned char shift_count = 0;
+#ifdef USE_SENSOR_LONG_EXPOSURE_SHOT
+	u32 lte_expousre = 0;
+#endif
+
+	WARN_ON(!subdev);
+
+	cis = (struct is_cis *)v4l2_get_subdevdata(subdev);
+	lte_mode = &cis->long_term_mode;
+
+	I2C_MUTEX_LOCK(cis->i2c_lock);
+	/* LTE mode or normal mode set */
+	if (lte_mode->sen_strm_off_on_enable) {
+		if (lte_mode->expo[0] > 250000) {
+#ifdef USE_SENSOR_LONG_EXPOSURE_SHOT
+			lte_expousre = lte_mode->expo[0];
+			cit_lshift_val = (unsigned char)(lte_mode->expo[0] / 250000);
+			while (cit_lshift_val) {
+				cit_lshift_val = cit_lshift_val / 2;
+				lte_expousre = lte_expousre / 2;
+				shift_count++;
+			}
+			lte_mode->expo[0] = lte_expousre;
+#else
+			cit_lshift_val = (unsigned char)(lte_mode->expo[0] / 250000);
+			while (cit_lshift_val) {
+				cit_lshift_val = cit_lshift_val / 2;
+				if (cit_lshift_val > 0)
+					shift_count++;
+			}
+			lte_mode->expo[0] = 250000;
+#endif
+			ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
+			ret |= is_sensor_write8(cis->client, 0x0702, shift_count);
+			ret |= is_sensor_write8(cis->client, 0x0704, shift_count);
+		}
+	} else {
+		cit_lshift_val = 0;
+		ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
+		ret |= is_sensor_write8(cis->client, 0x0702, cit_lshift_val);
+		ret |= is_sensor_write8(cis->client, 0x0704, cit_lshift_val);
+	}
+
+	I2C_MUTEX_UNLOCK(cis->i2c_lock);
+
+	info("%s enable(%d) shift_count(%d) exp(%d)",
+		__func__, lte_mode->sen_strm_off_on_enable, shift_count, lte_mode->expo[0]);
+
+	if (ret < 0) {
+		pr_err("ERR[%s]: LTE register setting fail\n", __func__);
+		return ret;
+	}
+
+	return ret;
+}
+
 int sensor_3j1_cis_adjust_analog_gain(struct v4l2_subdev *subdev, u32 input_again, u32 *target_permile)
 {
 	int ret = 0;
@@ -1824,6 +1888,8 @@ static struct is_cis_ops cis_ops = {
 	.cis_wait_streamon = sensor_cis_wait_streamon,
 	.cis_check_rev_on_init = sensor_cis_check_rev_on_init,
 	.cis_set_initial_exposure = sensor_cis_set_initial_exposure,
+	.cis_set_test_pattern = sensor_cis_set_test_pattern,
+	.cis_set_long_term_exposure = sensor_3j1_cis_long_term_exposure,
 };
 
 static int cis_3j1_probe(struct i2c_client *client,

@@ -296,6 +296,13 @@ static inline void dpp_write(u32 id, u32 reg_id, u32 val)
 	writel(val, dpp->res.regs + reg_id);
 }
 
+static inline void dpp_write_relaxed(u32 id, u32 reg_id, u32 val)
+{
+	struct dpp_device *dpp = get_dpp_drvdata(id);
+
+	writel_relaxed(val, dpp->res.regs + reg_id);
+}
+
 static inline void dpp_write_mask(u32 id, u32 reg_id, u32 val, u32 mask)
 {
 	struct dpp_device *dpp = get_dpp_drvdata(id);

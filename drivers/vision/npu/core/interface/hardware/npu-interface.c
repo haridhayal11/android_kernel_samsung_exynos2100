@@ -419,6 +419,9 @@ int npu_interface_close(struct npu_system *system)
 		wq = NULL;
 	}
 
+	irq_set_affinity_hint(system->irq0, NULL);
+	irq_set_affinity_hint(system->irq1, NULL);
+
 	devm_free_irq(dev, system->irq0, NULL);
 	devm_free_irq(dev, system->irq1, NULL);
 
@@ -483,7 +486,7 @@ int nw_req_manager(int msgid, struct npu_nw *nw)
 	case NPU_NW_CMD_PROFILE_START:
 		cmd.c.profile_ctl.ctl = PROFILE_CTL_CODE_START;
 		cmd.payload = nw->ncp_addr.daddr;
-		cmd.length = nw->ncp_addr.size;
+		cmd.length = (u32)nw->ncp_addr.size;
 		msg.command = COMMAND_PROFILE_CTL;
 		msg.length = sizeof(struct command);
 		break;
@@ -581,6 +584,7 @@ fr_req_err:
 	return ret;
 }
 
+/*
 void makeStructToString(struct cmd_done *done)
 {
 	u32 val;
@@ -600,6 +604,7 @@ void makeStructToString(struct cmd_done *done)
 		fwProfile.buf_size += strlen(strArr[i]) + strlen(tempbuf) + 1;
 	}
 }
+*/
 
 int nw_rslt_manager(int *ret_msgid, struct npu_nw *nw)
 {
@@ -630,7 +635,7 @@ int nw_rslt_manager(int *ret_msgid, struct npu_nw *nw)
 			 cmd.c.done.request_specific_value);
 		nw->result_value = cmd.c.done.request_specific_value;
 		nw->result_code = NPU_ERR_NO_ERROR;
-		makeStructToString(&(cmd.c.done));
+		// makeStructToString(&(cmd.c.done));
 	} else if (msg.command == COMMAND_NDONE) {
 		npu_err("COMMAND_NDONE for mid: (%d) error(%u/0x%08x)\n"
 			, msg.mid, cmd.c.ndone.error, cmd.c.ndone.error);
@@ -678,7 +683,7 @@ int fr_rslt_manager(int *ret_msgid, struct npu_frame *frame)
 			frame->duration	= cmd.c.done.request_specific_value;
 
 		frame->result_code = NPU_ERR_NO_ERROR;
-		makeStructToString(&(cmd.c.done));
+		// makeStructToString(&(cmd.c.done));
 	} else if (msg.command == COMMAND_NDONE) {
 		npu_err("COMMAND_NDONE for mid: (%d) error(%u/0x%08x)\n"
 			, msg.mid, cmd.c.ndone.error, cmd.c.ndone.error);

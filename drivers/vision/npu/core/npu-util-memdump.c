@@ -143,13 +143,16 @@ int ram_dump_fault_listner(struct npu_device *npu)
 	}
 	/* tcu_dump_addr and idp_dump_addr are not freed, because we expect them left on ramdump */
 
+	if (tcu_dump_addr)
+		kfree(tcu_dump_addr);
+	if (idp_dump_addr)
+		kfree(idp_dump_addr);
+
 	return ret;
 
 exit_err:
 	if (tcu_dump_addr)
 		kfree(tcu_dump_addr);
-	if (idp_dump_addr)
-		kfree(idp_dump_addr);
 	return ret;
 }
 

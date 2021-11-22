@@ -77,6 +77,7 @@ typedef struct sec_pd_sink_status
 	void (*fp_sec_pd_select_pdo)(int num);
 	int (*fp_sec_pd_select_pps)(int num, int ppsVol, int ppsCur);
 	void (*fp_sec_pd_ext_cb)(unsigned short v_id, unsigned short p_id);
+	void (*fp_sec_pd_manual_ccopen_req)(int is_on);
 } SEC_PD_SINK_STATUS;
 
 struct pdic_notifier_struct {
@@ -93,12 +94,14 @@ void sec_pd_init_data(SEC_PD_SINK_STATUS* psink_status);
 int sec_pd_register_chg_info_cb(void *cb);
 int sec_pd_get_chg_info(void);
 void sec_pd_get_vid_pid(unsigned short *vid, unsigned short *pid, unsigned int *xid);
+void sec_pd_manual_ccopen_req(int is_on);
 #else
-int sec_pd_select_pdo(int num) { return -ENODEV; }
-int sec_pd_select_pps(int num, int ppsVol, int ppsCur) { return -ENODEV; }
-int sec_pd_get_apdo_max_power(unsigned int *pdo_pos, unsigned int *taMaxVol, unsigned int *taMaxCur, unsigned int *taMaxPwr) { return -ENODEV; }
-void sec_pd_init_data(SEC_PD_SINK_STATUS* psink_status) { }
-int sec_pd_register_chg_info_cb(void *cb) { }
-void sec_pd_get_vid_pid(unsigned short *vid, unsigned short *pid, unsigned int *xid) { }
+static inline int sec_pd_select_pdo(int num) { return -ENODEV; }
+static inline int sec_pd_select_pps(int num, int ppsVol, int ppsCur) { return -ENODEV; }
+static inline int sec_pd_get_apdo_max_power(unsigned int *pdo_pos, unsigned int *taMaxVol, unsigned int *taMaxCur, unsigned int *taMaxPwr) { return -ENODEV; }
+static inline void sec_pd_init_data(SEC_PD_SINK_STATUS* psink_status) { }
+static inline int sec_pd_register_chg_info_cb(void *cb) { return 0; }
+static inline void sec_pd_get_vid_pid(unsigned short *vid, unsigned short *pid, unsigned int *xid) { }
+static inline void sec_pd_manual_ccopen_req(int is_on) { }
 #endif
 #endif /* __SEC_PD_H__ */

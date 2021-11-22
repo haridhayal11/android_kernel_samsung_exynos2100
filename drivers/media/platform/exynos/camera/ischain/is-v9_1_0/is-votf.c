@@ -514,9 +514,11 @@ int is_votf_subdev_create_link(struct is_group *group)
 		/*********** L0 UV ***********/
 		src_info.ip = VOTF_DNS_IP;
 		src_info.id = ISP_L0_UV;
+		src_info.mode = VOTF_NORMAL;
 
 		dst_info.ip = VOTF_YUVPP_IP;
 		dst_info.id = YUVPP_YUVNR_L0_UV;
+		dst_info.mode = VOTF_NORMAL;
 
 #if defined(USE_VOTF_AXI_APB)
 		votfitf_create_link(src_info.ip, dst_info.ip);
@@ -584,7 +586,7 @@ void is_votf_subdev_destroy_link(struct is_group *group)
 	struct is_group *src_gr;
 
 	src_gr = group->prev;
-	if (src_gr->id == GROUP_ID_ISP0 && group->id == GROUP_ID_YPP)
+	if (src_gr && src_gr->id == GROUP_ID_ISP0 && group->id == GROUP_ID_YPP)
 		votfitf_destroy_link(VOTF_DNS_IP, VOTF_YUVPP_IP);
 }
 #endif

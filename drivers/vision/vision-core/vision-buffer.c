@@ -997,7 +997,9 @@ int vb_queue_s_format(struct vb_queue *q, struct vs4l_format_list *flist)
 	if (q->format.count > VB_MAX_BUFFER) {
 		vision_err("flist->count(%d) cannot be greater to VB_MAX_BUFFER(%d)\n", q->format.count, VB_MAX_BUFFER);
 		ret = -EINVAL;
-		kfree(q->format.formats);
+		if (q->format.formats)
+			kfree(q->format.formats);
+		q->format.formats = NULL;
 		goto p_err;
 	}
 
@@ -1007,7 +1009,9 @@ int vb_queue_s_format(struct vb_queue *q, struct vs4l_format_list *flist)
 		fmt = __vb_find_format(f->format);
 		if (!fmt) {
 			vision_err("__vb_find_format is fail\n");
-			kfree(q->format.formats);
+			if (q->format.formats)
+				kfree(q->format.formats);
+			q->format.formats = NULL;
 			ret = -EINVAL;
 			goto p_err;
 		}
@@ -1028,7 +1032,9 @@ int vb_queue_s_format(struct vb_queue *q, struct vs4l_format_list *flist)
 
 		if (q->format.formats[i].plane >= VB_MAX_PLANES) {
 			vision_err("f->plane(%d) cannot be greater or equal to VB_MAX_PLANES(%d)\n", q->format.formats[i].plane, VB_MAX_PLANES);
-			kfree(q->format.formats);
+			if (q->format.formats)
+				kfree(q->format.formats);
+			q->format.formats = NULL;
 			ret = -EINVAL;
 			goto p_err;
 		}
@@ -1036,7 +1042,9 @@ int vb_queue_s_format(struct vb_queue *q, struct vs4l_format_list *flist)
 		ret = __vb_plane_size(&q->format.formats[i]);
 		if (ret) {
 			vision_err("__vb_plane_size is fail(%d)\n", ret);
-			kfree(q->format.formats);
+			if (q->format.formats)
+				kfree(q->format.formats);
+			q->format.formats = NULL;
 			ret = -EINVAL;
 			goto p_err;
 		}

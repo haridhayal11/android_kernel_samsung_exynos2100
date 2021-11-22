@@ -188,7 +188,7 @@ int get_filesystem_binary(const char *filename, struct is_binary *bin)
 		ret = PTR_ERR(fp);
 	}
 #else
-	err("not support %s API!", __func__);
+	info("not support %s API!", __func__);
 	ret = -EINVAL;
 #endif
 	return ret;

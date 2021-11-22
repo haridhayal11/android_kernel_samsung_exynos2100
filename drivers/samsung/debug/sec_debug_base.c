@@ -109,34 +109,6 @@ static int secdbg_base_die_handler(struct notifier_block *nb,
 	return NOTIFY_DONE;
 }
 
-/* sec debug write buffer function */
-void secdbg_base_write_buf(struct outbuf *obuf, int len, const char *fmt, ...)
-{
-	va_list list;
-	char *base;
-	int rem, ret;
-
-	base = obuf->buf;
-	base += obuf->index;
-
-	rem = sizeof(obuf->buf);
-	rem -= obuf->index;
-
-	if (rem <= 0)
-		return;
-
-	if ((len > 0) && (len < rem))
-		rem = len;
-
-	va_start(list, fmt);
-	ret = vsnprintf(base, rem, fmt, list);
-	if (ret)
-		obuf->index += ret;
-
-	va_end(list);
-}
-EXPORT_SYMBOL(secdbg_base_write_buf);
-
 /* device tree node for sec_debug */
 static struct device_node *kcnst_np;
 

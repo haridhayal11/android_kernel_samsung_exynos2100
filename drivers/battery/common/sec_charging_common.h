@@ -76,13 +76,6 @@ enum power_supply_ext_health {
 	POWER_SUPPLY_EXT_HEALTH_MAX,
 };
 
-enum sec_battery_voltage_mode {
-	/* average voltage */
-	SEC_BATTERY_VOLTAGE_AVERAGE = 0,
-	/* open circuit voltage */
-	SEC_BATTERY_VOLTAGE_OCV,
-};
-
 enum sec_battery_current_type {
 	/* uA */
 	SEC_BATTERY_CURRENT_UA = 0,
@@ -97,7 +90,7 @@ enum sec_battery_voltage_type {
 	SEC_BATTERY_VOLTAGE_MV,
 };
 
-#if defined(CONFIG_DUAL_BATTERY)
+#if IS_ENABLED(CONFIG_DUAL_BATTERY)
 enum sec_battery_dual_mode {
 	SEC_DUAL_BATTERY_MAIN = 0,
 	SEC_DUAL_BATTERY_SUB,
@@ -182,6 +175,7 @@ enum sec_wireless_vout_control_mode {
 	WIRELESS_VOUT_5_5V_STEP, /* 13 */
 	WIRELESS_VOUT_9V_STEP, /* 14 */
 	WIRELESS_VOUT_10V_STEP, /* 15 */
+	WIRELESS_VOUT_4_5V_STEP, /* 16 */
 };
 
 enum sec_wireless_rx_control_mode {
@@ -204,16 +198,19 @@ enum sec_wireless_rx_control_mode {
 };
 
 enum sec_wireless_tx_vout {
-	WC_TX_VOUT_5_0V = 0,
-	WC_TX_VOUT_5_5V,
-	WC_TX_VOUT_6_0V,
-	WC_TX_VOUT_6_5V,
-	WC_TX_VOUT_7_0V,
-	WC_TX_VOUT_7_5V,
-	WC_TX_VOUT_8_0V,
-	WC_TX_VOUT_8_5V,
-	WC_TX_VOUT_9_0V,
-	WC_TX_VOUT_OFF=100,
+	WC_TX_VOUT_OFF = 0,
+	WC_TX_VOUT_5000MV = 5000,
+	WC_TX_VOUT_5500MV = 5500,
+	WC_TX_VOUT_6000MV = 6000,
+	WC_TX_VOUT_6500MV = 6500,
+	WC_TX_VOUT_7000MV = 7000,
+	WC_TX_VOUT_7500MV = 7500,
+	WC_TX_VOUT_8000MV = 8000,
+	WC_TX_VOUT_8500MV = 8500,
+	WC_TX_VOUT_9000MV = 9000,
+	WC_TX_VOUT_MIN = WC_TX_VOUT_5000MV,
+	WC_TX_VOUT_MAX = WC_TX_VOUT_9000MV,
+	WC_TX_VOUT_STEP_AOV = 500,
 };
 
 enum sec_wireless_pad_id {
@@ -412,7 +409,7 @@ enum sec_battery_check {
 	SEC_BATTERY_CHECK_CHARGER,
 	/* by interrupt (use check_battery_callback() to check battery) */
 	SEC_BATTERY_CHECK_INT,
-#if defined(CONFIG_DUAL_BATTERY)
+#if IS_ENABLED(CONFIG_DUAL_BATTERY)
 	/* by dual battery */
 	SEC_BATTERY_CHECK_DUAL_BAT_GPIO,
 #endif
@@ -492,7 +489,6 @@ typedef struct {
 
 #define is_hv_wireless_type(cable_type) ( \
 	cable_type == SEC_BATTERY_CABLE_HV_WIRELESS || \
-	cable_type == SEC_BATTERY_CABLE_HV_WIRELESS_ETX || \
 	cable_type == SEC_BATTERY_CABLE_WIRELESS_HV_STAND || \
 	cable_type == SEC_BATTERY_CABLE_HV_WIRELESS_20 || \
 	cable_type == SEC_BATTERY_CABLE_HV_WIRELESS_20_LIMIT || \
@@ -521,7 +517,6 @@ typedef struct {
 	cable_type != SEC_BATTERY_CABLE_WIRELESS_PACK && \
 	cable_type != SEC_BATTERY_CABLE_WIRELESS_STAND && \
 	cable_type != SEC_BATTERY_CABLE_HV_WIRELESS && \
-	cable_type != SEC_BATTERY_CABLE_HV_WIRELESS_ETX && \
 	cable_type != SEC_BATTERY_CABLE_PREPARE_WIRELESS_HV && \
 	cable_type != SEC_BATTERY_CABLE_WIRELESS_HV_STAND && \
 	cable_type != SEC_BATTERY_CABLE_WIRELESS_VEHICLE && \

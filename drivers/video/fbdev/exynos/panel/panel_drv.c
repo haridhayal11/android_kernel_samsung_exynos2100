@@ -334,7 +334,7 @@ int panel_get_gpio_irq(struct panel_gpio *gpio)
 	return gpio->irq_enable;
 }
 
-int panel_set_gpio_irq(struct panel_gpio *gpio, bool enable)
+int __mockable panel_set_gpio_irq(struct panel_gpio *gpio, bool enable)
 {
 #ifdef CONFIG_EVASION_DISP_DET
 	struct panel_device *panel;
@@ -585,12 +585,15 @@ int __mockable __set_panel_power(struct panel_device *panel, int power)
 			panel_err("failed to panel_regulator_enable, ret:%d\n", ret);
 			return ret;
 		}
-		usleep_range(15000, 15000 + 10);
-		gpio_direction_output(gpio[PANEL_GPIO_RESET].num, 1);
-		usleep_range(10000, 10000 + 10);
+		if (panel->panel_data.ddi_props.after_panel_reset == false) {
+			usleep_range(15000, 15000 + 10);
+			gpio_direction_output(gpio[PANEL_GPIO_RESET].num, 1);
+			usleep_range(10000, 10000 + 10);
+		}
 	} else {
 		gpio_direction_output(gpio[PANEL_GPIO_RESET].num, 0);
-		usleep_range(500, 500);
+		// add delay for mangna spec, it will change to decon_board
+		usleep_range(11000, 12000);
 		ret = panel_regulator_disable(panel);
 		if (ret < 0) {
 			panel_err("failed to panel_regulator_disable, ret:%d\n", ret);
@@ -1019,6 +1022,16 @@ int panel_display_on(struct panel_device *panel)
 	}
 #endif
 
+#ifdef CONFIG_SUPPORT_TIG
+	if (panel->state.cur_state == PANEL_STATE_ALPM) {
+		ret = panel_do_seqtbl_by_index(panel, PANEL_TIG_ENABLE_SEQ);
+		if (unlikely(ret < 0)) {
+			panel_err("failed to seqtbl(PANEL_TIG_ENABLE_SEQ)\n");
+			return ret;
+		}
+		usleep_range(17000, 17100);
+	}
+#endif
 	ret = __panel_seq_display_on(panel);
 	if (ret) {
 		panel_err("failed to display on\n");
@@ -1026,6 +1039,16 @@ int panel_display_on(struct panel_device *panel)
 	}
 	state->disp_on = PANEL_DISPLAY_ON;
 
+#ifdef CONFIG_SUPPORT_TIG
+	if (panel->state.cur_state == PANEL_STATE_ALPM) {
+		usleep_range(33400, 33500);
+		ret = panel_do_seqtbl_by_index(panel, PANEL_TIG_DISABLE_SEQ);
+		if (unlikely(ret < 0)) {
+			panel_err("failed to seqtbl(PANEL_TIG_DISABLE_SEQ)\n");
+			return ret;
+		}
+	}
+#endif
 #ifdef CONFIG_EXTEND_LIVE_CLOCK
 	if (panel->state.cur_state == PANEL_STATE_ALPM) {
 		usleep_range(33400, 33500);
@@ -2932,6 +2955,7 @@ do_exit:
 }
 #endif /* CONFIG_SUPPORT_DSU */
 
+#define MAX_DSIM_CNT_FOR_PANEL (MAX_DSIM_CNT)
 static int panel_ioctl_dsim_probe(struct v4l2_subdev *sd, void *arg)
 {
 	int *param = (int *)arg;
@@ -2939,7 +2963,7 @@ static int panel_ioctl_dsim_probe(struct v4l2_subdev *sd, void *arg)
 	struct panel_device *panel = container_of(sd, struct panel_device, sd);
 
 	panel_info("PANEL_IOC_DSIM_PROBE\n");
-	if (param == NULL) {
+	if (param == NULL || *param >= MAX_DSIM_CNT_FOR_PANEL) {
 		panel_err("invalid arg\n");
 		return -EINVAL;
 	}
@@ -3005,6 +3029,25 @@ static int panel_ioctl_set_power(struct panel_device *panel, void *arg)
 
 	return ret;
 }
+
+static int panel_ioctl_panel_reset(struct panel_device *panel)
+{
+	struct panel_gpio *gpio = panel->gpio;
+
+	if (panel->panel_data.ddi_props.after_panel_reset == true) {
+		usleep_range(15000, 15000 + 10);
+		gpio_direction_output(gpio[PANEL_GPIO_RESET].num, 1);
+		usleep_range(10000, 10000 + 10);
+		panel_info("gpio_reset(%s)\n",
+			gpio_get_value(gpio[PANEL_GPIO_RESET].num) ? "high" : "low");
+	} else {
+		panel_info("already panel reset(%s)\n",
+				gpio_get_value(gpio[PANEL_GPIO_RESET].num) ? "high" : "low");
+	}
+
+	return 0;
+}
+
 
 static int panel_set_error_cb(struct v4l2_subdev *sd)
 {
@@ -3095,17 +3138,41 @@ static int panel_set_mask_layer(struct panel_device *panel, void *arg)
 	if (req_data->req_mask_layer == MASK_LAYER_ON) {
 		if (req_data->trigger_time  == MASK_LAYER_TRIGGER_BEFORE) {
 
-			/* 1. REQ ON + FRAME START BEFORE */
-			panel_do_seqtbl_by_index(panel, PANEL_MASK_LAYER_BEFORE_SEQ);
+			/*
+			 * W/A - During smooth dimming transition,
+			 * Smooth dimming transition should stop here.
+			 */
+
+			/* 0. STOP SMOOTH DIMMING */
 			mutex_lock(&panel_bl->lock);
+			if (check_seqtbl_exist(&panel->panel_data, PANEL_MASK_LAYER_STOP_DIMMING_SEQ)) {
+				panel_do_seqtbl_by_index(panel, PANEL_MASK_LAYER_BEFORE_SEQ);
+				panel_bl->props.smooth_transition = SMOOTH_TRANS_OFF;
+				panel_do_seqtbl_by_index(panel, PANEL_MASK_LAYER_STOP_DIMMING_SEQ);
+			}
+
+			/* 1. REQ ON + FRAME START BEFORE */
+			if (check_seqtbl_exist(&panel->panel_data, PANEL_MASK_LAYER_BEFORE_SEQ))
+				panel_do_seqtbl_by_index(panel, PANEL_MASK_LAYER_BEFORE_SEQ);
 			panel_bl->props.mask_layer_br_hook = MASK_LAYER_HOOK_ON;
 			panel_bl->props.smooth_transition = SMOOTH_TRANS_OFF;
-			mutex_unlock(&panel_bl->lock);
-			panel_update_brightness(panel);
-			panel_do_seqtbl_by_index(panel, PANEL_MASK_LAYER_AFTER_SEQ);
+			panel_bl->props.acl_opr = ACL_OPR_OFF;
+			panel_bl->props.acl_pwrsave = ACL_PWRSAVE_OFF;
+			if (check_seqtbl_exist(&panel->panel_data, PANEL_MASK_LAYER_ENTER_BR_SEQ)
+				&&(panel->state.cur_state != PANEL_STATE_ALPM)) {
+				panel_bl->props.brightness = panel_bl->props.mask_layer_br_target;
+				panel_info("mask_layer_br enter (%d)->(%d)\n",
+					panel_bl->bd->props.brightness, panel_bl->props.mask_layer_br_target);
+				panel_do_seqtbl_by_index(panel, PANEL_MASK_LAYER_ENTER_BR_SEQ);
+				mutex_unlock(&panel_bl->lock);
+			} else {
+				mutex_unlock(&panel_bl->lock);
+				panel_update_brightness(panel);
+			}
+			if (check_seqtbl_exist(&panel->panel_data, PANEL_MASK_LAYER_AFTER_SEQ))
+				panel_do_seqtbl_by_index(panel, PANEL_MASK_LAYER_AFTER_SEQ);
 
 		} else if  (req_data->trigger_time  == MASK_LAYER_TRIGGER_AFTER)  {
-
 			/* 2. REQ ON + FRAME START AFTER */
 			panel_bl->props.mask_layer_br_actual = panel_bl->props.mask_layer_br_target;
 			sysfs_notify(&panel->lcd_dev->kobj, NULL, "actual_mask_brightness");
@@ -3115,12 +3182,25 @@ static int panel_set_mask_layer(struct panel_device *panel, void *arg)
 		if (req_data->trigger_time  == MASK_LAYER_TRIGGER_BEFORE) {
 
 			/* 3. REQ OFF + FRAME START BEFORE */
-			panel_do_seqtbl_by_index(panel, PANEL_MASK_LAYER_BEFORE_SEQ);
 			mutex_lock(&panel_bl->lock);
+			if (check_seqtbl_exist(&panel->panel_data, PANEL_MASK_LAYER_BEFORE_SEQ))
+				panel_do_seqtbl_by_index(panel, PANEL_MASK_LAYER_BEFORE_SEQ);
 			panel_bl->props.mask_layer_br_hook = MASK_LAYER_HOOK_OFF;
-			mutex_unlock(&panel_bl->lock);
-			panel_update_brightness(panel);
 
+			if (check_seqtbl_exist(&panel->panel_data, PANEL_MASK_LAYER_EXIT_BR_SEQ)
+				&& (panel->state.cur_state != PANEL_STATE_ALPM)) {
+				panel_info("mask_layer_br exit (%d)->(%d)\n",
+					panel_bl->props.mask_layer_br_target, panel_bl->bd->props.brightness);
+				panel_bl->props.brightness = panel_bl->bd->props.brightness;
+
+				panel_do_seqtbl_by_index(panel, PANEL_MASK_LAYER_EXIT_BR_SEQ);
+				mutex_unlock(&panel_bl->lock);
+			} else {
+				mutex_unlock(&panel_bl->lock);
+				panel_update_brightness(panel);
+			}
+			if (check_seqtbl_exist(&panel->panel_data, PANEL_MASK_LAYER_AFTER_SEQ))
+				panel_do_seqtbl_by_index(panel, PANEL_MASK_LAYER_AFTER_SEQ);
 		} else if  (req_data->trigger_time  == MASK_LAYER_TRIGGER_AFTER)  {
 
 			/* 4. REQ OFF + FRAME START AFTER */
@@ -3202,6 +3282,11 @@ static long panel_core_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg
 	case PANEL_IOC_SET_POWER:
 		panel_info("PANEL_IOC_SET_POWER\n");
 		ret = panel_ioctl_set_power(panel, arg);
+		break;
+
+	case PANEL_IOC_PANEL_RESET:
+		panel_info("PANEL_IOC_PANEL_RESET\n");
+		ret = panel_ioctl_panel_reset(panel);
 		break;
 
 	case PANEL_IOC_PANEL_DUMP:
@@ -3966,7 +4051,7 @@ static void disp_det_handler(struct work_struct *work)
 	disp_det_state = panel_disp_det_state(panel);
 	panel_info("disp_det_state:%s\n",
 			disp_det_state == PANEL_STATE_OK ? "OK" : "NOK");
-	
+
 	switch (state->cur_state) {
 	case PANEL_STATE_ALPM:
 	case PANEL_STATE_NORMAL:
@@ -3975,7 +4060,7 @@ static void disp_det_handler(struct work_struct *work)
 			ret = panel_set_gpio_irq(&gpio[PANEL_GPIO_DISP_DET], false);
 			if (ret < 0)
 				panel_warn("do not support irq\n");
-			
+
 			/* delay for disp_det deboundce */
 			usleep_range(10000, 11000);
 
@@ -4246,8 +4331,8 @@ static int panel_dpui_notifier_callback(struct notifier_block *self,
 			"%d", panel->work[PANEL_WORK_DIM_FLASH].ret);
 	set_dpui_field(DPUI_KEY_PNGFLS, tbuf, size);
 #endif
-//	inc_dpui_u32_field(DPUI_KEY_UB_CON, panel->panel_data.props.ub_con_cnt);
-//	panel->panel_data.props.ub_con_cnt = 0;
+	inc_dpui_u32_field(DPUI_KEY_UB_CON, panel->panel_data.props.ub_con_cnt);
+	panel->panel_data.props.ub_con_cnt = 0;
 
 	return 0;
 }

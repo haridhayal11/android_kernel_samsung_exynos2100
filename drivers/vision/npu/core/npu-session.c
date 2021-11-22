@@ -752,8 +752,9 @@ int __second_parsing_ncp(
 				address_vector_index = (mv + i)->address_vector_index;
 				if (likely(!EVER_FIND_FM(&IFM_cnt, *IFM_av, address_vector_index))) {
 					(*IFM_av + IFM_cnt)->av_index = address_vector_index;
-					if (unlikely(((address_vector_index * sizeof(struct address_vector)) + address_vector_offset) >
-									session->ncp_mem_buf->size) || unlikely(address_vector_index >= address_vector_cnt)) {
+					if (unlikely(((address_vector_index * sizeof(struct address_vector))
+						+ address_vector_offset) > session->ncp_mem_buf->size) ||
+						unlikely(address_vector_index >= address_vector_cnt)) {
 						npu_err("address_vector_index(%d) should not exceed max addr vec count(%d)\n",
 								address_vector_index, address_vector_cnt);
 						return -EFAULT;
@@ -789,8 +790,9 @@ int __second_parsing_ncp(
 				address_vector_index = (mv + i)->address_vector_index;
 				if (likely(!EVER_FIND_FM(&OFM_cnt, *OFM_av, address_vector_index))) {
 					(*OFM_av + OFM_cnt)->av_index = address_vector_index;
-					if (unlikely(((address_vector_index * sizeof(struct address_vector)) + address_vector_offset) >
-									session->ncp_mem_buf->size) || unlikely(address_vector_index >= address_vector_cnt)) {
+					if (unlikely(((address_vector_index * sizeof(struct address_vector))
+						+ address_vector_offset) > session->ncp_mem_buf->size) ||
+						unlikely(address_vector_index >= address_vector_cnt)) {
 						npu_err("address_vector_index(%d) should not exceed max addr vec count(%d)\n",
 								address_vector_index, address_vector_cnt);
 						return -EFAULT;
@@ -824,8 +826,9 @@ int __second_parsing_ncp(
 				address_vector_index = (mv + i)->address_vector_index;
 				if (likely(!EVER_FIND_FM(&IMB_cnt, *IMB_av, address_vector_index))) {
 					(*IMB_av + IMB_cnt)->av_index = address_vector_index;
-					if (unlikely(((address_vector_index * sizeof(struct address_vector)) + address_vector_offset) >
-									session->ncp_mem_buf->size) || unlikely(address_vector_index >= address_vector_cnt)) {
+					if (unlikely(((address_vector_index * sizeof(struct address_vector))
+						+ address_vector_offset) > session->ncp_mem_buf->size) ||
+						unlikely(address_vector_index >= address_vector_cnt)) {
 						npu_err("address_vector_index(%d) should not exceed max addr vec count(%d)\n",
 								address_vector_index, address_vector_cnt);
 						return -EFAULT;
@@ -856,8 +859,9 @@ int __second_parsing_ncp(
 				}
 				// update address vector, m_addr with ncp_alloc_daddr + offset
 				address_vector_index = (mv + i)->address_vector_index;
-				if (unlikely(((address_vector_index * sizeof(struct address_vector)) + address_vector_offset) >
-									session->ncp_mem_buf->size) || unlikely(address_vector_index >= address_vector_cnt)) {
+				if (unlikely(((address_vector_index * sizeof(struct address_vector))
+						+ address_vector_offset) > session->ncp_mem_buf->size) ||
+						unlikely(address_vector_index >= address_vector_cnt)) {
 					npu_err("address_vector_index(%d) should not exceed max addr vec count(%d)\n",
 							address_vector_index, address_vector_cnt);
 					return -EFAULT;
@@ -1104,7 +1108,7 @@ int __ion_alloc_IMB(struct npu_session *session, struct addr_info **IMB_av)
 		(session->imb_ion_info + i)->daddr = IMB_mem_buf->daddr + addr_offset;
 		(session->imb_ion_info + i)->vaddr = ((void *)((char *)(IMB_mem_buf->vaddr)) + addr_offset);
 		(session->imb_ion_info + i)->size = (*IMB_av + i)->size;
-		addr_offset += ALIGN((*IMB_av + i)->size, (u32)NPU_IMB_ALIGN);
+		addr_offset += ALIGN((u32)(*IMB_av + i)->size, (u32)NPU_IMB_ALIGN);
 
 		npu_udbg("(IMB_mem_buf + %d)->vaddr(0x%pK), daddr(0x%pad), size(%zu)\n",
 			session, i, (session->imb_ion_info + i)->vaddr, &(session->imb_ion_info + i)->daddr, (session->imb_ion_info + i)->size);
@@ -1173,7 +1177,7 @@ int __config_session_info(struct npu_session *session)
 	session->ss_state |= BIT(NPU_SESSION_STATE_WGT_KALLOC);
 
 	if (unlikely(!IFM_av || !OFM_av || !IMB_av || !WGT_av)) {
-		npu_err("failed(%d) in __config_session_info(ENOMEM)\n", session);
+		npu_err("failed in __config_session_info(ENOMEM)\n", session);
 		ret = -ENOMEM;
 		goto p_err;
 	}

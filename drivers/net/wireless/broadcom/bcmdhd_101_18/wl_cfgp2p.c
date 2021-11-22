@@ -573,22 +573,22 @@ wl_cfgp2p_ifidx(struct bcm_cfg80211 *cfg, struct ether_addr *mac, s32 *index)
 	return ret;
 }
 
-#define DISCOVERY_EBUSY_RETRY_LIMIT 5
+#define DISCOVERY_EBUSY_RETRY_LIMIT 5u
 static void
-wl_cfgp2p_handle_discovery_busy(struct bcm_cfg80211 *cfg, s32 err)
+wl_cfgp2p_handle_discovery_busy(struct bcm_cfg80211 *cfg)
 {
-	static u32 busy_count = 0;
 	dhd_pub_t *dhdp = (dhd_pub_t *)(cfg->pub);
+	struct ether_addr *p2p_dev_addr = wl_to_p2p_bss_macaddr(cfg, P2PAPI_BSSCFG_DEVICE);
 
-	if (err != BCME_BUSY) {
-		busy_count = 0;
-		return;
+	if (dhdp->dhd_induce_error == DHD_INDUCE_P2P_DISC_BUSY) {
+		/* force hang for p2p disc busy to be triggered */
+		dhdp->p2p_disc_busy_cnt = DISCOVERY_EBUSY_RETRY_LIMIT;
+		CFGP2P_ERR(("P2P disc busy hang forcily\n"));
 	}
 
-	busy_count++;
-
-	if (busy_count >= DISCOVERY_EBUSY_RETRY_LIMIT) {
-		struct ether_addr *p2p_dev_addr = wl_to_p2p_bss_macaddr(cfg, P2PAPI_BSSCFG_DEVICE);
+	if (++dhdp->p2p_disc_busy_cnt < DISCOVERY_EBUSY_RETRY_LIMIT) {
+		goto done;
+	}
 
 		CFGP2P_ERR(("p2p disc busy!!!\n"));
 
@@ -600,11 +600,10 @@ wl_cfgp2p_handle_discovery_busy(struct bcm_cfg80211 *cfg, s32 err)
 
 		if (dhd_query_bus_erros(dhdp)) {
 			CFGP2P_ERR(("bus error\n"));
-			return;
+		goto done;
 		}
 
 		dhdp->p2p_disc_busy_occurred = TRUE;
-		busy_count = 0;
 
 #if defined(DHD_DEBUG) && defined(DHD_FW_COREDUMP)
 		if (dhdp->memdump_enabled) {
@@ -616,7 +615,9 @@ wl_cfgp2p_handle_discovery_busy(struct bcm_cfg80211 *cfg, s32 err)
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27))
 		dhd_os_send_hang_message(dhdp);
 #endif
-	}
+
+done:
+	return;
 }
 
 static s32
@@ -624,15 +625,21 @@ wl_cfgp2p_set_discovery(struct bcm_cfg80211 *cfg, s32 on)
 {
 	s32 ret = BCME_OK;
 	struct net_device *ndev = bcmcfg_to_prmry_ndev(cfg);
+	dhd_pub_t *dhdp = (dhd_pub_t *)(cfg->pub);
 	CFGP2P_DBG(("enter\n"));
 
 	ret = wldev_iovar_setint(ndev, "p2p_disc", on);
 
 	if (unlikely(ret < 0)) {
 		CFGP2P_ERR(("p2p_disc %d error %d\n", on, ret));
+	}
 
 		if (on) {
-			wl_cfgp2p_handle_discovery_busy(cfg, ret);
+		if (ret == BCME_BUSY ||
+			dhdp->dhd_induce_error == DHD_INDUCE_P2P_DISC_BUSY) {
+			wl_cfgp2p_handle_discovery_busy(cfg);
+		} else {
+			dhdp->p2p_disc_busy_cnt = 0;
 		}
 	}
 

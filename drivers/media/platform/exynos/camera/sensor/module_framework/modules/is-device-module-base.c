@@ -40,9 +40,7 @@
 #if defined(CONFIG_CAMERA_PAFSTAT)
 #include "pafstat/is-pafstat.h"
 #endif
-#ifdef CAMERA_MODULE_DUAL_CAL_AVAILABLE_VERSION
 #include "is-sec-define.h"
-#endif
 #include "is-vender-specific.h"
 
 static void update_sensor_id_by_position(u32 position, u32 module_id)

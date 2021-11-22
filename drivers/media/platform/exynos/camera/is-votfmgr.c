@@ -554,6 +554,7 @@ int is_votf_destroy_link_sensor(struct is_group *group)
 {
 	int ret = 0;
 	struct votf_info src_info, dst_info;
+	struct is_framemgr *votf_fmgr;
 
 	if (group->id >= GROUP_ID_MAX) {
 		mgerr("group ID is invalid(%d)", group, group);
@@ -582,6 +583,13 @@ int is_votf_destroy_link_sensor(struct is_group *group)
 #else
 	votfitf_destroy_ring();
 #endif
+
+	/*
+	 * TRS wait idle after flush
+	 * TWS wait idle is not necessary.
+	 */
+	votf_fmgr = is_votf_get_framemgr(group, TRS, group->leader.id);
+	votf_fmgr_call(votf_fmgr, slave, wait_idle);
 
 	/* Free VOTF internal buffer */
 	ret = is_votf_free_internal_buffer(group);
@@ -735,7 +743,7 @@ struct is_frame *is_votf_get_frame(struct is_group *group,  enum votf_service ty
 }
 
 int is_votf_register_framemgr(struct is_group *group, enum votf_service type,
-	void *data, votf_s_addr fn, unsigned long subdev_id)
+	void *data, const struct votf_ops *ops, unsigned long subdev_id)
 {
 	struct is_framemgr *framemgr;
 
@@ -748,36 +756,13 @@ int is_votf_register_framemgr(struct is_group *group, enum votf_service type,
 	if (type == TWS) {
 		framemgr->master.id = subdev_id;
 		framemgr->master.data = data;
-		framemgr->master.s_addr = fn;
+		framemgr->master.ops = ops;
 		mginfo("Register VOTF master callback (subdev_id: %ld)\n", group, group, subdev_id);
 	} else {
 		framemgr->slave.id = subdev_id;
 		framemgr->slave.data = data;
-		framemgr->slave.s_addr = fn;
+		framemgr->slave.ops = ops;
 		mginfo("Register VOTF slave callback (subdev_id: %ld)\n", group, group, subdev_id);
-	}
-
-	return 0;
-}
-
-int is_votf_register_oneshot(struct is_group *group, enum votf_service type,
-	void *data, votf_s_oneshot fn, unsigned long subdev_id)
-{
-	struct is_framemgr *framemgr;
-
-	framemgr = is_votf_get_framemgr(group, type, subdev_id);
-	if (!framemgr) {
-		mgerr("framemgr is NULL. (subdev_id: %ld)\n", group, group, subdev_id);
-		return -EINVAL;
-	}
-
-	if (type == TWS) {
-		mgwarn("Invalid type for VOTF oneshot trigger register (subdev_id: %ld)\n", group, group, subdev_id);
-	} else {
-		framemgr->slave.id = subdev_id;
-		framemgr->slave.data = data;
-		framemgr->slave.s_oneshot = fn;
-		mginfo("Register VOTF slave oneshot trigger (subdev_id: %ld)\n", group, group, subdev_id);
 	}
 
 	return 0;

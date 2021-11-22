@@ -3229,15 +3229,15 @@ static void is_hw_mcsc_size_dump(struct is_hw_ip *hw_ip)
 	int i;
 	u32 input_src = 0;
 	u32 in_w, in_h = 0;
-	u32 rdma_w, rdma_h = 0;
-	u32 poly_src_w, poly_src_h = 0;
-	u32 poly_dst_w, poly_dst_h = 0;
-	u32 post_in_w, post_in_h = 0;
-	u32 post_out_w, post_out_h = 0;
+	u32 rdma_w = 0, rdma_h = 0;
+	u32 poly_src_w = 0, poly_src_h = 0;
+	u32 poly_dst_w = 0, poly_dst_h = 0;
+	u32 post_in_w = 0, post_in_h = 0;
+	u32 post_out_w = 0, post_out_h = 0;
 	u32 wdma_enable = 0;
-	u32 wdma_w, wdma_h = 0;
-	u32 rdma_y_stride, rdma_uv_stride = 0;
-	u32 wdma_y_stride, wdma_uv_stride = 0;
+	u32 wdma_w = 0, wdma_h = 0;
+	u32 rdma_y_stride = 0, rdma_uv_stride = 0;
+	u32 wdma_y_stride = 0, wdma_uv_stride = 0;
 	struct is_hw_mcsc_cap *cap;
 
 	FIMC_BUG_VOID(!hw_ip);

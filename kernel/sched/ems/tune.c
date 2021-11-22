@@ -892,7 +892,7 @@ static void update_ecs_threshold(struct list_head *stage_list,
 
 	list_for_each_entry(stage, stage_list, node)
 		if (stage->id == id)
-			stage->busy_threshold = threshold;
+			stage->busy_threshold_orig = threshold;
 }
 
 static void init_ecs_list(struct emstune_ecs *ecs)
@@ -931,8 +931,8 @@ static int init_ecs_stage_list(struct device_node *ecs_dn,
 			cpulist_parse(buf, &stage->monitor_cpus);
 
 		if (of_property_read_u32(stage_dn, "busy-threshold",
-					(u32 *)&stage->busy_threshold))
-			stage->busy_threshold = UINT_MAX;
+					(u32 *)&stage->busy_threshold_orig))
+			stage->busy_threshold_orig = UINT_MAX;
 
 		stage->id = id++;
 		list_add_tail(&stage->node, stage_list);
@@ -1303,6 +1303,8 @@ show_cur_set(struct kobject *k, struct kobj_attribute *attr, char *buf)
 					cpumask_pr_args(&stage->monitor_cpus));
 				ret += sprintf(buf + ret, " busy threshold : %lu\n",
 					stage->busy_threshold);
+				ret += sprintf(buf + ret, " busy threshold : %lu (origin)\n",
+					stage->busy_threshold_orig);
 				ret += sprintf(buf + ret, "-----------------------------\n");
 			}
 		} else  {

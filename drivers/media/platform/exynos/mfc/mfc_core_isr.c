@@ -442,6 +442,11 @@ static struct mfc_buf *__mfc_handle_frame_output_del(struct mfc_core *core,
 			mfc_debug(2, "[QoS] framerate changed\n");
 		}
 
+		if ((IS_VP9_DEC(ctx) || IS_AV1_DEC(ctx)) && dec->has_multiframe) {
+			mfc_set_mb_flag(dst_mb, MFC_FLAG_MULTIFRAME);
+			mfc_debug(2, "[MULTIFRAME] multiframe detected\n");
+		}
+
 		if (ctx->dst_fmt->mem_planes == 1) {
 			vb2_set_plane_payload(&dst_mb->vb.vb2_buf, 0,
 					raw->total_plane_size);
@@ -453,6 +458,7 @@ static struct mfc_buf *__mfc_handle_frame_output_del(struct mfc_core *core,
 						raw->plane_size[i]);
 			}
 		}
+
 		dst_mb->vb.flags &= ~(V4L2_BUF_FLAG_KEYFRAME |
 					V4L2_BUF_FLAG_PFRAME |
 					V4L2_BUF_FLAG_BFRAME |
@@ -461,9 +467,9 @@ static struct mfc_buf *__mfc_handle_frame_output_del(struct mfc_core *core,
 		switch (frame_type) {
 			case MFC_REG_DISPLAY_FRAME_I:
 				dst_mb->vb.flags |= V4L2_BUF_FLAG_KEYFRAME;
-				if (idr_flag) {
-					mfc_set_mb_flag(dst_mb, MFC_FLAG_IDR);
-					mfc_debug(2, "[FRAME] keyframe IDR\n");
+				if (!(CODEC_HAS_IDR(ctx) && !idr_flag)) {
+					mfc_set_mb_flag(dst_mb, MFC_FLAG_SYNC_FRAME);
+					mfc_debug(2, "[FRAME] syncframe IDR\n");
 				}
 				break;
 			case MFC_REG_DISPLAY_FRAME_P:
@@ -820,6 +826,7 @@ static void __mfc_handle_frame_input(struct mfc_core *core,
 		dec->remained_size = src_mb->vb.vb2_buf.planes[0].bytesused
 					- dec->consumed;
 		dec->has_multiframe = 1;
+		dec->is_multiframe = 1;
 
 		MFC_TRACE_CORE_CTX("** consumed:%ld, remained:%ld, addr:0x%08llx\n",
 			dec->consumed, dec->remained_size, dec->y_addr_for_pb);
@@ -831,10 +838,13 @@ static void __mfc_handle_frame_input(struct mfc_core *core,
 				&ctx->src_ctrls[index]) < 0)
 		mfc_err("failed in core_recover_buf_ctrls_val\n");
 
-	dec->consumed = 0;
-	dec->remained_size = 0;
-
 	mfc_clear_mb_flag(src_mb);
+
+	if ((IS_VP9_DEC(ctx) || IS_AV1_DEC(ctx)) && dec->has_multiframe &&
+		(mfc_core_get_disp_status() == MFC_REG_DEC_STATUS_DECODING_ONLY)) {
+		mfc_set_mb_flag(src_mb, MFC_FLAG_CONSUMED_ONLY);
+		mfc_debug(2, "[STREAM][MULTIFRAME] last frame is decoding only\n");
+	}
 
 	/*
 	 * VP8 decoder has decoding only frame,
@@ -879,6 +889,10 @@ static void __mfc_handle_frame_input(struct mfc_core *core,
 	if (call_cop(ctx, core_get_buf_ctrls_val, core, ctx,
 				&ctx->src_ctrls[index]) < 0)
 		mfc_err("failed in core_get_buf_ctrls_val\n");
+
+	dec->consumed = 0;
+	dec->has_multiframe = 0;
+	dec->remained_size = 0;
 
 	vb2_buffer_done(&src_mb->vb.vb2_buf, VB2_BUF_STATE_DONE);
 }
@@ -932,9 +946,21 @@ static void __mfc_handle_frame(struct mfc_core *core, struct mfc_ctx *ctx,
 		mfc_change_state(core_ctx, MFCINST_RES_CHANGE_FLUSH);
 
 	if (res_change) {
-		mfc_debug(2, "[DRC] Resolution change set to %d\n", res_change);
+		mfc_ctx_info("[DRC] Resolution change set to %d\n", res_change);
 		mfc_change_state(core_ctx, MFCINST_RES_CHANGE_INIT);
-		ctx->wait_state = WAIT_G_FMT | WAIT_STOP;
+		if (IS_MULTI_MODE(ctx)) {
+			if (!ctx->wait_state) {
+				/* The core that detects DRC must be switched to single */
+				ctx->op_core_type = (core->id == MFC_OP_CORE_FIXED_1) ?
+					MFC_OP_CORE_FIXED_0 : MFC_OP_CORE_FIXED_1;
+				ctx->wait_state = WAIT_G_FMT | WAIT_STOP;
+				mfc_debug(2, "[2CORE][DRC] MFC-%d op_core_type: %d\n",
+						core->id, ctx->op_core_type);
+			}
+			mfc_debug(2, "[2CORE][DRC] wait_state: %d\n", ctx->wait_state);
+		} else {
+			ctx->wait_state = WAIT_G_FMT | WAIT_STOP;
+		}
 		mfc_debug(2, "[DRC] Decoding waiting! : %d\n", ctx->wait_state);
 		return;
 	}
@@ -979,8 +1005,9 @@ static void __mfc_handle_frame(struct mfc_core *core, struct mfc_ctx *ctx,
 
 			mfc_qos_reset_ts_list(&ctx->src_ts);
 			mfc_qos_reset_last_framerate(ctx);
-			mfc_qos_reset_disp_framerate(ctx);
+			mfc_qos_reset_bufq_framerate(ctx);
 			mfc_qos_set_framerate(ctx, DEC_DEFAULT_FPS);
+			mfc_core_qos_on(core, ctx);
 
 			goto leave_handle_frame;
 		} else {
@@ -1004,6 +1031,10 @@ static void __mfc_handle_frame(struct mfc_core *core, struct mfc_ctx *ctx,
 	if (mfc_dec_status_decoding(dst_frame_status))
 		__mfc_handle_frame_copy_timestamp(core_ctx,
 				mfc_core_get_dec_y_addr());
+
+	/* Mark source buffer as complete */
+	if (dst_frame_status != MFC_REG_DEC_STATUS_DISPLAY_ONLY)
+		__mfc_handle_frame_input(core, ctx, err);
 
 	/* A frame has been decoded and is in the buffer  */
 	if (mfc_dec_status_display(dst_frame_status))
@@ -1034,10 +1065,6 @@ static void __mfc_handle_frame(struct mfc_core *core, struct mfc_ctx *ctx,
 			mfc_debug(2, "[REFINFO] Released FD = %d will update with display buffer\n",
 					dec->ref_buf[i].fd[0]);
 	}
-
-	/* Mark source buffer as complete */
-	if (dst_frame_status != MFC_REG_DEC_STATUS_DISPLAY_ONLY)
-		__mfc_handle_frame_input(core, ctx, err);
 
 	if (dst_frame_status == MFC_REG_DEC_STATUS_DECODING_EMPTY) {
 		mfc_handle_force_change_status(core->core_ctx[ctx->num]);
@@ -1201,9 +1228,10 @@ move_buf:
 static void __mfc_handle_stream_output(struct mfc_core *core,
 		struct mfc_ctx *ctx, int slice_type, unsigned int strm_size)
 {
+	struct mfc_dev *dev = ctx->dev;
 	struct mfc_enc *enc = ctx->enc_priv;
 	struct mfc_buf *dst_mb;
-	unsigned int index;
+	unsigned int index, idr_flag = 1;
 
 	if (strm_size == 0) {
 		mfc_debug(3, "no encoded dst (reuse)\n");
@@ -1220,12 +1248,20 @@ static void __mfc_handle_stream_output(struct mfc_core *core,
 	mfc_debug(2, "[BUFINFO] ctx[%d] get dst addr: 0x%08llx\n",
 			ctx->num, dst_mb->addr[0][0]);
 
+	if (MFC_FEATURE_SUPPORT(dev, dev->pdata->enc_idr_flag))
+		idr_flag = mfc_core_get_enc_idr_flag();
+
+	mfc_clear_mb_flag(dst_mb);
 	dst_mb->vb.flags &= ~(V4L2_BUF_FLAG_KEYFRAME |
 				V4L2_BUF_FLAG_PFRAME |
 				V4L2_BUF_FLAG_BFRAME);
 	switch (slice_type) {
 	case MFC_REG_E_SLICE_TYPE_I:
 		dst_mb->vb.flags |= V4L2_BUF_FLAG_KEYFRAME;
+		if (!(CODEC_HAS_IDR(ctx) && !idr_flag)) {
+			mfc_set_mb_flag(dst_mb, MFC_FLAG_SYNC_FRAME);
+			mfc_debug(2, "[STREAM] syncframe IDR\n");
+		}
 		break;
 	case MFC_REG_E_SLICE_TYPE_P:
 		dst_mb->vb.flags |= V4L2_BUF_FLAG_PFRAME;
@@ -1518,10 +1554,9 @@ static int __mfc_handle_seq_dec(struct mfc_core *core, struct mfc_ctx *ctx)
 				mfc_debug(2, "[2CORE] multi core bits: %#llx, num inst: %d\n",
 						dev->multi_core_inst_bits, dev->num_inst);
 			ctx->stream_op_mode = mfc_core_get_two_core_mode();
-			mfc_change_op_mode(ctx, ctx->stream_op_mode);
 			set_bit(ctx->num, &dev->multi_core_inst_bits);
-			mfc_ctx_info("[2CORE] This stream need to multi core op_mode(%d)\n",
-					ctx->op_mode);
+			mfc_ctx_info("[2CORE] This stream need to multi core stream_op_mode(%d)\n",
+					ctx->stream_op_mode);
 		}
 	}
 
@@ -1542,12 +1577,6 @@ static int __mfc_handle_seq_dec(struct mfc_core *core, struct mfc_ctx *ctx)
 				dec->remained_size = 0;
 			}
 		}
-	}
-
-	if (src_mb && IS_MULTI_MODE(ctx) && dec->consumed) {
-		mfc_debug(2, "[STREAM][2CORE] src should be moved without consumed\n");
-		dec->consumed = 0;
-		dec->remained_size = 0;
 	}
 
 	dec->frame_display_delay = mfc_core_get_display_delay();
@@ -1983,7 +2012,7 @@ irqreturn_t mfc_core_irq(int irq, void *priv)
 
 	mfc_release_core_intlock(core_ctx);
 
-	if (core_ctx->state != MFCINST_RES_CHANGE_INIT)
+	if (!((core_ctx->state == MFCINST_RES_CHANGE_INIT) && IS_SINGLE_MODE(ctx)))
 		mfc_ctx_ready_clear_bit(core_ctx, &core->work_bits);
 
 	if (ctx->otf_handle) {

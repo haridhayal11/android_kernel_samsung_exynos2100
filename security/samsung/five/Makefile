@@ -19,14 +19,18 @@ ifdef CONFIG_FIVE_GKI_20
            five_tint_dev.o five_tee_interface.o
   five-y += $(addprefix gki/,$(FILES))
 else
-  five-y += five_main.o five_appraise.o five_crypto.o five_audit.o \
-            five_hooks.o task_integrity.o five_state.o five_tee_interface.o
+  five-y +=  five_crypto.o five_audit.o \
+              five_hooks.o task_integrity.o five_state.o
+  ifdef CONFIG_PROCA_S_OS
+    five-y += s_os/five_main.o s_os/five_appraise.o
+  else
+    five-y += five_main.o five_appraise.o five_tee_interface.o
+  endif
 endif
 
 # kunit tests options:
-ifeq ($(CONFIG_KUNIT), y)
+ifeq ($(CONFIG_SEC_KUNIT)$(CONFIG_UML), yy)
   GCOV_PROFILE := y
+  five-$(CONFIG_FIVE) += five_dsms.o
   EXTRA_CFLAGS += -DFIVE_KUNIT_ENABLED
-else
-  EXTRA_CFLAGS += -D__visible_for_testing=static
 endif

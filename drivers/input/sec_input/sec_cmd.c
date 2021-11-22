@@ -15,6 +15,13 @@
 
 struct class *tsp_sec_class;
 
+#if IS_ENABLED(CONFIG_SEC_KUNIT)
+__visible_for_testing struct sec_cmd_data *kunit_sec;
+EXPORT_SYMBOL(kunit_sec);
+#else
+#define __visible_for_testing static
+#endif
+
 #if IS_ENABLED(CONFIG_TOUCHSCREEN_DUAL_FOLDABLE)
 static struct sec_cmd_data *main_sec;
 static struct sec_cmd_data *sub_sec;
@@ -126,7 +133,7 @@ void sec_cmd_set_cmd_result(struct sec_cmd_data *data, char *buff, int len)
 EXPORT_SYMBOL(sec_cmd_set_cmd_result);
 
 #ifndef USE_SEC_CMD_QUEUE
-static ssize_t sec_cmd_store(struct device *dev,
+__visible_for_testing ssize_t sec_cmd_store(struct device *dev,
 		struct device_attribute *devattr, const char *buf, size_t count)
 {
 	struct sec_cmd_data *data = dev_get_drvdata(dev);
@@ -368,7 +375,7 @@ static void sec_cmd_store_function(struct sec_cmd_data *data)
 	}
 }
 
-static ssize_t sec_cmd_store(struct device *dev, struct device_attribute *devattr,
+__visible_for_testing ssize_t sec_cmd_store(struct device *dev, struct device_attribute *devattr,
 			   const char *buf, size_t count)
 {
 	struct sec_cmd_data *data = dev_get_drvdata(dev);
@@ -471,7 +478,7 @@ static ssize_t sec_cmd_store(struct device *dev, struct device_attribute *devatt
 }
 #endif
 
-static ssize_t sec_cmd_show_status(struct device *dev,
+__visible_for_testing ssize_t sec_cmd_show_status(struct device *dev,
 				 struct device_attribute *devattr, char *buf)
 {
 	struct sec_cmd_data *data = dev_get_drvdata(dev);
@@ -539,7 +546,7 @@ static ssize_t sec_cmd_show_status_all(struct device *dev,
 	return snprintf(buf, SEC_CMD_BUF_SIZE, "%s\n", buff);
 }
 
-static ssize_t sec_cmd_show_result(struct device *dev,
+__visible_for_testing ssize_t sec_cmd_show_result(struct device *dev,
 				 struct device_attribute *devattr, char *buf)
 {
 	struct sec_cmd_data *data = dev_get_drvdata(dev);
@@ -714,7 +721,7 @@ int sec_cmd_init(struct sec_cmd_data *data, struct sec_cmd *cmds,
 		pr_err("%s %s: Failed to create class(sec) %ld\n", SECLOG, __func__, PTR_ERR(tsp_sec_class));
 		return PTR_ERR(tsp_sec_class);
 	}
-	data->fac_dev = device_create(tsp_sec_class, NULL, devt, data, dev_name);
+	data->fac_dev = device_create(tsp_sec_class, NULL, devt, data, "%s", dev_name);
 #endif
 
 	if (IS_ERR(data->fac_dev)) {
@@ -729,7 +736,7 @@ int sec_cmd_init(struct sec_cmd_data *data, struct sec_cmd *cmds,
 		pr_err("%s %s: failed to create sysfs group\n", SECLOG, __func__);
 		goto err_sysfs_group;
 	}
-	
+
 #if IS_ENABLED(CONFIG_TOUCHSCREEN_DUAL_FOLDABLE)
 	switch (devt) {
 	case SEC_CLASS_DEVT_TSP1:
@@ -776,7 +783,7 @@ void sec_cmd_exit(struct sec_cmd_data *data, int devt)
 	sysfs_remove_group(&data->fac_dev->kobj, &sec_fac_attr_group);
 	dev_set_drvdata(data->fac_dev, NULL);
 #if IS_ENABLED(CONFIG_DRV_SAMSUNG)
-//	sec_device_destroy(data->fac_dev->devt);
+	sec_device_destroy(data->fac_dev->devt);
 #else
 	device_destroy(tsp_sec_class, devt);
 #endif
@@ -785,9 +792,9 @@ void sec_cmd_exit(struct sec_cmd_data *data, int devt)
 	while (kfifo_len(&data->cmd_queue)) {
 		ret = kfifo_out(&data->cmd_queue, &cmd, sizeof(struct command));
 		if (!ret) {
-			pr_err("%s: %s %s: kfifo_out failed, it seems empty, ret=%d\n", dev_name(data->fac_dev), SECLOG, __func__, ret);
+			pr_err("%s %s: kfifo_out failed, it seems empty, ret=%d\n", SECLOG, __func__, ret);
 		}
-		pr_info("%s: %s %s: remove pending commands: %s", dev_name(data->fac_dev), SECLOG, __func__, cmd.cmd);
+		pr_info("%s %s: remove pending commands: %s", SECLOG, __func__, cmd.cmd);
 	}
 	mutex_unlock(&data->fifo_lock);
 	mutex_destroy(&data->fifo_lock);
@@ -815,6 +822,9 @@ void sec_cmd_send_event_to_user(struct sec_cmd_data *data, char *test, char *res
 	u64 realtime;
 	int curr_time;
 	char *eol = "\0";
+
+	if (!data || !data->fac_dev)
+		return;
 
 	calltime = ktime_get();
 	realtime = ktime_to_ns(calltime);
@@ -1057,6 +1067,24 @@ err:
 	sec_cmd_set_cmd_result_all(sec, buff, SEC_CMD_RESULT_STR_LEN, "NONE");
 }
 EXPORT_SYMBOL(sec_cmd_virtual_tsp_write_cmd_factory_all);
+#endif
+
+#if IS_ENABLED(CONFIG_SEC_KUNIT) && !IS_ENABLED(CONFIG_TOUCHSCREEN_DUAL_FOLDABLE)
+kunit_notifier_chain_init(sec_cmd_test_module);
+
+static int __init sec_cmd_m_init(void)
+{
+	kunit_notifier_chain_register(sec_cmd_test_module);
+	return 0;
+}
+
+static void __exit sec_cmd_m_exit(void)
+{
+	kunit_notifier_chain_unregister(sec_cmd_test_module);
+}
+
+module_init(sec_cmd_m_init);
+module_exit(sec_cmd_m_exit);
 #endif
 
 MODULE_DESCRIPTION("Samsung input command");

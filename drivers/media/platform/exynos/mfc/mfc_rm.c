@@ -356,6 +356,17 @@ static struct mfc_core *__mfc_rm_switch_to_single_mode(struct mfc_ctx *ctx, int 
 	if (need_lock)
 		mutex_lock(&ctx->op_mode_mutex);
 
+	if (IS_SWITCH_SINGLE_MODE(ctx) || IS_SINGLE_MODE(ctx)) {
+		mfc_core_release_hwlock_dev(master);
+		mfc_core_release_hwlock_dev(slave);
+		master = mfc_get_master_core(ctx->dev, ctx);
+		if (!master)
+			mfc_ctx_err("[RM] There is no master core\n");
+		if (need_lock)
+			mutex_unlock(&ctx->op_mode_mutex);
+		return master;
+	}
+
 	mfc_change_op_mode(ctx, MFC_OP_SWITCHING);
 
 	/* need to cleanup src buffer */
@@ -426,6 +437,9 @@ static struct mfc_core *__mfc_rm_switch_to_single_mode(struct mfc_ctx *ctx, int 
 			mfc_change_op_mode(ctx, MFC_OP_SWITCH_BUT_MODE2);
 		}
 	}
+
+	/* for check whether command is sent during switch to single */
+	ctx->cmd_counter = 0;
 
 	if (need_lock)
 		mutex_unlock(&ctx->op_mode_mutex);
@@ -837,14 +851,59 @@ static void __mfc_rm_move_buf_request_work(struct mfc_ctx *ctx, enum mfc_request
 	return;
 }
 
+static void __mfc_rm_rearrange_cpb(struct mfc_core *master, struct mfc_core_ctx *core_ctx)
+{
+	struct mfc_ctx *ctx = core_ctx->ctx;
+	struct mfc_dev *dev = ctx->dev;
+	struct mfc_buf *src_mb;
+	unsigned long flags;
+
+	mfc_debug(2, "[RM][2CORE] master core-%d src count %d\n",
+			master->id, core_ctx->src_buf_queue.count);
+	MFC_TRACE_RM("[c:%d] master core-%d src count %d\n", ctx->num,
+			master->id, core_ctx->src_buf_queue.count);
+
+	mfc_move_buf_all(ctx, &ctx->src_buf_ready_queue,
+			&core_ctx->src_buf_queue, MFC_QUEUE_ADD_TOP);
+
+	mfc_debug(2, "[RM][2CORE] ready %d master %d\n",
+			ctx->src_buf_ready_queue.count,
+			master->core_ctx[ctx->num]->src_buf_queue.count);
+	MFC_TRACE_RM("[c:%d] ready %d master %d\n", ctx->num,
+			ctx->src_buf_ready_queue.count,
+			master->core_ctx[ctx->num]->src_buf_queue.count);
+
+	ctx->serial_src_index = 0;
+	ctx->curr_src_index = -1;
+
+	spin_lock_irqsave(&ctx->buf_queue_lock, flags);
+	if (!list_empty(&ctx->src_buf_ready_queue.head)) {
+		list_for_each_entry(src_mb, &ctx->src_buf_ready_queue.head, list) {
+			if (src_mb) {
+				mfc_debug(2, "[RM][2CORE] src index(%d) changed to %d\n",
+						src_mb->src_index, ctx->serial_src_index);
+				MFC_TRACE_RM("[c:%d] src index(%d) changed to %d\n",
+						ctx->num, src_mb->src_index,
+						ctx->serial_src_index);
+				src_mb->src_index = ctx->serial_src_index++;
+				src_mb->used = 0;
+			}
+		}
+	} else {
+		mfc_debug(2, "[RM][2CORE] there is no src in ready(%d)\n",
+				ctx->src_buf_ready_queue.count);
+		MFC_TRACE_RM("[c:%d] there is no src in ready(%d)\n", ctx->num,
+				ctx->src_buf_ready_queue.count);
+	}
+	spin_unlock_irqrestore(&ctx->buf_queue_lock, flags);
+}
+
 static int __mfc_rm_switch_to_multi_mode(struct mfc_ctx *ctx)
 {
 	struct mfc_dev *dev = ctx->dev;
 	struct mfc_core *master;
 	struct mfc_core *slave;
 	struct mfc_core_ctx *core_ctx;
-	struct mfc_buf *src_mb;
-	unsigned long flags;
 	int ret;
 
 	master = mfc_get_master_core(ctx->dev, ctx);
@@ -872,6 +931,14 @@ static int __mfc_rm_switch_to_multi_mode(struct mfc_ctx *ctx)
 		return -EINVAL;
 	}
 
+	if (!ctx->cmd_counter) {
+		mfc_ctx_err("It didn't worked on switch to single\n");
+		mfc_core_release_hwlock_dev(master);
+		mfc_core_release_hwlock_dev(slave);
+		__mfc_rm_request_butler(dev, ctx);
+		return -EINVAL;
+	}
+
 	mutex_lock(&ctx->op_mode_mutex);
 
 	if (ctx->op_mode == MFC_OP_SWITCH_BUT_MODE2) {
@@ -881,45 +948,7 @@ static int __mfc_rm_switch_to_multi_mode(struct mfc_ctx *ctx)
 
 		/* re-arrangement cpb for mode2 */
 		core_ctx = master->core_ctx[ctx->num];
-		mfc_debug(2, "[RM][2CORE] master core-%d src count %d\n",
-				master->id, core_ctx->src_buf_queue.count);
-		MFC_TRACE_RM("[c:%d] master core-%d src count %d\n", ctx->num,
-				master->id, core_ctx->src_buf_queue.count);
-
-		mfc_move_buf_all(ctx, &ctx->src_buf_ready_queue,
-				&core_ctx->src_buf_queue, MFC_QUEUE_ADD_TOP);
-
-		mfc_debug(2, "[RM][2CORE] ready %d master %d slave %d\n",
-				ctx->src_buf_ready_queue.count,
-				master->core_ctx[ctx->num]->src_buf_queue.count,
-				slave->core_ctx[ctx->num]->src_buf_queue.count);
-		MFC_TRACE_RM("[c:%d] ready %d master %d slave %d\n", ctx->num,
-				ctx->src_buf_ready_queue.count,
-				master->core_ctx[ctx->num]->src_buf_queue.count,
-				slave->core_ctx[ctx->num]->src_buf_queue.count);
-
-		ctx->serial_src_index = 0;
-		ctx->curr_src_index = -1;
-
-		spin_lock_irqsave(&ctx->buf_queue_lock, flags);
-		if (!list_empty(&ctx->src_buf_ready_queue.head)) {
-			list_for_each_entry(src_mb, &ctx->src_buf_ready_queue.head, list) {
-				if (src_mb) {
-					mfc_debug(2, "[RM][2CORE] src index(%d) changed to %d\n",
-							src_mb->src_index, ctx->serial_src_index);
-					MFC_TRACE_RM("[c:%d] src index(%d) changed to %d\n",
-							ctx->num, src_mb->src_index,
-							ctx->serial_src_index);
-					src_mb->src_index = ctx->serial_src_index++;
-				}
-			}
-		} else {
-			mfc_debug(2, "[RM][2CORE] there is no src in ready(%d)\n",
-					ctx->src_buf_ready_queue.count);
-			MFC_TRACE_RM("[c:%d] there is no src in ready(%d)\n", ctx->num,
-					ctx->src_buf_ready_queue.count);
-		}
-		spin_unlock_irqrestore(&ctx->buf_queue_lock, flags);
+		__mfc_rm_rearrange_cpb(master, core_ctx);
 	}
 
 	/* Master core number of multi core mode should MFC-0 */
@@ -940,6 +969,30 @@ static int __mfc_rm_switch_to_multi_mode(struct mfc_ctx *ctx)
 	__mfc_rm_move_buf_ready_set_bit(ctx);
 
 	return 0;
+}
+
+static void __mfc_rm_check_instance(struct mfc_ctx *ctx)
+{
+	struct mfc_dev *dev = ctx->dev;
+	int ret;
+
+	if (dev->num_inst == 1 && IS_SWITCH_SINGLE_MODE(ctx)) {
+		/*
+		 * If there is only one instance and it is still switch to single mode,
+		 * switch to multi core mode again.
+		 */
+		ret = __mfc_rm_switch_to_multi_mode(ctx);
+		if (ret)
+			mfc_ctx_info("[RM] Keep switch to single mode\n");
+	} else if (dev->num_inst > 1) {
+		/*
+		 * If there are more than one instance and it is still multi core mode,
+		 * switch to single mode.
+		 */
+		ret = __mfc_rm_check_multi_core_mode(dev, ctx->op_core_type);
+		if (ret < 0)
+			mfc_ctx_err("[RM] failed multi core instance switching\n");
+	}
 }
 
 void mfc_rm_migration_worker(struct work_struct *work)
@@ -1432,7 +1485,7 @@ static void __mfc_rm_inst_dec_src_stop(struct mfc_dev *dev, struct mfc_ctx *ctx)
 	mfc_get_corelock_ctx(ctx);
 
 	if (IS_TWO_MODE2(ctx)) {
-		core = __mfc_rm_switch_to_single_mode(ctx, 1, ctx->op_core_type);
+		core = __mfc_rm_switch_to_single_mode(ctx, 1, MFC_OP_CORE_FIXED_1);
 		if (!core) {
 			mfc_ctx_err("[RM][2CORE] failed to switch to single for stop\n");
 			goto err_src_stop;
@@ -1519,15 +1572,11 @@ void mfc_rm_instance_enc_stop(struct mfc_dev *dev, struct mfc_ctx *ctx,
 
 int mfc_rm_instance_setup(struct mfc_dev *dev, struct mfc_ctx *ctx)
 {
-	struct mfc_core *core;
-	struct mfc_core_ctx *core_ctx, *master_core_ctx;
+	struct mfc_core *maincore, *core;
+	struct mfc_core_ctx *core_ctx, *maincore_ctx;
+	struct mfc_buf_queue *from_queue;
 	struct mfc_buf *src_mb = NULL;
 	int ret = 0;
-
-	if (!IS_MULTI_MODE(ctx)) {
-		mfc_ctx_info("[RM] do not need to slave setup\n");
-		return 0;
-	}
 
 	if (ctx->op_core_num[MFC_CORE_SLAVE] != MFC_CORE_INVALID) {
 		mfc_ctx_info("[RM] slave core already setup\n");
@@ -1536,12 +1585,12 @@ int mfc_rm_instance_setup(struct mfc_dev *dev, struct mfc_ctx *ctx)
 
 	mfc_rm_set_core_num(ctx, ctx->op_core_num[MFC_CORE_MASTER]);
 
-	core = mfc_get_master_core(dev, ctx);
-	if (!core) {
+	maincore = mfc_get_master_core(dev, ctx);
+	if (!maincore) {
 		mfc_ctx_err("[RM] There is no master core\n");
 		return -EINVAL;
 	}
-	master_core_ctx = core->core_ctx[ctx->num];
+	maincore_ctx = maincore->core_ctx[ctx->num];
 
 	core = mfc_get_slave_core(dev, ctx);
 	if (!core) {
@@ -1562,9 +1611,30 @@ int mfc_rm_instance_setup(struct mfc_dev *dev, struct mfc_ctx *ctx)
 		goto fail_open;
 	}
 
+	from_queue = &maincore_ctx->src_buf_queue;
+
+	src_mb = mfc_get_buf(ctx, from_queue, MFC_BUF_NO_TOUCH_USED);
+	if (!src_mb) {
+		mfc_ctx_err("[RM] there is no header buffers\n");
+		ret = -EAGAIN;
+		goto fail_open;
+	}
+
+	/* When DRC case, it needs to rearrange src buffer for mode1,2 */
+	if (ctx->wait_state) {
+		if (ctx->stream_op_mode == MFC_OP_TWO_MODE2) {
+			__mfc_rm_rearrange_cpb(maincore, maincore_ctx);
+			from_queue = &ctx->src_buf_ready_queue;
+		}
+		if (ctx->stream_op_mode == MFC_OP_TWO_MODE1) {
+			mfc_move_buf_all(ctx, &ctx->src_buf_ready_queue,
+					&maincore_ctx->src_buf_queue, MFC_QUEUE_ADD_TOP);
+			from_queue = &ctx->src_buf_ready_queue;
+		}
+	}
+
 	/* Move the header buffer to slave core */
-	src_mb = mfc_get_move_buf(ctx, &core_ctx->src_buf_queue,
-			&master_core_ctx->src_buf_queue,
+	src_mb = mfc_get_move_buf(ctx, &core_ctx->src_buf_queue, from_queue,
 			MFC_BUF_NO_TOUCH_USED, MFC_QUEUE_ADD_TOP);
 	if (!src_mb) {
 		mfc_ctx_err("[RM] there is no header buffers\n");
@@ -1573,6 +1643,12 @@ int mfc_rm_instance_setup(struct mfc_dev *dev, struct mfc_ctx *ctx)
 	} else {
 		MFC_TRACE_RM("[c:%d] SETUP: Move src[%d] to queue\n",
 				ctx->num, src_mb->src_index);
+	}
+
+	if (ctx->dec_priv->consumed) {
+		mfc_debug(2, "[STREAM][2CORE] src should be without consumed\n");
+		ctx->dec_priv->consumed = 0;
+		ctx->dec_priv->remained_size = 0;
 	}
 
 	if (mfc_ctx_ready_set_bit(core_ctx, &core->work_bits))
@@ -1611,6 +1687,8 @@ int mfc_rm_instance_setup(struct mfc_dev *dev, struct mfc_ctx *ctx)
 		mfc_debug(2, "[RM] slave setup inst_no: %d\n", ctx->slave_inst_no);
 	}
 
+	mfc_change_op_mode(ctx, ctx->stream_op_mode);
+
 	return ret;
 
 fail_open:
@@ -1618,9 +1696,48 @@ fail_open:
 		mfc_ctx_err("[RMLB] Failed to deinit\n");
 fail_init:
 	ctx->op_core_num[MFC_CORE_SLAVE] = MFC_CORE_INVALID;
-	mfc_change_op_mode(ctx, MFC_OP_SINGLE);
 
 	return ret;
+}
+
+static void __mfc_rm_handle_drc_multi_mode(struct mfc_ctx *ctx)
+{
+	struct mfc_core *core;
+	struct mfc_core *subcore;
+	int ret;
+
+	core = __mfc_rm_switch_to_single_mode(ctx, 1, ctx->op_core_type);
+	if (!core)
+		return;
+
+	mutex_lock(&ctx->op_mode_mutex);
+
+	if (IS_SINGLE_MODE(ctx))
+		goto out;
+
+	mfc_change_state(core->core_ctx[ctx->num], MFCINST_RES_CHANGE_INIT);
+	mfc_debug(2, "[RM][2CORE][DRC] switch single for DRC op_mode: %d, state: %d\n",
+			ctx->op_mode, core->core_ctx[ctx->num]->state);
+
+	subcore = mfc_get_slave_core(ctx->dev, ctx);
+	if (!subcore)
+		goto out;
+
+	ret = subcore->core_ops->instance_deinit(subcore, ctx);
+	if (ret)
+		mfc_core_err("[RM][2CORE][DRC] Failed to deinit\n");
+
+	ctx->slave_inst_no = MFC_NO_INSTANCE_SET;
+	ctx->op_core_num[MFC_CORE_SLAVE] = MFC_CORE_INVALID;
+	ctx->op_core_type = MFC_OP_CORE_ALL;
+	ctx->stream_op_mode = MFC_OP_SINGLE;
+
+	clear_bit(ctx->num, &ctx->dev->multi_core_inst_bits);
+	mfc_change_op_mode(ctx, MFC_OP_SINGLE);
+	mfc_debug(2, "[RM][2CORE][DRC] DRC update op_mode: %d\n", ctx->op_mode);
+
+out:
+	mutex_unlock(&ctx->op_mode_mutex);
 }
 
 void mfc_rm_request_work(struct mfc_dev *dev, enum mfc_request_work work,
@@ -1640,6 +1757,9 @@ void mfc_rm_request_work(struct mfc_dev *dev, enum mfc_request_work work,
 		mfc_dev_err("[RM] ctx is needed (request work: %#x)\n", work);
 		return;
 	}
+
+	if (IS_MULTI_MODE(ctx) && mfc_rm_query_state(ctx, EQUAL_OR, MFCINST_RES_CHANGE_INIT))
+		__mfc_rm_handle_drc_multi_mode(ctx);
 
 	if (IS_TWO_MODE2(ctx)) {
 		__mfc_rm_move_buf_request_work(ctx, work);
@@ -1726,8 +1846,10 @@ void mfc_rm_qos_control(struct mfc_ctx *ctx, enum mfc_qos_control qos_control)
 			mfc_core_qos_on(core, ctx);
 		}
 
-		if (IS_MULTI_CORE_DEVICE(dev))
+		if (IS_MULTI_CORE_DEVICE(dev)) {
 			mfc_rm_load_balancing(ctx, MFC_RM_LOAD_ADD);
+			__mfc_rm_check_instance(ctx);
+		}
 
 		break;
 	case MFC_QOS_OFF:
@@ -1871,4 +1993,31 @@ err_query_state:
 	mfc_release_corelock_ctx(ctx);
 
 	return ret;
+}
+
+void mfc_rm_update_real_time(struct mfc_ctx *ctx)
+{
+	if (ctx->operating_framerate > 0) {
+		if (ctx->prio == 0)
+			ctx->rt = MFC_RT;
+		else if (ctx->prio >= 1)
+			ctx->rt = MFC_RT_CON;
+		else
+			ctx->rt = MFC_RT_LOW;
+	} else {
+		if ((ctx->prio == 0) && (ctx->type == MFCINST_ENCODER)) {
+			if (ctx->enc_priv->params.rc_framerate)
+				ctx->rt = MFC_RT;
+			else
+				ctx->rt = MFC_NON_RT;
+		} else if (ctx->prio >= 1) {
+			ctx->rt = MFC_NON_RT;
+		} else {
+			ctx->rt = MFC_RT_UNDEFINED;
+		}
+	}
+
+	mfc_debug(2, "[PRIO] update real time: %d, operating frame rate: %d, prio: %d\n",
+			ctx->rt, ctx->operating_framerate, ctx->prio);
+
 }

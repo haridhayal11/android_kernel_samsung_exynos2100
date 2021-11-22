@@ -238,7 +238,7 @@ EXPORT_SYMBOL(sec_set_reboot_magic);
 static void sec_power_off(void)
 {
 	u32 poweroff_try = 0;
-	union power_supply_propval ac_val, usb_val, wpc_val, water_val;
+	union power_supply_propval ac_val = {0, }, usb_val = {0, }, wpc_val = {0, }, water_val = {0, };
 	u32 reboot_charging = 0;
 	u32 npu_retry = 0;
 	u32 val = 0;

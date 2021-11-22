@@ -2175,6 +2175,12 @@ void is_hw_configure_llc(bool on, struct is_device_ischain *device, ulong *llc_s
 	struct is_dvfs_scenario_param param;
 	int votf, mcfp;
 
+	if (test_bit(LLC_DISABLE, llc_state)) {
+		cam_llc_enable(on);
+		minfo("[LLC] disable(%d)\n", device, on);
+		return;
+	}
+
 	is_hw_dvfs_init_face_mask(device, &param);
 	is_hw_dvfs_get_scenario_param(device, 0, &param);
 
@@ -2233,11 +2239,7 @@ void is_hw_configure_llc(bool on, struct is_device_ischain *device, ulong *llc_s
 		info("[LLC] release");
 	}
 
-	/* Front VT calls below API to prevent LLC enable by governor */
-	if (param.sensor == IS_DVFS_SENSOR_FRONT_VT)
-		llc_off_disable(on);
-	else
-		llc_enable(on);
+	cam_llc_enable(on);
 #endif
 }
 
@@ -2508,6 +2510,22 @@ void * is_get_dma_blk(int type)
 	}
 
 	return (void *)mblk;
+}
+
+int is_get_dma_id(u32 vid)
+{
+	u32 dma_id;
+
+	switch (vid) {
+	case IS_VIDEO_LME0C_NUM:
+		dma_id = ID_DBUF_LMEC;
+		break;
+	default:
+		dma_id = -EINVAL;
+		break;
+	}
+
+	return dma_id;
 }
 
 int is_hw_check_changed_chain_id(struct is_hardware *hardware, u32 hw_id, u32 instance)

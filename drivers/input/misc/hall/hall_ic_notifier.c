@@ -4,9 +4,8 @@
 
 #if IS_ENABLED(CONFIG_HALL_NOTIFIER)
 #include <linux/hall/hall_ic_notifier.h>
-#endif
+#include <linux/module.h>
 
-#if IS_ENABLED(CONFIG_HALL_NOTIFIER)
 static struct hall_notifier_context hall_notifier;
 static struct blocking_notifier_head hall_nb_head = BLOCKING_NOTIFIER_INIT(hall_nb_head);
 
@@ -22,7 +21,7 @@ int hall_notifier_register(struct notifier_block *n)
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(hall_notifier_register);
+EXPORT_SYMBOL(hall_notifier_register);
 
 int hall_notifier_unregister(struct notifier_block *nb)
 {
@@ -36,7 +35,7 @@ int hall_notifier_unregister(struct notifier_block *nb)
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(hall_notifier_unregister);
+EXPORT_SYMBOL(hall_notifier_unregister);
 
 int hall_notifier_notify(const char *hall_name, int hall_value)
 {
@@ -61,5 +60,9 @@ int hall_notifier_notify(const char *hall_name, int hall_value)
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(hall_notifier_notify);
+EXPORT_SYMBOL(hall_notifier_notify);
+
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Hall IC notifier");
+
 #endif /* if IS_ENABLED(CONFIG_HALL_NOTIFIER) */

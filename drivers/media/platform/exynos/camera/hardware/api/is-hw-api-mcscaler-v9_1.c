@@ -1121,6 +1121,8 @@ void is_scaler_set_poly_scaler_coef(void __iomem *base_addr, u32 output_id,
 			h_coef = (struct scaler_filter_h_coef_cfg *)&h_coef_8tap[h_coef_idx];
 			v_coef = (struct scaler_filter_v_coef_cfg *)&v_coef_4tap[v_coef_idx];
 		}
+		is_scaler_set_poly_scaler_h_coef(base_addr, output_id, h_coef);
+		is_scaler_set_poly_scaler_v_coef(base_addr, output_id, v_coef);
 	} else {
 		err_hw("sc_coef is NULL");
 	}
@@ -1133,8 +1135,6 @@ void is_scaler_set_poly_scaler_coef(void __iomem *base_addr, u32 output_id,
 
 	is_scaler_set_h_init_phase_offset(base_addr, output_id, h_phase_offset);
 	is_scaler_set_v_init_phase_offset(base_addr, output_id, v_phase_offset);
-	is_scaler_set_poly_scaler_h_coef(base_addr, output_id, h_coef);
-	is_scaler_set_poly_scaler_v_coef(base_addr, output_id, v_coef);
 }
 
 void is_scaler_set_poly_round_mode(void __iomem *base_addr, u32 output_id, u32 mode)
