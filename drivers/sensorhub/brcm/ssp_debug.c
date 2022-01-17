@@ -514,6 +514,11 @@ static void print_sensordata(struct ssp_data *data, unsigned int uSensor)
 			data->buf[uSensor].light_seamless_event,
 			get_msdelay(data->adDelayBuf[uSensor]));
                 break;
+	case AUTO_ROTATION_SENSOR:
+		ssp_dbg("[SSP] %u : %d (%ums)\n", uSensor,
+			data->buf[uSensor].auto_rotation_event,
+			get_msdelay(data->adDelayBuf[uSensor]));
+		break;
 	case FLIP_COVER_DETECTOR:
 		ssp_dbg("[SSP] %u : %d, %d, %d, %d, %d, %d %d (%ums)\n", uSensor,
 			data->buf[uSensor].value, data->buf[uSensor].magX,

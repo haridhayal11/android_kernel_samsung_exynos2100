@@ -985,7 +985,7 @@ static int dhd_pm_callback(struct notifier_block *nfb, unsigned long action, voi
 	BCM_REFERENCE(suspend);
 
 	GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
-	dhdinfo = container_of(nfb, struct dhd_info, pm_notifier);
+	dhdinfo = container_of(nfb, dhd_info_t, pm_notifier);
 	GCC_DIAGNOSTIC_POP();
 
 	if (!dhdinfo->pub.up) {
@@ -4907,11 +4907,6 @@ dhd_dbg_periodic_cntrs_start(dhd_pub_t * dhdp)
 	dhd_info_t *dhd = NULL;
 	uint32 current_time = wl_cfgdbg_current_timestamp();
 
-	if (FW_SUPPORTED(dhdp, ecounters)) {
-		/* Not required DHD periodic conters */
-		return;
-	}
-
 	if (dhdp && dhdp->info) {
 		dhd = (dhd_info_t *)dhdp->info;
 	} else {
@@ -4919,6 +4914,11 @@ dhd_dbg_periodic_cntrs_start(dhd_pub_t * dhdp)
 	}
 
 	if (dhdp->dongle_reset) {
+		return;
+	}
+
+	if (FW_SUPPORTED(dhdp, ecounters)) {
+		/* Not required DHD periodic conters */
 		return;
 	}
 
@@ -6870,6 +6870,8 @@ dhd_open(struct net_device *net)
 			dhd->wl_accel_force_reg_on = TRUE;
 		}
 		if (!dhd->wl_accel_force_reg_on && !DHD_BUS_BUSY_CHECK_IDLE(&dhd->pub)) {
+			DHD_ERROR(("%s: clear dhd_bus_busy_state: 0x%x\n",
+					__FUNCTION__, dhd->pub.dhd_bus_busy_state));
 			dhd->pub.dhd_bus_busy_state = 0;
 			dhd->wl_accel_force_reg_on = TRUE;
 		}
@@ -16417,6 +16419,10 @@ static void dhd_hang_process(struct work_struct *work_data)
 	dhd = container_of(work_data, dhd_info_t, dhd_hang_process_work);
 	GCC_DIAGNOSTIC_POP();
 
+	if (!dhd) {
+		return;
+	}
+
 	dev = dhd->iflist[0]->net;
 
 	if (dev) {
@@ -16445,7 +16451,7 @@ static void dhd_hang_process(struct work_struct *work_data)
 #endif /* HANG_DELAY_BEFORE_DEV_CLOSE */
 
 	rtnl_lock();
-	for (i = 0; i < DHD_MAX_IFS && dhd; i++) {
+	for (i = 0; i < DHD_MAX_IFS; i++) {
 		ndev = dhd->iflist[i] ? dhd->iflist[i]->net : NULL;
 		if (ndev && (ndev->flags & IFF_UP)) {
 			DHD_ERROR(("ndev->name : %s dev close\n",

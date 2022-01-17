@@ -32,12 +32,7 @@ DHDCFLAGS += -Wall -Werror -Wstrict-prototypes -Dlinux -DLINUX -DBCMDRIVER      
         -DSEC_ENHANCEMENT
 
 DHDCFLAGS += -DOEM_ANDROID
-ifeq ($(SEC_BUILD_OPTION_ALT_WIFI), true)
-export CONFIG_BCM4389=m
-export CONFIG_BCM4375=n
-endif
-$(warning DHDMAKEFILE CONFIG_BCM4389 = $(CONFIG_BCM4389))
-$(warning DHDMAKEFILE CONFIG_BCM4375 = $(CONFIG_BCM4375))
+
 #####################
 # Bus Interface Type
 #####################
@@ -140,6 +135,9 @@ endif
 	DHDCFLAGS += -DDHD_FLOW_RING_STATUS_TRACE
 	# Enable internal Rx packet pool
 	DHDCFLAGS += -DRX_PKT_POOL
+ifeq ($(filter y,$(CONFIG_ARCH_LAHAINA) $(CONFIG_ARCH_WAIPIO)),y)
+	DHDCFLAGS += -DUSE_ISB_IN_FLR
+endif
 endif
 
 
@@ -806,7 +804,6 @@ ifeq ($(BUS_IFACE_PCIE),y)
   DHDCFLAGS += -DDHDTCPACK_SUPPRESS
 endif
  DHDCFLAGS += -DFLOW_RING_PREALLOC
- DHDCFLAGS += -DDHD_PERIODIC_CNTRS
 # NAN-Ranging BW private command
  DHDCFLAGS += -DSUPPORT_NAN_RANGING_TEST_BW
 

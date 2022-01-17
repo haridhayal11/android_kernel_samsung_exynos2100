@@ -518,12 +518,15 @@ static int rx_multi_pdp(struct sk_buff *skb)
 	}
 #endif
 
+	napi = skbpriv(skb)->napi;
+
 #ifdef CONFIG_MCPS_MODULE
-	if (!mcps_try_gro(skb))
-		return len;
+	if (napi) {
+		if (!mcps_try_gro(skb))
+			return len;
+	}
 #endif
 
-	napi = skbpriv(skb)->napi;
 	if (!napi || !check_gro_support(skb)) {
 		ret = netif_receive_skb(skb);
 		if (ret != NET_RX_SUCCESS)

@@ -103,11 +103,11 @@ static char *mfc_vout_control_mode_str[] = {
 	"Set Vout 11V",
 	"Set Vout 12V",
 	"Set Vout 12.5V",
+	"Set Vout 4.5V Step",	
 	"Set Vout 5V Step",
 	"Set Vout 5.5V Step",
 	"Set Vout 9V Step",
 	"Set Vout 10V Step",
-	"Set Vout 4.5V Step",
 };
 
 static char *rx_vout_str[] = {
@@ -1046,7 +1046,7 @@ static void mfc_fan_control(struct mfc_charger_data *charger, bool on)
 
 static void mfc_set_vrect_adjust(struct mfc_charger_data *charger, u8 vrect_headroom)
 {
-	if (charger->vout_mode != WIRELESS_VOUT_4_5V_STEP)
+	if (charger->vout_mode != charger->pdata->wpc_vout_ctrl_full)
 		mfc_reg_write(charger->client, MFC_VRECT_ADJ_REG, vrect_headroom);
 }
 
@@ -1056,14 +1056,16 @@ static void mfc_set_vout_ctrl_full(struct mfc_charger_data *charger)
 		(charger->tx_id == TX_ID_DREAM_STAND) || (charger->tx_id == TX_ID_DREAM_DOWN))
 		return;
 
-	mfc_set_vrect_adjust(charger, MFC_HEADROOM_7);
-	charger->vout_mode = WIRELESS_VOUT_4_5V_STEP;
+	if (charger->pdata->wpc_headroom_ctrl_full)
+		mfc_set_vrect_adjust(charger, MFC_HEADROOM_7);
+	charger->vout_mode = charger->pdata->wpc_vout_ctrl_full;
 	cancel_delayed_work(&charger->wpc_vout_mode_work);
 	__pm_stay_awake(charger->wpc_vout_mode_ws);
 	queue_delayed_work(charger->wqueue,
 		&charger->wpc_vout_mode_work, msecs_to_jiffies(250));
-	pr_info("%s: 2nd wireless charging done! vout set 4.5V & headroom offset -600mV!\n",
-		__func__);
+	pr_info("%s: 2nd wireless charging done! vout set %s & headroom offset %dmV!\n",
+		__func__, mfc_vout_control_mode_str[charger->vout_mode],
+		charger->pdata->wpc_headroom_ctrl_full ? -600 : 0);
 }
 
 static void mfc_set_cep_timeout(struct mfc_charger_data *charger, u32 timeout)
@@ -2731,7 +2733,7 @@ static void mfc_wpc_fw_booting_work(struct work_struct *work)
 
 static int mfc_get_target_vout(struct mfc_charger_data *charger)
 {
-	return charger->pdata->mis_align_taget_vout; // falling uvlo
+	return charger->pdata->mis_align_target_vout; // falling uvlo
 }
 
 static int mfc_unsafe_vout_check(struct mfc_charger_data *charger)
@@ -5634,17 +5636,21 @@ static int mfc_chg_parse_dt(struct device *dev,
 		if (pdata->wpc_vout_ctrl_lcd_on)
 			pr_info("%s: flicker w/a\n", __func__);
 
-		pdata->wpc_vout_ctrl_full = of_property_read_bool(np, "battery,wpc_vout_ctrl_full");
+		ret = of_property_read_u32(np, "battery,wpc_vout_ctrl_full",
+			&pdata->wpc_vout_ctrl_full);
+		if (ret)
+			pr_err("%s: wpc_vout_ctrl_full is Empty\n", __func__);
+
 		if (pdata->wpc_vout_ctrl_full)
-			pr_info("%s: vout after full w/a\n", __func__);
+			pdata->wpc_headroom_ctrl_full = of_property_read_bool(np, "battery,wpc_headroom_ctrl_full");
 
 		pdata->mis_align_guide = of_property_read_bool(np, "battery,mis_align_guide");
 		if (pdata->mis_align_guide) {
-			ret = of_property_read_u32(np, "battery,mis_align_taget_vout",
-							&pdata->mis_align_taget_vout);
+			ret = of_property_read_u32(np, "battery,mis_align_target_vout",
+							&pdata->mis_align_target_vout);
 			if (ret)
-				pdata->mis_align_taget_vout = 5000;
-			pr_info("%s: mis_align_guide, vout:%d\n", __func__, pdata->mis_align_taget_vout);
+				pdata->mis_align_target_vout = 5000;
+			pr_info("%s: mis_align_guide, vout:%d\n", __func__, pdata->mis_align_target_vout);
 		}
 
 		mfc_chg_parse_fod_data(np, pdata);

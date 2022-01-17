@@ -2381,19 +2381,24 @@ static bool am_app_launch = false;
 
 #define MEM_BOOST_MAX_TIME (5 * HZ) /* 5 sec */
 
-#ifdef CONFIG_SYSFS
-static ssize_t mem_boost_mode_show(struct kobject *kobj,
-				    struct kobj_attribute *attr, char *buf)
-{
-	if (time_after(jiffies, last_mode_change + MEM_BOOST_MAX_TIME))
-		mem_boost_mode = NO_BOOST;
-	return sprintf(buf, "%d\n", mem_boost_mode);
-}
-
 #if CONFIG_KSWAPD_CPU
 static int set_kswapd_cpu_affinity_as_config(void);
 static int set_kswapd_cpu_affinity_as_boost(void);
 #endif
+
+#ifdef CONFIG_SYSFS
+static ssize_t mem_boost_mode_show(struct kobject *kobj,
+				    struct kobj_attribute *attr, char *buf)
+{
+	if (mem_boost_mode != NO_BOOST &&
+		time_after(jiffies, last_mode_change + MEM_BOOST_MAX_TIME)) {
+		mem_boost_mode = NO_BOOST;
+#ifdef CONFIG_KSWAPD_CPU
+		set_kswapd_cpu_affinity_as_config();
+#endif
+	}
+	return sprintf(buf, "%d\n", mem_boost_mode);
+}
 
 static ssize_t mem_boost_mode_store(struct kobject *kobj,
 				     struct kobj_attribute *attr,
@@ -2463,18 +2468,14 @@ inline bool need_memory_boosting(struct pglist_data *pgdat)
 {
 	bool ret;
 
-	if (mem_boost_mode == NO_BOOST)
-		goto skip_boost_check;
-	if (time_after(jiffies, last_mode_change + MEM_BOOST_MAX_TIME))
-		mem_boost_mode = NO_BOOST;
-	else if (is_too_low_file(pgdat))
+	if (mem_boost_mode != NO_BOOST && 
+		(time_after(jiffies, last_mode_change + MEM_BOOST_MAX_TIME) ||
+		is_too_low_file(pgdat))) {
 		mem_boost_mode = NO_BOOST;
 #if CONFIG_KSWAPD_CPU
-	if (mem_boost_mode == NO_BOOST)
 		set_kswapd_cpu_affinity_as_config();
 #endif
-
-skip_boost_check:
+	}
 
 	switch (mem_boost_mode) {
 		case BOOST_KILL:

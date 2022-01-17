@@ -1819,7 +1819,7 @@
 				battery,wireless20_max_power_list = <0x02 0x03 0x03>;
 				battery,oc_fod1 = <0x44c>;
 				battery,tx_gear_min_op_freq_delay = <0xfa0>;
-				battery,wpc_vout_ctrl_full;
+				battery,wpc_vout_ctrl_full = <0x0d>;
 				phandle = <0xad>;
 
 				fod_list {
@@ -10155,20 +10155,20 @@
 				kallsyms {
 					_stext = <0xffffffc0 0x10081000>;
 					_etext = <0xffffffc0 0x10f30000>;
-					kallsyms_offsets = <0xffffffc0 0x1131fbd0>;
-					kallsyms_relative_base = <0xffffffc0 0x1139fd18>;
-					kallsyms_num_syms = <0xffffffc0 0x1139fd20>;
-					kallsyms_names = <0xffffffc0 0x1139fd28>;
-					kallsyms_markers = <0xffffffc0 0x1165ba70>;
-					kallsyms_token_table = <0xffffffc0 0x1165c278>;
-					kallsyms_token_index = <0xffffffc0 0x1165c5d0>;
+					kallsyms_offsets = <0xffffffc0 0x1131e870>;
+					kallsyms_relative_base = <0xffffffc0 0x1139e998>;
+					kallsyms_num_syms = <0xffffffc0 0x1139e9a0>;
+					kallsyms_names = <0xffffffc0 0x1139e9a8>;
+					kallsyms_markers = <0xffffffc0 0x1165adf0>;
+					kallsyms_token_table = <0xffffffc0 0x1165b5f8>;
+					kallsyms_token_index = <0xffffffc0 0x1165b950>;
 					_sinittext = <0xffffffc0 0x119e0000>;
-					_einittext = <0xffffffc0 0x11a5dd88>;
+					_einittext = <0xffffffc0 0x11a5dd20>;
 					_end = <0xffffffc0 0x1250d000>;
 				};
 
 				kconstants {
-					swapper_pg_dir = <0xffffffc0 0x119d4000>;
+					swapper_pg_dir = <0xffffffc0 0x119d3000>;
 				};
 			};
 		};

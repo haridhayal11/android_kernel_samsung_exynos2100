@@ -708,35 +708,6 @@ enum {
 };
 
 enum {
-	MFC_END_SIG_STRENGTH = 0,
-	MFC_END_POWER_TRANSFER,			/* 1 */
-	MFC_END_CTR_ERROR,				/* 2 */
-	MFC_END_RECEIVED_POWER,			/* 3 */
-	MFC_END_CHARGE_STATUS,			/* 4 */
-	MFC_POWER_CTR_HOLD_OFF,			/* 5 */
-	MFC_AFC_CONF_5V,				/* 6 */
-	MFC_AFC_CONF_10V,				/* 7 */
-	MFC_AFC_CONF_5V_TX,				/* 8 */
-	MFC_AFC_CONF_10V_TX,			/* 9 */
-	MFC_AFC_CONF_12V_TX,			/* 10 */
-	MFC_AFC_CONF_12_5V_TX,			/* 11 */
-	MFC_AFC_CONF_20V_TX,			/* 12 */
-	MFC_CONFIGURATION,				/* 13 */
-	MFC_IDENTIFICATION,				/* 14 */
-	MFC_EXTENDED_IDENT,				/* 15 */
-	MFC_LED_CONTROL_ON,				/* 16 */
-	MFC_LED_CONTROL_OFF,			/* 17 */
-	MFC_FAN_CONTROL_ON,				/* 18 */
-	MFC_FAN_CONTROL_OFF,			/* 19 */
-	MFC_REQUEST_AFC_TX,				/* 20 */
-	MFC_REQUEST_TX_ID,				/* 21 */
-	MFC_DISABLE_TX,					/* 22 */
-	MFC_PHM_ON, 				/* 23 */
-	MFC_LED_CONTROL_DIMMING,			/* 24 */
-	MFC_SET_OP_FREQ,			/* 25 */
-};
-
-enum {
 	MFC_ADDR = 0,
 	MFC_SIZE,
 	MFC_DATA,
@@ -1143,9 +1114,10 @@ struct mfc_charger_platform_data {
 	u32 gear_min_op_freq_delay;
 	u32 cep_timeout;
 	bool wpc_vout_ctrl_lcd_on;
-	bool wpc_vout_ctrl_full;
+	u32 wpc_vout_ctrl_full;
+	bool wpc_headroom_ctrl_full;
 	bool mis_align_guide;
-	u32 mis_align_taget_vout;
+	u32 mis_align_target_vout;
 #if defined(CONFIG_TX_GEAR_PHM_VOUT_CTRL) || defined(CONFIG_TX_GEAR_AOV)
 	u32 phm_vout_ctrl_dev;
 #endif

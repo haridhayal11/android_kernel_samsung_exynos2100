@@ -2110,7 +2110,7 @@ static void max77705_irq_execute(struct max77705_usbc_platform_data *usbc_data,
 	case OPCODE_SAMSUNG_READ_MESSAGE:
 		pr_info("@TA_ALERT: %s : OPCODE[%x] Data[1] = 0x%x Data[7] = 0x%x Data[9] = 0x%x\n",
 			__func__, OPCODE_SAMSUNG_READ_MESSAGE, data[1], data[7], data[9]);
-#if defined(CONFIG_DIRECT_CHARGING)
+#if IS_ENABLED(CONFIG_DIRECT_CHARGING)
 		if ((data[0] == 0x5D) &&
 			/* OCP would be set to Alert or Status message */
 			((data[1] == 0x01 && data[7] == 0x04) || (data[1] == 0x02 && (data[9] & 0x02)))) {

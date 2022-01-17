@@ -1221,6 +1221,9 @@ int npu_system_open(struct npu_system *system)
 		npu_err("fail(%d) in npu_scheduler_open\n", ret);
 		goto p_err;
 	}
+	// to check available max freq for current NPU dvfs governor, need to finish scheduler open
+	// then we can set boost as available
+	npu_scheduler_boost_on(device->sched);
 
 	ret = npu_qos_open(system);
 	if (ret) {

@@ -158,26 +158,6 @@ enum sec_wireless_auth_mode {
 	WIRELESS_AUTH_PASS,
 };
 
-enum sec_wireless_vout_control_mode {
-	WIRELESS_VOUT_OFF = 0,
-	WIRELESS_VOUT_NORMAL_VOLTAGE,	/* 5V , reserved by factory */
-	WIRELESS_VOUT_RESERVED,			/* 6V */
-	WIRELESS_VOUT_HIGH_VOLTAGE,		/* 9V , reserved by factory */
-	WIRELESS_VOUT_CC_CV_VOUT, /* 4 */
-	WIRELESS_VOUT_CALL, /* 5 */
-	WIRELESS_VOUT_5V, /* 6 */
-	WIRELESS_VOUT_9V, /* 7 */
-	WIRELESS_VOUT_10V, /* 8 */
-	WIRELESS_VOUT_11V, /* 9 */
-	WIRELESS_VOUT_12V, /* 10 */
-	WIRELESS_VOUT_12_5V, /* 11 */
-	WIRELESS_VOUT_5V_STEP, /* 12 */
-	WIRELESS_VOUT_5_5V_STEP, /* 13 */
-	WIRELESS_VOUT_9V_STEP, /* 14 */
-	WIRELESS_VOUT_10V_STEP, /* 15 */
-	WIRELESS_VOUT_4_5V_STEP, /* 16 */
-};
-
 enum sec_wireless_rx_control_mode {
 	WIRELESS_PAD_FAN_OFF = 0,
 	WIRELESS_PAD_FAN_ON,
