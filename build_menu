@@ -14,7 +14,7 @@ export LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN=$PARENT_DIR/aarch64-linux-android-4
 export CLANG_PREBUILT_BIN=$PARENT_DIR/clang-r383902/bin
 export PATH=$PATH:$LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN:$CLANG_PREBUILT_BIN
 export LLVM=1
-KERNEL_MAKE_ENV="LOCALVERSION=-afaneh92"
+KERNEL_MAKE_ENV="LOCALVERSION=-Hari-v0.2-GSI"
 
 # Color
 ON_BLUE=`echo -e "\033[44m"`	# On Blue
@@ -146,7 +146,7 @@ anykernel3(){
     cd $PARENT_DIR/AnyKernel3
     git reset --hard
     cp $DIR/arch/arm64/boot/Image zImage
-    sed -i "s/ExampleKernel by osm0sis/${VARIANT} kernel by afaneh92/g" anykernel.sh
+    sed -i "s/ExampleKernel by osm0sis/${VARIANT} HariKernel (GSI) by Haridhayal/g" anykernel.sh
     sed -i "s/=maguro/=${VARIANT}/g" anykernel.sh
     sed -i "s/=toroplus/=/g" anykernel.sh
     sed -i "s/=toro/=/g" anykernel.sh
