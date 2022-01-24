@@ -98,16 +98,55 @@ build_kernel(){
   fi
 }
 
+install-kernel-modules(){
+    [ -d "$2" ] && rm -rf $2
+    mkdir -p $2
+    sed -e 's/\(.*kernel.*\):/\/\1:/g' -e 's/ \([^ ]*kernel[^ ]*\)/ \/\1/g' $1/modules.dep > $2/modules.dep
+    cp $1/modules.softdep $2
+    cp $1/modules.alias $2
+    for MOD in $modules; do
+        MODULE="$(basename $MOD)"
+        sed -i "s|\(.*kernel.*\)\/$MODULE:|/lib/modules/$MODULE:|" $2/modules.dep
+        sed -i "s| \([^ ]*kernel.*\)\/$MODULE| /lib/modules/$MODULE|" $2/modules.dep
+        basename $MOD >> $2/modules.load;
+        cp $MOD $2
+    done
+}
+
+build_kernel_modules(){
+  if [ -e $DIR/arch/arm64/boot/Image ]; then
+    # Build modules
+    echo "${GREEN}***** Installing Kernel Modules *****${STD}"
+    [ ! -d "out/tmp_modules" ] && mkdir -p out/tmp_modules
+    make -j$(nproc) -C $(pwd) $KERNEL_MAKE_ENV modules
+    make -j$(nproc) -C $(pwd) $KERNEL_MAKE_ENV INSTALL_MOD_STRIP=1 INSTALL_MOD_PATH=$(pwd)/out/tmp_modules modules_install
+
+    kernel_release=$(cat include/config/kernel.release)
+    kernel_modules_dir=$DIR/out/tmp_modules/lib/modules/$kernel_release
+    kernel_modules_out=$DIR/out/lib/modules
+    modules=$(find $kernel_modules_dir -type f -name '*.ko');
+
+    install-kernel-modules $kernel_modules_dir $kernel_modules_out
+    [ -d "out/tmp_modules" ] && rm -rf out/tmp_modules
+    echo "${GREEN}***** Ready to Roar *****${STD}"
+    pause 'continue'
+  else
+    pause 'return to Main menu' 'Build kernel first, '
+  fi
+}
+
 anykernel3(){
   if [ ! -d $PARENT_DIR/AnyKernel3 ]; then
     pause 'clone AnyKernel3 - Flashable Zip Template'
     git clone https://github.com/osm0sis/AnyKernel3 $PARENT_DIR/AnyKernel3
   fi
   variant
+  [ -e $PARENT_DIR/${VARIANT}_kernel.zip ] && rm $PARENT_DIR/${VARIANT}_kernel.zip
   if [ -e $DIR/arch/arm64/boot/Image ]; then
     cd $PARENT_DIR/AnyKernel3
     git reset --hard
     cp $DIR/arch/arm64/boot/Image zImage
+    cp $DIR/out/dtbo.img dtbo.img
     sed -i "s/ExampleKernel by osm0sis/${VARIANT} HariKernel (GSI) by Haridhayal/g" anykernel.sh
     sed -i "s/=maguro/=${VARIANT}/g" anykernel.sh
     sed -i "s/=toroplus/=/g" anykernel.sh
@@ -119,7 +158,9 @@ anykernel3(){
     sed -i "s/insert_line/#insert_line/g" anykernel.sh
     sed -i "s/append_file/#append_file/g" anykernel.sh
     sed -i "s/patch_fstab/#patch_fstab/g" anykernel.sh
-    zip -r9 $PARENT_DIR/${VARIANT}_kernel_`date '+%Y_%m_%d'`.zip * -x .git README.md *placeholder
+    sed -i "s/## end boot install/flash_dtbo/g" anykernel.sh
+
+    zip -r9 $PARENT_DIR/${VARIANT}_kernel.zip * -x .git README.md *placeholder
     cd $DIR
     pause 'continue'
   else
@@ -136,20 +177,22 @@ show_menus(){
   clear
   echo "${ON_BLUE} B U I L D - M E N U ${STD}"
   echo "1. ${Under_Line}B${STD}uild kernel"
-  echo "2. ${Under_Line}C${STD}lean"
-  echo "3. Make ${Under_Line}f${STD}lashable zip"
-  echo "4. E${Under_Line}x${STD}it"
+  echo "2. Build kernel ${Under_Line}m${STD}odules"
+  echo "3. ${Under_Line}C${STD}lean"
+  echo "4. Make ${Under_Line}f${STD}lashable zip"
+  echo "5. E${Under_Line}x${STD}it"
 }
 
 # Read input
 read_options(){
   local choice
-  read -p "Enter choice [ 1 - 4] " choice
+  read -p "Enter choice [ 1 - 5] " choice
   case $choice in
     1|b|B) build_kernel ;;
-    2|c|C) clean ;;
-    3|f|F) anykernel3;;
-    4|x|X) exit 0;;
+    2|m|M) build_kernel_modules ;;
+    3|c|C) clean ;;
+    4|f|F) anykernel3;;
+    5|x|X) exit 0;;
     *) pause 'return to Main menu' 'Invalid option, '
   esac
 }
