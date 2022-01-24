@@ -647,6 +647,8 @@ static ssize_t vl53l5_firmware_version_show(struct device *dev,
 		p_version.firmware.ver_build,
 		p_version.firmware.ver_revision);
 
+	vl53l5_k_log_info("get_range failed %d", status);
+
 	return snprintf(buf, PAGE_SIZE, "%d.%d.%d.%d\n",
 		p_version.firmware.ver_major,
 		p_version.firmware.ver_minor,
@@ -1220,6 +1222,8 @@ static ssize_t vl53l5_test_mode_store(struct device *dev,
 	int ret;
 
 	ret = kstrtou8(buf, 10, &val);
+
+	vl53l5_k_log_info("get_range failed %d", ret);
 
 	switch(val) {
 	case 1:
