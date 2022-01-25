@@ -1,5 +1,5 @@
 #!/bin/bash
-# Afaneh menu V2.0
+# Hari menu V2.0 based on afaneh menu
 
 # Variables
 DIR=`readlink -f .`
@@ -31,7 +31,7 @@ pause(){
 
 variant(){
   findconfig=""
-  findconfig=($(ls arch/arm64/configs/afaneh_* 2>/dev/null))
+  findconfig=($(ls arch/arm64/configs/hari_* 2>/dev/null))
   declare -i i=1
   shift 2
   for e in "${findconfig[@]}"; do
@@ -74,14 +74,12 @@ clean(){
   make mrproper
   [ -d "out" ] && rm -rf out
   echo "${GREEN}***** Cleaning Done *****${STD}"
-  pause 'continue'
 }
 
 build_kernel(){
-  variant
-  echo "${GREEN}***** Compiling kernel *****${STD}"
+  echo "${GREEN}***** Compiling kernel for ${VARIANT} *****${STD}"
   [ ! -d "out" ] && mkdir out
-  make -j$(nproc) -C $(pwd) $KERNEL_MAKE_ENV afaneh_${VARIANT}_defconfig
+  make -j$(nproc) -C $(pwd) $KERNEL_MAKE_ENV hari_${VARIANT}_defconfig
   make -j$(nproc) -C $(pwd) $KERNEL_MAKE_ENV
 
   [ -e arch/arm64/boot/Image.gz ] && cp arch/arm64/boot/Image.gz $(pwd)/out/Image.gz
@@ -92,9 +90,8 @@ build_kernel(){
     $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/dtb.img dt.configs/exynos2100.cfg -d ${DTB_DIR}/exynos
     $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/dtbo.img dt.configs/${VARIANT}.cfg -d ${DTB_DIR}/samsung/${VARIANT}
     echo "${GREEN}***** Ready to Roar *****${STD}"
-    pause 'continue'
   else
-    pause 'return to Main menu' 'Kernel STUCK in BUILD!, '
+    echo 'Error'
   fi
 }
 
@@ -140,7 +137,6 @@ anykernel3(){
     pause 'clone AnyKernel3 - Flashable Zip Template'
     git clone https://github.com/osm0sis/AnyKernel3 $PARENT_DIR/AnyKernel3
   fi
-  variant
   [ -e $PARENT_DIR/${VARIANT}_kernel.zip ] && rm $PARENT_DIR/${VARIANT}_kernel.zip
   if [ -e $DIR/arch/arm64/boot/Image ]; then
     cd $PARENT_DIR/AnyKernel3
@@ -162,12 +158,29 @@ anykernel3(){
 
     zip -r9 $PARENT_DIR/${VARIANT}_kernel.zip * -x .git README.md *placeholder
     cd $DIR
-    pause 'continue'
   else
-    pause 'return to Main menu' 'Build kernel first, '
+    echo 'Done building Flashable zip for ${VARIANT}'
   fi
 }
 
+build_kernel_all_devices(){
+  VARIANT=o1s
+  build_kernel
+  anykernel3
+  clean
+
+  VARIANT=t2s
+  build_kernel
+  anykernel3
+  clean
+
+  VARIANT=p3s
+  build_kernel
+  anykernel3
+  clean
+  pause 'All the builds are done'
+}
+ 
 # Run once
 toolchain
 clang
@@ -177,22 +190,24 @@ show_menus(){
   clear
   echo "${ON_BLUE} B U I L D - M E N U ${STD}"
   echo "1. ${Under_Line}B${STD}uild kernel"
-  echo "2. Build kernel ${Under_Line}m${STD}odules"
-  echo "3. ${Under_Line}C${STD}lean"
-  echo "4. Make ${Under_Line}f${STD}lashable zip"
-  echo "5. E${Under_Line}x${STD}it"
+  echo "2. ${Under_Line}B${STD}uild kernel for all devices"
+  echo "3. Build kernel ${Under_Line}m${STD}odules"
+  echo "4. ${Under_Line}C${STD}lean"
+  echo "5. Make ${Under_Line}f${STD}lashable zip"
+  echo "6. E${Under_Line}x${STD}it"
 }
 
 # Read input
 read_options(){
   local choice
-  read -p "Enter choice [ 1 - 5] " choice
+  read -p "Enter choice [ 1 - 6] " choice
   case $choice in
     1|b|B) build_kernel ;;
-    2|m|M) build_kernel_modules ;;
-    3|c|C) clean ;;
-    4|f|F) anykernel3;;
-    5|x|X) exit 0;;
+    2|a|A) build_kernel_all_devices ;;
+    3|m|M) build_kernel_modules ;;
+    4|c|C) clean ;;
+    5|f|F) anykernel3;;
+    6|x|X) exit 0;;
     *) pause 'return to Main menu' 'Invalid option, '
   esac
 }
