@@ -1,5 +1,5 @@
 #!/bin/bash
-# Afaneh menu V2.0
+# Hari menu V3.0 based on afaneh menu
 
 # Variables
 DIR=`readlink -f .`
@@ -14,7 +14,7 @@ export LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN=$PARENT_DIR/aarch64-linux-android-4
 export CLANG_PREBUILT_BIN=$PARENT_DIR/clang-r383902/bin
 export PATH=$PATH:$LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN:$CLANG_PREBUILT_BIN
 export LLVM=1
-KERNEL_MAKE_ENV="LOCALVERSION=-Hari-v0.2-GSI"
+KERNEL_MAKE_ENV="LOCALVERSION=-Hari-v${harikernelver}-GSI"
 
 # Color
 ON_BLUE=`echo -e "\033[44m"`	# On Blue
@@ -23,33 +23,10 @@ BLUE=`echo -e "\033[1;34m"`	# Blue
 GREEN=`echo -e "\033[1;32m"`	# Green
 Under_Line=`echo -e "\e[4m"`	# Text Under Line
 STD=`echo -e "\033[0m"`		# Text Clear
- 
+
 # Functions
 pause(){
   read -p "${RED}$2${STD}Press ${BLUE}[Enter]${STD} key to $1..." fackEnterKey
-}
-
-variant(){
-  findconfig=""
-  findconfig=($(ls arch/arm64/configs/afaneh_* 2>/dev/null))
-  declare -i i=1
-  shift 2
-  for e in "${findconfig[@]}"; do
-    echo "$i) $(basename $e | cut -d'_' -f2)"
-    i=i+1
-  done
-  echo ""
-  read -p "Select variant: " REPLY
-  i="$REPLY"
-  if [[ $i -gt 0 && $i -le ${#findconfig[@]} ]]; then
-    export v="${findconfig[$i-1]}"
-    export VARIANT=$(basename $v | cut -d'_' -f2)
-    echo ${VARIANT} selected
-    pause 'continue'
-  else
-    pause 'return to Main menu' 'Invalid option, '
-    . $DIR/build_menu
-  fi
 }
 
 toolchain(){
@@ -74,14 +51,12 @@ clean(){
   make mrproper
   [ -d "out" ] && rm -rf out
   echo "${GREEN}***** Cleaning Done *****${STD}"
-  pause 'continue'
 }
 
 build_kernel(){
-  variant
-  echo "${GREEN}***** Compiling kernel *****${STD}"
+  echo "${GREEN}***** Compiling kernel for ${VARIANT} *****${STD}"
   [ ! -d "out" ] && mkdir out
-  make -j$(nproc) -C $(pwd) $KERNEL_MAKE_ENV afaneh_${VARIANT}_defconfig
+  make -j$(nproc) -C $(pwd) $KERNEL_MAKE_ENV exynos2100-${VARIANT}xxx_defconfig
   make -j$(nproc) -C $(pwd) $KERNEL_MAKE_ENV
 
   [ -e arch/arm64/boot/Image.gz ] && cp arch/arm64/boot/Image.gz $(pwd)/out/Image.gz
@@ -92,9 +67,8 @@ build_kernel(){
     $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/dtb.img dt.configs/exynos2100.cfg -d ${DTB_DIR}/exynos
     $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/dtbo.img dt.configs/${VARIANT}.cfg -d ${DTB_DIR}/samsung/${VARIANT}
     echo "${GREEN}***** Ready to Roar *****${STD}"
-    pause 'continue'
   else
-    pause 'return to Main menu' 'Kernel STUCK in BUILD!, '
+    echo 'Error'
   fi
 }
 
@@ -140,7 +114,6 @@ anykernel3(){
     pause 'clone AnyKernel3 - Flashable Zip Template'
     git clone https://github.com/osm0sis/AnyKernel3 $PARENT_DIR/AnyKernel3
   fi
-  variant
   [ -e $PARENT_DIR/${VARIANT}_kernel.zip ] && rm $PARENT_DIR/${VARIANT}_kernel.zip
   if [ -e $DIR/arch/arm64/boot/Image ]; then
     cd $PARENT_DIR/AnyKernel3
@@ -160,12 +133,63 @@ anykernel3(){
     sed -i "s/patch_fstab/#patch_fstab/g" anykernel.sh
     sed -i "s/## end boot install/flash_dtbo/g" anykernel.sh
 
-    zip -r9 $PARENT_DIR/${VARIANT}_kernel.zip * -x .git README.md *placeholder
+    zip -r9 $PARENT_DIR/${releasefilename}.zip * -x .git README.md *placeholder
     cd $DIR
-    pause 'continue'
   else
-    pause 'return to Main menu' 'Build kernel first, '
+    echo 'Done building Flashable zip for ${VARIANT}'
   fi
+}
+
+build_kernel_o1s(){
+  read -p "Enter Kernel Release Version v" harikernelver
+  VARIANT=o1s
+  build_kernel
+  curtime=`date +"%m_%d_%H%M"`
+  releasefilename=HariKernel_Test_${curtime}_${VARIANT}
+  anykernel3
+  clean
+}
+
+build_kernel_t2s(){
+  read -p "Enter Kernel Release Version v" harikernelver
+  VARIANT=t2s
+  build_kernel
+  curtime=`date +"%m_%d_%H%M"`
+  releasefilename=HariKernel_Test_${curtime}_${VARIANT}
+  anykernel3
+  clean
+}
+
+build_kernel_p3s(){
+  read -p "Enter Kernel Release Version v" harikernelver
+  VARIANT=p3s
+  build_kernel
+  curtime=`date +"%m_%d_%H%M"`
+  releasefilename=HariKernel_Test_${curtime}_${VARIANT}
+  anykernel3
+  clean
+}
+
+build_kernel_all_devices(){
+  read -p "Enter Kernel Release Version v" harikernelver
+  VARIANT=o1s
+  build_kernel
+  releasefilename=HariKernel_${harikernelver}_${VARIANT}
+  anykernel3
+  clean
+
+  VARIANT=t2s
+  build_kernel
+  releasefilename=HariKernel_${harikernelver}_${VARIANT}
+  anykernel3
+  clean
+
+  VARIANT=p3s
+  build_kernel
+  releasefilename=HariKernel_${harikernelver}_${VARIANT}
+  anykernel3
+  clean
+  pause 'All the builds are done'
 }
 
 # Run once
@@ -176,30 +200,36 @@ clang
 show_menus(){
   clear
   echo "${ON_BLUE} B U I L D - M E N U ${STD}"
-  echo "1. ${Under_Line}B${STD}uild kernel"
-  echo "2. Build kernel ${Under_Line}m${STD}odules"
-  echo "3. ${Under_Line}C${STD}lean"
-  echo "4. Make ${Under_Line}f${STD}lashable zip"
-  echo "5. E${Under_Line}x${STD}it"
+  echo "1. ${Under_Line}B${STD}uild kernel for o1s"
+  echo "2. ${Under_Line}B${STD}uild kernel for t2s"
+  echo "3. ${Under_Line}B${STD}uild kernel for p3s"
+  echo "4. ${Under_Line}B${STD}uild kernel for all devices"
+  echo "5. Build kernel ${Under_Line}m${STD}odules"
+  echo "6. ${Under_Line}C${STD}lean"
+  echo "7. Make ${Under_Line}f${STD}lashable zip"
+  echo "8. E${Under_Line}x${STD}it"
 }
 
 # Read input
 read_options(){
   local choice
-  read -p "Enter choice [ 1 - 5] " choice
+  read -p "Enter choice [ 1 - 8] " choice
   case $choice in
-    1|b|B) build_kernel ;;
-    2|m|M) build_kernel_modules ;;
-    3|c|C) clean ;;
-    4|f|F) anykernel3;;
-    5|x|X) exit 0;;
+    1|b|B) build_kernel_o1s ;;
+    2|b|B) build_kernel_t2s ;;
+    3|b|B) build_kernel_p3s ;;
+    4|a|A) build_kernel_all_devices ;;
+    5|m|M) build_kernel_modules ;;
+    6|c|C) clean ;;
+    7|f|F) anykernel3;;
+    8|x|X) exit 0;;
     *) pause 'return to Main menu' 'Invalid option, '
   esac
 }
 
 # Trap CTRL+C, CTRL+Z and quit singles
 trap '' SIGINT SIGQUIT SIGTSTP
- 
+
 # Step # Main logic - infinite loop
 while true
 do
