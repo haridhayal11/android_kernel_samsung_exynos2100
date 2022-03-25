@@ -57,7 +57,7 @@ clean(){
 }
 
 build_kernel(){
-  KERNEL_MAKE_ENV="LOCALVERSION=-Hari-v${harikernelver}-GSI"
+  KERNEL_MAKE_ENV="LOCALVERSION=-Hari-v${harikernelver}-OneUI"
   echo "${GREEN}***** Compiling kernel for ${VARIANT} *****${STD}"
   [ ! -d "out" ] && mkdir out
   make -j$(nproc) -C $(pwd) $KERNEL_MAKE_ENV hari_${VARIANT}_defconfig
@@ -124,7 +124,7 @@ anykernel3(){
     git reset --hard
     cp $DIR/arch/arm64/boot/Image zImage
     cp $DIR/out/dtbo.img dtbo.img
-    sed -i "s/ExampleKernel by osm0sis/${VARIANT} HariKernel (GSI) by Haridhayal/g" anykernel.sh
+    sed -i "s/ExampleKernel by osm0sis/${VARIANT} HariKernel (OneUI) by Haridhayal/g" anykernel.sh
     sed -i "s/=maguro/=${VARIANT}/g" anykernel.sh
     sed -i "s/=toroplus/=/g" anykernel.sh
     sed -i "s/=toro/=/g" anykernel.sh
