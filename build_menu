@@ -18,7 +18,7 @@ export LLVM=1
 export USE_CCACHE=1
 export CCACHE_EXEC=/usr/bin/ccache
 #export CCACHE_DIR=/mnt/ccache
-ccache -M 50G -F 0
+ccache -M 20G -F 0
 
 # Color
 ON_BLUE=`echo -e "\033[44m"`	# On Blue
@@ -58,7 +58,7 @@ clean(){
 }
 
 build_kernel(){
-  KERNEL_MAKE_ENV="LOCALVERSION=-Hari-v${harikernelver}-OneUI"
+  KERNEL_MAKE_ENV="LOCALVERSION=-Hari-v${harikernelver}-GSI"
   echo "${GREEN}***** Compiling kernel for ${VARIANT} *****${STD}"
   [ ! -d "out" ] && mkdir out
   make -j$(nproc) -C $(pwd) $KERNEL_MAKE_ENV hari_${VARIANT}_defconfig
@@ -125,7 +125,7 @@ anykernel3(){
     git reset --hard
     cp $DIR/arch/arm64/boot/Image zImage
     cp $DIR/out/dtbo.img dtbo.img
-    sed -i "s/ExampleKernel by osm0sis/${VARIANT} HariKernel (OneUI) by Haridhayal/g" anykernel.sh
+    sed -i "s/ExampleKernel by osm0sis/${VARIANT} HariKernel (GSI) by Haridhayal/g" anykernel.sh
     sed -i "s/=maguro/=${VARIANT}/g" anykernel.sh
     sed -i "s/=toroplus/=/g" anykernel.sh
     sed -i "s/=toro/=/g" anykernel.sh
@@ -150,7 +150,7 @@ build_kernel_o1s(){
   VARIANT=o1s
   build_kernel
   curtime=`date +"%m_%d_%H%M"`
-  releasefilename=HariKernel_Test_${curtime}_OneUI_${VARIANT}
+  releasefilename=HariKernel_Test_${curtime}_GSI_${VARIANT}
   anykernel3
   clean
 }
@@ -160,7 +160,7 @@ build_kernel_t2s(){
   VARIANT=t2s
   build_kernel
   curtime=`date +"%m_%d_%H%M"`
-  releasefilename=HariKernel_Test_${curtime}_OneUI_${VARIANT}
+  releasefilename=HariKernel_Test_${curtime}_GSI_${VARIANT}
   anykernel3
   clean
 }
@@ -170,7 +170,7 @@ build_kernel_p3s(){
   VARIANT=p3s
   build_kernel
   curtime=`date +"%m_%d_%H%M"`
-  releasefilename=HariKernel_Test_${curtime}_OneUI_${VARIANT}
+  releasefilename=HariKernel_Test_${curtime}_GSI_${VARIANT}
   anykernel3
   clean
 }
@@ -179,19 +179,19 @@ build_kernel_all_devices(){
   read -p "Enter Kernel Release Version v" harikernelver
   VARIANT=o1s
   build_kernel
-  releasefilename=HariKernel_v${harikernelver}_OneUI_${VARIANT}
+  releasefilename=HariKernel_v${harikernelver}_GSI_${VARIANT}
   anykernel3
   clean
 
   VARIANT=t2s
   build_kernel
-  releasefilename=HariKernel_v${harikernelver}_OneUI_${VARIANT}
+  releasefilename=HariKernel_v${harikernelver}_GSI_${VARIANT}
   anykernel3
   clean
 
   VARIANT=p3s
   build_kernel
-  releasefilename=HariKernel_v${harikernelver}_OneUI_${VARIANT}
+  releasefilename=HariKernel_v${harikernelver}_GSI_${VARIANT}
   anykernel3
   clean
   pause 'All the builds are done'
