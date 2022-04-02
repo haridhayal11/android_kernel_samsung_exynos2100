@@ -149,7 +149,7 @@ build_kernel_o1s(){
   VARIANT=o1s
   build_kernel
   curtime=`date +"%m_%d_%H%M"`
-  releasefilename=HariKernel_Test_${curtime}_${VARIANT}
+  releasefilename=HariKernel_Test_${curtime}_GSI_${VARIANT}
   anykernel3
   clean
 }
@@ -159,7 +159,7 @@ build_kernel_t2s(){
   VARIANT=t2s
   build_kernel
   curtime=`date +"%m_%d_%H%M"`
-  releasefilename=HariKernel_Test_${curtime}_${VARIANT}
+  releasefilename=HariKernel_Test_${curtime}_GSI_${VARIANT}
   anykernel3
   clean
 }
@@ -169,7 +169,7 @@ build_kernel_p3s(){
   VARIANT=p3s
   build_kernel
   curtime=`date +"%m_%d_%H%M"`
-  releasefilename=HariKernel_Test_${curtime}_${VARIANT}
+  releasefilename=HariKernel_Test_${curtime}_GSI_${VARIANT}
   anykernel3
   clean
 }
@@ -178,19 +178,19 @@ build_kernel_all_devices(){
   read -p "Enter Kernel Release Version v" harikernelver
   VARIANT=o1s
   build_kernel
-  releasefilename=HariKernel_v${harikernelver}_${VARIANT}
+  releasefilename=HariKernel_v${harikernelver}_GSI_${VARIANT}
   anykernel3
   clean
 
   VARIANT=t2s
   build_kernel
-  releasefilename=HariKernel_v${harikernelver}_${VARIANT}
+  releasefilename=HariKernel_v${harikernelver}_GSI_${VARIANT}
   anykernel3
   clean
 
   VARIANT=p3s
   build_kernel
-  releasefilename=HariKernel_v${harikernelver}_${VARIANT}
+  releasefilename=HariKernel_v${harikernelver}_GSI_${VARIANT}
   anykernel3
   clean
   pause 'All the builds are done'
