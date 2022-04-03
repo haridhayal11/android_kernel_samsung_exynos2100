@@ -29,6 +29,14 @@ choice
 	  with lots of processors that may show reduced performance if
 	  too many timer interrupts are occurring.
 
+	config HZ_200
+		bool "200 HZ"
+	help
+	 200 Hz is a good compromise choice allowing server performance
+	 while also showing good interactive responsiveness even
+	 on SMP and NUMA systems. If you are going to be using NTSC video
+	 or multimedia, selected 300Hz instead.
+
 	config HZ_250
 		bool "250 HZ"
 	help
@@ -58,6 +66,7 @@ config HZ
 	default 25 if HZ_25
 	default 50 if HZ_50
 	default 100 if HZ_100
+	default 200 if HZ_200
 	default 250 if HZ_250
 	default 300 if HZ_300
 	default 1000 if HZ_1000
