@@ -7314,6 +7314,7 @@ enum group_type {
 #define LBF_SOME_PINNED	0x08
 #define LBF_NOHZ_STATS	0x10
 #define LBF_NOHZ_AGAIN	0x20
+#define LBF_IGNORE_BIG_TASKS 0x100
 
 struct lb_env {
 	struct sched_domain	*sd;
