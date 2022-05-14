@@ -60,7 +60,7 @@ build_kernel(){
   KERNEL_MAKE_ENV="LOCALVERSION=-Hari-v${harikernelver}-GSI"
   echo "${GREEN}***** Compiling kernel for ${VARIANT} *****${STD}"
   [ ! -d "out" ] && mkdir out
-  make -j$(nproc) -C $(pwd) $KERNEL_MAKE_ENV exynos2100-${VARIANT}xxx_defconfig
+  make -j$(nproc) -C $(pwd) $KERNEL_MAKE_ENV hari_${VARIANT}_defconfig
   make -j$(nproc) -C $(pwd) $KERNEL_MAKE_ENV
 
   [ -e arch/arm64/boot/Image.gz ] && cp arch/arm64/boot/Image.gz $(pwd)/out/Image.gz
