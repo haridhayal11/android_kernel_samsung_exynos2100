@@ -8973,27 +8973,6 @@
 					phandle = <0x6e>;
 				};
 
-				m1s_old_panel_display_mode_1080x2400_60hs {
-					id = "1080x2400_60HS";
-					width = <0x438>;
-					height = <0x960>;
-					refresh_rate = <0x3c>;
-					refresh_mode = <0x01>;
-					panel_refresh_rate = <0x3c>;
-					panel_refresh_mode = <0x01>;
-					panel_te_st = <0x00>;
-					panel_te_ed = <0x00>;
-					panel_te_sw_skip_count = <0x00>;
-					panel_te_hw_skip_count = <0x00>;
-					dsc_en = <0x01>;
-					dsc_cnt = <0x02>;
-					dsc_slice_num = <0x02>;
-					dsc_slice_w = <0x21c>;
-					dsc_slice_h = <0x78>;
-					cmd_lp_ref = <0x2879>;
-					phandle = <0x6a>;
-				};
-
 				m1s_old_panel_display_mode_1080x2400_48hs {
 					id = "1080x2400_48HS";
 					width = <0x438>;
@@ -9105,27 +9084,6 @@
 					phandle = <0x74>;
 				};
 
-				m1s_panel_display_mode_1080x2400_60hs {
-					id = "1080x2400_60HS";
-					width = <0x438>;
-					height = <0x960>;
-					refresh_rate = <0x3c>;
-					refresh_mode = <0x01>;
-					panel_refresh_rate = <0x3c>;
-					panel_refresh_mode = <0x01>;
-					panel_te_st = <0x00>;
-					panel_te_ed = <0x00>;
-					panel_te_sw_skip_count = <0x00>;
-					panel_te_hw_skip_count = <0x00>;
-					dsc_en = <0x01>;
-					dsc_cnt = <0x02>;
-					dsc_slice_num = <0x02>;
-					dsc_slice_w = <0x21c>;
-					dsc_slice_h = <0x78>;
-					cmd_lp_ref = <0x2879>;
-					phandle = <0x70>;
-				};
-
 				m1s_panel_display_mode_1080x2400_48hs {
 					id = "1080x2400_48HS";
 					width = <0x438>;
@@ -9145,27 +9103,6 @@
 					dsc_slice_h = <0x78>;
 					cmd_lp_ref = <0x3631>;
 					phandle = <0x75>;
-				};
-
-				m1s_panel_display_mode_1080x2400_60ns {
-					id = "1080x2400_60NS";
-					width = <0x438>;
-					height = <0x960>;
-					refresh_rate = <0x3c>;
-					refresh_mode = <0x00>;
-					panel_refresh_rate = <0x3c>;
-					panel_refresh_mode = <0x00>;
-					panel_te_st = <0x00>;
-					panel_te_ed = <0x00>;
-					panel_te_sw_skip_count = <0x00>;
-					panel_te_hw_skip_count = <0x00>;
-					dsc_en = <0x01>;
-					dsc_cnt = <0x02>;
-					dsc_slice_num = <0x02>;
-					dsc_slice_w = <0x21c>;
-					dsc_slice_h = <0x78>;
-					cmd_lp_ref = <0x2879>;
-					phandle = <0x76>;
 				};
 			};
 		};
@@ -10435,16 +10372,13 @@
 		m1s_old_panel_display_mode_1080x2400_60hs_120hs = "/fragment@panel_display_mode/__overlay__/m1s_old_panel_display_modes/m1s_old_panel_display_mode_1080x2400_60hs_120hs";
 		m1s_old_panel_display_mode_1080x2400_96hs = "/fragment@panel_display_mode/__overlay__/m1s_old_panel_display_modes/m1s_old_panel_display_mode_1080x2400_96hs";
 		m1s_old_panel_display_mode_1080x2400_48hs_96hs = "/fragment@panel_display_mode/__overlay__/m1s_old_panel_display_modes/m1s_old_panel_display_mode_1080x2400_48hs_96hs";
-		m1s_old_panel_display_mode_1080x2400_60hs = "/fragment@panel_display_mode/__overlay__/m1s_old_panel_display_modes/m1s_old_panel_display_mode_1080x2400_60hs";
 		m1s_old_panel_display_mode_1080x2400_48hs = "/fragment@panel_display_mode/__overlay__/m1s_old_panel_display_modes/m1s_old_panel_display_mode_1080x2400_48hs";
 		m1s_panel_display_modes = "/fragment@panel_display_mode/__overlay__/m1s_panel_display_modes";
 		m1s_panel_display_mode_1080x2400_120hs = "/fragment@panel_display_mode/__overlay__/m1s_panel_display_modes/m1s_panel_display_mode_1080x2400_120hs";
 		m1s_panel_display_mode_1080x2400_60hs_120hs = "/fragment@panel_display_mode/__overlay__/m1s_panel_display_modes/m1s_panel_display_mode_1080x2400_60hs_120hs";
 		m1s_panel_display_mode_1080x2400_96hs = "/fragment@panel_display_mode/__overlay__/m1s_panel_display_modes/m1s_panel_display_mode_1080x2400_96hs";
 		m1s_panel_display_mode_1080x2400_48hs_96hs = "/fragment@panel_display_mode/__overlay__/m1s_panel_display_modes/m1s_panel_display_mode_1080x2400_48hs_96hs";
-		m1s_panel_display_mode_1080x2400_60hs = "/fragment@panel_display_mode/__overlay__/m1s_panel_display_modes/m1s_panel_display_mode_1080x2400_60hs";
 		m1s_panel_display_mode_1080x2400_48hs = "/fragment@panel_display_mode/__overlay__/m1s_panel_display_modes/m1s_panel_display_mode_1080x2400_48hs";
-		m1s_panel_display_mode_1080x2400_60ns = "/fragment@panel_display_mode/__overlay__/m1s_panel_display_modes/m1s_panel_display_mode_1080x2400_60ns";
 		sec_debug_next = "/fragment@68/__overlay__/sec_debug_next";
 		ram_base = "/fragment@68/__overlay__/ram_base";
 		grip_int = "/fragment@69/__overlay__/grip-int";
