@@ -67,7 +67,7 @@ const_debug unsigned int sysctl_sched_features =
  * Number of tasks to iterate in a single balance run.
  * Limited because this is done with IRQs disabled.
  */
-const_debug unsigned int sysctl_sched_nr_migrate = 32;
+const_debug unsigned int sysctl_sched_nr_migrate = 32; /* default 32 */
 
 /*
  * period over which we measure -rt task CPU usage in us.
@@ -3999,14 +3999,7 @@ static noinline void __schedule_bug(struct task_struct *prev)
 		print_ip_sym(preempt_disable_ip);
 		pr_cont("\n");
 	}
-	if (panic_on_warn)
-		panic("scheduling while atomic\n");
-
-	dump_stack();
-#ifdef CONFIG_SEC_DEBUG_ATOMIC_SLEEP_PANIC
-	BUG();
-#endif
-	add_taint(TAINT_WARN, LOCKDEP_STILL_OK);
+	panic("scheduling while atomic\n");
 }
 
 /*
@@ -4831,7 +4824,8 @@ static void __setscheduler_params(struct task_struct *p,
 	if (policy == SETPARAM_POLICY)
 		policy = p->policy;
 
-	p->policy = policy;
+	/* Replace SCHED_FIFO with SCHED_RR to reduce latency */
+	p->policy = policy == SCHED_FIFO ? SCHED_RR : policy;
 
 	if (dl_policy(policy))
 		__setparam_dl(p, attr);

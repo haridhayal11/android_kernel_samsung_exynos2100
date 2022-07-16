@@ -3905,6 +3905,13 @@ static void check_spread(struct cfs_rq *cfs_rq, struct sched_entity *se)
 #endif
 }
 
+static unsigned int Lgentle_fair_sleepers = 0;
+
+void relay_gfs(unsigned int gfs)
+{
+	Lgentle_fair_sleepers = gfs;
+}
+
 static void
 place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int initial)
 {
@@ -3927,7 +3934,7 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int initial)
 		 * Halve their sleep time's effect, to allow
 		 * for a gentler effect of sleepers:
 		 */
-		if (sched_feat(GENTLE_FAIR_SLEEPERS))
+		if (Lgentle_fair_sleepers)
 			thresh >>= 1;
 
 		vruntime -= thresh;
@@ -4237,6 +4244,7 @@ pick_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *curr)
 {
 	struct sched_entity *left = __pick_first_entity(cfs_rq);
 	struct sched_entity *se;
+	bool strict_skip = false;
 
 	/*
 	 * If curr is set we have to see if its left of the leftmost entity
@@ -4256,13 +4264,16 @@ pick_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *curr)
 
 		if (se == curr) {
 			second = __pick_first_entity(cfs_rq);
+			if (sched_feat(STRICT_SKIP_BUDDY))
+				strict_skip = true;
 		} else {
 			second = __pick_next_entity(se);
 			if (!second || (curr && entity_before(curr, second)))
 				second = curr;
 		}
 
-		if (second && wakeup_preempt_entity(second, left) < 1)
+		if (second && (strict_skip ||
+		    wakeup_preempt_entity(second, left) < 1))
 			se = second;
 	}
 
@@ -7303,6 +7314,7 @@ enum group_type {
 #define LBF_SOME_PINNED	0x08
 #define LBF_NOHZ_STATS	0x10
 #define LBF_NOHZ_AGAIN	0x20
+#define LBF_IGNORE_BIG_TASKS 0x100
 
 struct lb_env {
 	struct sched_domain	*sd;
@@ -7620,7 +7632,17 @@ static int detach_tasks(struct lb_env *env)
 		if (sched_feat(LB_MIN) && load < 16 && !env->sd->nr_balance_failed)
 			goto next;
 
-		if ((load / 2) > env->imbalance)
+		/*
+		 * p is not running task when we goes until here, so if p is one
+		 * of the 2 task in src cpu rq and not the running one,
+		 * that means it is the only task that can be balanced.
+		 * So only when there is other tasks can be balanced or
+		 * there is situation to ignore big task, it is needed
+		 * to skip the task load bigger than 2*imbalance.
+		 */
+		if (((cpu_rq(env->src_cpu)->nr_running > 2) ||
+			(env->flags & LBF_IGNORE_BIG_TASKS)) &&
+			((load / 2) > env->imbalance))
 			goto next;
 
 		detach_task(p, env);
