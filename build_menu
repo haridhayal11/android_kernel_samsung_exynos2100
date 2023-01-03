@@ -7,6 +7,7 @@ PARENT_DIR=`readlink -f ${DIR}/..`
 
 export PLATFORM_VERSION=11
 export ANDROID_MAJOR_VERSION=r
+export SEC_BUILD_CONF_VENDOR_BUILD_OS=13
 export CROSS_COMPILE=$PARENT_DIR/aarch64-linux-android-4.9/bin/aarch64-linux-android-
 export CLANG_TRIPLE=$PARENT_DIR/clang-r383902/bin/aarch64-linux-gnu-
 export ARCH=arm64
@@ -16,8 +17,8 @@ export PATH=$PATH:$LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN:$CLANG_PREBUILT_BIN
 export LLVM=1
 export USE_CCACHE=1
 export CCACHE_EXEC=/usr/bin/ccache
-export CCACHE_DIR=/mnt/ccache
-ccache -M 50G -F 0
+#export CCACHE_DIR=/mnt/ccache
+ccache -M 20G -F 0
 
 # Color
 ON_BLUE=`echo -e "\033[44m"`	# On Blue
@@ -50,8 +51,8 @@ clang(){
 
 clean(){
   echo "${GREEN}***** Cleaning in Progress *****${STD}"
-  make clean
-  make mrproper
+  make clean -j$(nproc)
+  make mrproper -j$(nproc)
   [ -d "out" ] && rm -rf out
   echo "${GREEN}***** Cleaning Done *****${STD}"
 }
@@ -202,7 +203,6 @@ clang
 
 # Show menu
 show_menus(){
-  clear
   echo "${ON_BLUE} B U I L D - M E N U ${STD}"
   echo "1. ${Under_Line}B${STD}uild kernel for o1s"
   echo "2. ${Under_Line}B${STD}uild kernel for t2s"
